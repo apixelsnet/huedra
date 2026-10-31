@@ -8,6 +8,12 @@ publish.workspace = true
 
 [dependencies]
 huedra-core.workspace = true
+huedra-win.workspace = true
+huedra-ui.workspace = true
+anyhow.workspace = true
+
+[build-dependencies]
+huedra-core.workspace = true
 
 [lints]
 workspace = true

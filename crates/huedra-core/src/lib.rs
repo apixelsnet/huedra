@@ -7,6 +7,22 @@
 
 #![forbid(unsafe_code)]
 
+pub mod clock;
+pub mod command;
+pub mod config;
+pub mod display;
+pub mod engine;
+pub mod files;
+pub mod gameinfo;
+pub mod geometry;
+pub mod icon;
+pub mod ipc;
+pub mod library;
+pub mod locations;
+pub mod logfile;
+pub mod paths;
+pub mod tracker;
+
 /// Application name as shown to users.
 pub const APP_NAME: &str = "Huedra";
 

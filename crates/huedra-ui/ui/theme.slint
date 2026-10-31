@@ -1,0 +1,55 @@
+// Design tokens: the BT.2020-derived palette over ink-violet neutrals, sizes
+// from the Windows 11 layout, and motion that turns off when Windows
+// "Animation effects" is off. No yellow anywhere.
+
+import { Palette } from "std-widgets.slint";
+
+export global Theme {
+    in property <bool> motion: true;
+    out property <bool> dark: Palette.color-scheme == ColorScheme.dark;
+
+    // Spectrum (HDR only).
+    out property <color> pink: #FF2D6F;
+    out property <color> violet: #9B3DFF;
+    out property <color> ultramarine: #3341E6;
+    out property <color> cyan: #00C8F0;
+    out property <color> green: #14D98A;
+    // Drawn in Rust (huedra_core::icon) so every renderer shows it without seams.
+    in property <image> spectrum-image;
+    in property <image> dot-image;
+
+    // Neutrals.
+    out property <color> background: dark ? #16141E : #F4F2F9;
+    out property <color> surface: dark ? #201D2B : #FFFFFF;
+    out property <color> surface-raised: dark ? #2A2638 : #ECE8F4;
+    out property <color> hover: dark ? #2F2B40 : #E6E1F0;
+    out property <color> border: dark ? #353049 : #DDD7E8;
+    out property <color> text: dark ? #F2F0F7 : #1B1826;
+    out property <color> text-muted: dark ? #A9A4B6 : #5E5870;
+    out property <color> sdr: #A9A4B6;
+    // Controls use ultramarine; a lighter tint keeps contrast on dark.
+    out property <color> accent: dark ? #8B93FF : #3341E6;
+    out property <color> on-accent: dark ? #16141E : #FFFFFF;
+    // HDR labels use pink.
+    out property <color> hdr-label: dark ? #FF5C8D : #D81B57;
+
+    // Sizes.
+    out property <length> radius-control: 4px;
+    out property <length> radius-card: 8px;
+    out property <length> button-height: 32px;
+    out property <length> nav-row: 36px;
+    out property <length> gap: 12px;
+
+    // Type.
+    out property <length> title-size: 28px;
+    out property <length> heading-size: 20px;
+    out property <length> body-size: 14px;
+    out property <length> caption-size: 12px;
+    out property <string> icons: "Segoe Fluent Icons";
+
+    // Motion.
+    out property <duration> fade: motion ? 400ms : 0ms;
+    out property <duration> page: motion ? 150ms : 0ms;
+    out property <duration> control: motion ? 120ms : 0ms;
+    out property <duration> hover-time: motion ? 80ms : 0ms;
+}

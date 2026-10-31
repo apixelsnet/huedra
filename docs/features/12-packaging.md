@@ -31,4 +31,15 @@ Not verified: a build from a fresh clone on another machine; the image build tim
 
 Open: cargo deny warns that allow-listed licences are unused, because there are no dependencies yet.
 
+## Result (2026-10-31) — phases 1 and 2
+- `build/remote-fmt.sh` runs `cargo fmt` on the server and copies the formatted crates back (Rust is not installed on this PC).
+- `ci.sh` runs `cargo fetch` first, so new dependencies update `Cargo.lock` minimally and every later step runs `--locked`.
+- `build.rs` embeds the manifest (`/MANIFESTINPUT`) and a `.res` with version information and the icon (`llvm-rc` from the image).
+- Windows Defender quarantined the first phase 2 build, run from the Temp folder, as `Trojan:Win32/Bearfoos.A!ml` (a machine-learning heuristic) seconds after it switched HDR. After adding version information and the icon, and running from `dist\`, the same tests ran without detection. Code signing remains the real remedy and is still deferred.
+- Executable size: 1.13 MB (the 256 px icon is about 260 KB of it).
+
+## Result (2026-10-31) — phase 3
+- `deny.toml` checks only the shipped target (`x86_64-pc-windows-msvc`); with both targets, Linux-only dependencies of Windows-only crates (zbus through Slint's winit backend) entered the graph. Newly allowed licences: BSD-2-Clause, BSL-1.0 and `LicenseRef-Slint-Royalty-free-2.0` (attribution shown in General > About). `RUSTSEC-2026-0192` (ttf-parser unmaintained, used by Slint) is ignored with a note.
+- Release profile now `opt-level = "z"`: 10.2 MB with `"s"`, 9.3 MB with `"z"`. That is above the 8 MB target; most of the size is Slint's text and accessibility stack. Executable packers were ruled out because they trigger antivirus false positives.
+
 Status: phase 0 done. Release archive, start-up entry and uninstall come in phase 5.

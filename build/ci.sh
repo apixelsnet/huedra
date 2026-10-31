@@ -5,7 +5,10 @@ set -euo pipefail
 
 target=x86_64-pc-windows-msvc
 locked=--locked
-[ -f Cargo.lock ] || locked=   # the first build creates the lock file
+
+# Record new or changed dependencies in Cargo.lock (minimal update), then
+# check everything against that lock. remote-build.sh copies it back.
+cargo fetch -q
 
 step() { printf '\n==> %s\n' "$*"; }
 

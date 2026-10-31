@@ -10,6 +10,14 @@ publish = false
 
 [workspace.dependencies]
 huedra-core = { path = "crates/huedra-core" }
+huedra-win = { path = "crates/huedra-win" }
+huedra-ui = { path = "crates/huedra-ui" }
+anyhow = "1.0.104"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0.21"
+toml = "1.1.8"
+windows = "0.62.2"
 
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "deny"
@@ -26,12 +34,11 @@ cast_sign_loss = "warn"
 missing_errors_doc = "warn"
 missing_panics_doc = "warn"
 missing_assert_message = "warn"
-exhaustive_enums = "warn"
 dbg_macro = "deny"
 todo = "deny"
 
 [profile.release]
-opt-level = "s"
+opt-level = "z"
 lto = "fat"
 codegen-units = 1
 panic = "abort"

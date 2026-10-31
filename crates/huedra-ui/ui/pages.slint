@@ -1,0 +1,923 @@
+// The four pages of the settings window and the parts they share.
+// Feature doc: docs/features/08-settings-window.md
+
+import { Button, Switch, ComboBox, LineEdit, SpinBox, ScrollView, ListView, AboutSlint } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+
+export struct GameRow {
+    id: string,
+    name: string,
+    store: string,
+    detail: string,
+    setting: string,
+    running: bool,
+}
+
+export struct GameDetail {
+    id: string,
+    name: string,
+    store: string,
+    path: string,
+    setting-index: int,
+    delay: int,
+    hold: int,
+    custom-timing: bool,
+    manual: bool,
+    looked-up: bool,
+    info: string,
+    notes: string,
+    ray-tracing: string,
+    wiki-url: string,
+    suggestion: string,
+    suggestion-index: int,
+}
+
+export struct DisplayRow {
+    id: string,
+    number: int,
+    title: string,
+    detail: string,
+    capable: bool,
+    managed: bool,
+    hdr-on: bool,
+}
+
+export struct HistoryRow {
+    time: string,
+    title: string,
+    detail: string,
+    kind: string,
+}
+
+export struct StoreChip {
+    key: string,
+    label: string,
+    count: int,
+}
+
+// ---- Shared parts -----------------------------------------------------
+
+component Card inherits Rectangle {
+    background: Theme.surface;
+    border-radius: Theme.radius-card;
+    border-width: 1px;
+    border-color: Theme.border;
+}
+
+component PageTitle inherits Text {
+    font-size: Theme.title-size;
+    font-weight: 600;
+    color: Theme.text;
+    accessible-role: text;
+}
+
+component SectionTitle inherits Text {
+    font-size: 16px;
+    font-weight: 600;
+    color: Theme.text;
+}
+
+component Caption inherits Text {
+    font-size: Theme.caption-size;
+    color: Theme.text-muted;
+    wrap: word-wrap;
+}
+
+component SettingRow inherits Card {
+    in property <string> title;
+    in property <string> description;
+    min-height: 64px;
+    HorizontalLayout {
+        padding-left: 16px;
+        padding-right: 16px;
+        padding-top: 10px;
+        padding-bottom: 10px;
+        spacing: 16px;
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            spacing: 2px;
+            Text {
+                text: root.title;
+                font-size: Theme.body-size;
+                color: Theme.text;
+                wrap: word-wrap;
+            }
+            if root.description != "": Caption {
+                text: root.description;
+            }
+        }
+        HorizontalLayout {
+            horizontal-stretch: 0;
+            alignment: end;
+            spacing: 8px;
+            @children
+        }
+    }
+}
+
+component Badge inherits Rectangle {
+    in property <string> text;
+    in property <string> kind; // hdr, sdr, external, failed
+    height: 22px;
+    width: label.preferred-width + 16px;
+    border-radius: 11px;
+    background: kind == "hdr" ? #FF2D6F26 : kind == "external" ? #9B3DFF26 : kind == "failed" ? #FF2D6F14 : #A9A4B633;
+    border-width: kind == "failed" ? 1px : 0px;
+    border-color: Theme.hdr-label;
+    label := Text {
+        text: root.text;
+        font-size: Theme.caption-size;
+        font-weight: 600;
+        color: kind == "hdr" || kind == "failed" ? Theme.hdr-label : kind == "external" ? Theme.violet : Theme.text-muted;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
+
+component Glyph inherits Text {
+    font-family: Theme.icons;
+    font-size: 16px;
+    color: Theme.text;
+    vertical-alignment: center;
+    horizontal-alignment: center;
+    accessible-role: none;
+}
+
+// A three-way segmented control for the mode.
+component ModeSelector inherits Rectangle {
+    in property <int> mode;
+    callback chosen(int);
+    height: Theme.button-height + 4px;
+    border-radius: Theme.radius-control + 2px;
+    background: Theme.surface-raised;
+    accessible-role: tab-list;
+    HorizontalLayout {
+        padding: 2px;
+        spacing: 2px;
+        for label[i] in ["Automatic", "Always HDR", "Always SDR"]: Rectangle {
+            property <bool> selected: root.mode == i;
+            border-radius: Theme.radius-control;
+            background: selected ? Theme.accent : touch.has-hover ? Theme.hover : transparent;
+            animate background { duration: Theme.control; }
+            accessible-role: tab;
+            accessible-label: label;
+            accessible-item-selected: selected;
+            Text {
+                text: label;
+                font-size: Theme.body-size;
+                font-weight: selected ? 600 : 400;
+                color: selected ? Theme.on-accent : Theme.text;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+            touch := TouchArea {
+                clicked => {
+                    root.chosen(i);
+                }
+            }
+        }
+    }
+}
+
+// The status card: grey in SDR; the spectrum fades in while HDR is on.
+component HeroCard inherits Rectangle {
+    in property <bool> hdr-on;
+    in property <string> headline;
+    in property <string> detail;
+    in property <string> caption;
+    min-height: 150px;
+    border-radius: Theme.radius-card;
+    background: Theme.surface;
+    border-width: 1px;
+    border-color: Theme.border;
+    clip: true;
+    Image {
+        source: Theme.spectrum-image;
+        image-fit: fill;
+        width: parent.width;
+        height: parent.height;
+        opacity: root.hdr-on ? 1 : 0;
+        animate opacity { duration: Theme.fade; easing: ease-in-out; }
+    }
+    VerticalLayout {
+        padding: 24px;
+        spacing: 6px;
+        alignment: center;
+        HorizontalLayout {
+            spacing: 10px;
+            alignment: start;
+            Rectangle {
+                width: 14px;
+                height: 14px;
+                y: (parent.height - self.height) / 2;
+                border-radius: 7px;
+                background: root.hdr-on ? #FFFFFF : transparent;
+                border-width: root.hdr-on ? 0px : 2px;
+                border-color: Theme.sdr;
+            }
+            Text {
+                text: root.headline;
+                font-size: Theme.title-size;
+                font-weight: 600;
+                color: root.hdr-on ? #FFFFFF : Theme.text;
+                animate color { duration: Theme.fade; }
+            }
+        }
+        Text {
+            text: root.detail;
+            font-size: Theme.body-size;
+            color: root.hdr-on ? #FFFFFFF0 : Theme.text;
+            wrap: word-wrap;
+        }
+        Text {
+            text: root.caption;
+            font-size: Theme.caption-size;
+            color: root.hdr-on ? #FFFFFFCC : Theme.text-muted;
+            wrap: word-wrap;
+        }
+    }
+}
+
+// ---- Status -----------------------------------------------------------
+
+export component StatusPage inherits Rectangle {
+    in property <bool> tray-running;
+    in property <bool> hdr-on;
+    in property <string> headline;
+    in property <string> detail;
+    in property <string> caption;
+    in property <int> mode;
+    in property <bool> paused;
+    in property <string> pause-note;
+    in property <[HistoryRow]> history;
+    callback set-mode(int);
+    callback toggle-pause();
+    callback start-huedra();
+
+    ScrollView {
+        VerticalLayout {
+            padding: 28px;
+            spacing: Theme.gap;
+            alignment: start;
+            PageTitle {
+                text: "Status";
+            }
+            if !root.tray-running: Card {
+                background: Theme.surface-raised;
+                HorizontalLayout {
+                    padding: 16px;
+                    spacing: 12px;
+                    Caption {
+                        horizontal-stretch: 1;
+                        vertical-alignment: center;
+                        text: "Huedra is not running, so HDR is not switched automatically.";
+                        color: Theme.text;
+                    }
+                    Button {
+                        text: "Start Huedra";
+                        primary: true;
+                        clicked => {
+                            root.start-huedra();
+                        }
+                    }
+                }
+            }
+            HeroCard {
+                hdr-on: root.hdr-on;
+                headline: root.headline;
+                detail: root.detail;
+                caption: root.caption;
+            }
+            Card {
+                VerticalLayout {
+                    padding: 16px;
+                    spacing: 10px;
+                    SectionTitle {
+                        text: "Mode";
+                    }
+                    Caption {
+                        text: "Automatic mode follows the setting of each game. The other two modes stay in effect until changed.";
+                    }
+                    ModeSelector {
+                        mode: root.mode;
+                        chosen(i) => {
+                            root.set-mode(i);
+                        }
+                    }
+                }
+            }
+            SettingRow {
+                title: "Pause automatic switching";
+                description: root.paused ? root.pause-note : "The current state is kept and no switching occurs until the pause ends.";
+                Button {
+                    text: root.paused ? "Resume" : "Pause for 1 hour";
+                    enabled: root.tray-running;
+                    clicked => {
+                        root.toggle-pause();
+                    }
+                }
+            }
+            SectionTitle {
+                text: "Recent changes";
+            }
+            if root.history.length == 0: Caption {
+                text: "No changes since Huedra started.";
+            }
+            for entry in root.history: Card {
+                HorizontalLayout {
+                    padding: 12px;
+                    spacing: 14px;
+                    Text {
+                        text: entry.time;
+                        font-size: Theme.caption-size;
+                        color: Theme.text-muted;
+                        vertical-alignment: center;
+                        width: 40px;
+                    }
+                    VerticalLayout {
+                        horizontal-stretch: 1;
+                        spacing: 2px;
+                        Text {
+                            text: entry.title;
+                            font-size: Theme.body-size;
+                            font-weight: 600;
+                            color: Theme.text;
+                        }
+                        Caption {
+                            text: entry.detail;
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        Badge {
+                            kind: entry.kind;
+                            text: entry.kind == "hdr" ? "HDR" : entry.kind == "external" ? "External" : entry.kind == "failed" ? "Failed" : "SDR";
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ---- Games ------------------------------------------------------------
+
+component GameDetailPanel inherits Card {
+    in property <GameDetail> detail;
+    in property <bool> show-back;
+    callback back();
+    callback set-setting(string, int);
+    callback set-delay(string, int);
+    callback set-hold(string, int);
+    callback reset-timing(string);
+    callback apply-suggestion(string);
+    callback open-wiki(string);
+    callback remove-game(string);
+
+    ScrollView {
+        VerticalLayout {
+            padding: 18px;
+            spacing: 12px;
+            alignment: start;
+            if root.show-back: HorizontalLayout {
+                alignment: start;
+                Button {
+                    text: "Back to the list";
+                    clicked => {
+                        root.back();
+                    }
+                }
+            }
+            Text {
+                text: root.detail.name;
+                font-size: Theme.heading-size;
+                font-weight: 600;
+                color: Theme.text;
+                wrap: word-wrap;
+            }
+            Caption {
+                text: root.detail.store + " · " + root.detail.path;
+            }
+            VerticalLayout {
+                spacing: 4px;
+                Text {
+                    text: "HDR setting";
+                    font-size: Theme.body-size;
+                    color: Theme.text;
+                }
+                ComboBox {
+                    model: ["Enable while running", "Do not change", "Game controls HDR"];
+                    current-index: root.detail.setting-index;
+                    selected(value) => {
+                        root.set-setting(root.detail.id, self.current-index);
+                    }
+                }
+            }
+            HorizontalLayout {
+                spacing: 16px;
+                VerticalLayout {
+                    spacing: 4px;
+                    Text {
+                        text: "Delay before enabling HDR (seconds)";
+                        font-size: Theme.body-size;
+                        color: Theme.text;
+                        wrap: word-wrap;
+                    }
+                    SpinBox {
+                        minimum: 0;
+                        maximum: 120;
+                        value: root.detail.delay;
+                        edited(v) => {
+                            root.set-delay(root.detail.id, v);
+                        }
+                    }
+                }
+                VerticalLayout {
+                    spacing: 4px;
+                    Text {
+                        text: "Hold time after exit (seconds)";
+                        font-size: Theme.body-size;
+                        color: Theme.text;
+                        wrap: word-wrap;
+                    }
+                    SpinBox {
+                        minimum: 0;
+                        maximum: 600;
+                        value: root.detail.hold;
+                        edited(v) => {
+                            root.set-hold(root.detail.id, v);
+                        }
+                    }
+                }
+            }
+            if root.detail.custom-timing: HorizontalLayout {
+                alignment: start;
+                Button {
+                    text: "Use the default times";
+                    clicked => {
+                        root.reset-timing(root.detail.id);
+                    }
+                }
+            }
+            Rectangle {
+                height: 1px;
+                background: Theme.border;
+            }
+            SectionTitle {
+                text: "From PCGamingWiki";
+            }
+            Text {
+                text: root.detail.info;
+                font-size: Theme.body-size;
+                color: Theme.text;
+                wrap: word-wrap;
+            }
+            if root.detail.notes != "": Caption {
+                text: "\"" + root.detail.notes + "\"";
+            }
+            if root.detail.ray-tracing != "": Caption {
+                text: "Ray tracing: " + root.detail.ray-tracing;
+            }
+            if root.detail.suggestion != "" && root.detail.suggestion-index != root.detail.setting-index: HorizontalLayout {
+                alignment: start;
+                Button {
+                    text: "Use the suggested setting: " + root.detail.suggestion;
+                    clicked => {
+                        root.apply-suggestion(root.detail.id);
+                    }
+                }
+            }
+            if root.detail.wiki-url != "": HorizontalLayout {
+                alignment: start;
+                Button {
+                    text: "Open the PCGamingWiki page";
+                    clicked => {
+                        root.open-wiki(root.detail.wiki-url);
+                    }
+                }
+            }
+            if root.detail.looked-up: Caption {
+                text: "Source: PCGamingWiki, licensed CC BY-NC-SA 3.0. Suggestions are never applied automatically.";
+            }
+            if root.detail.manual: HorizontalLayout {
+                alignment: start;
+                Button {
+                    text: "Remove this game";
+                    clicked => {
+                        root.remove-game(root.detail.id);
+                    }
+                }
+            }
+        }
+    }
+}
+
+export component GamesPage inherits Rectangle {
+    in property <bool> wide;
+    in property <[GameRow]> games;
+    in property <[StoreChip]> chips;
+    in property <string> filter;
+    in property <int> total;
+    // The selected game, as a list of zero or one entries: a new list makes a
+    // fresh detail panel, so its controls always show that game's values.
+    in property <[GameDetail]> details;
+    in property <string> selected-id;
+    in property <string> scan-note;
+    callback search-changed(string);
+    callback filter-changed(string);
+    callback select-game(string);
+    callback close-detail();
+    callback add-game();
+    callback rescan();
+    callback set-setting(string, int);
+    callback set-delay(string, int);
+    callback set-hold(string, int);
+    callback reset-timing(string);
+    callback apply-suggestion(string);
+    callback open-wiki(string);
+    callback remove-game(string);
+
+    property <bool> has-selection: root.details.length > 0;
+    property <bool> list-visible: root.wide || !root.has-selection;
+
+    VerticalLayout {
+        padding: 28px;
+        padding-bottom: 16px;
+        spacing: Theme.gap;
+        PageTitle {
+            text: "Games";
+        }
+        HorizontalLayout {
+            spacing: 8px;
+            LineEdit {
+                horizontal-stretch: 1;
+                placeholder-text: "Search " + root.total + " games";
+                edited(text) => {
+                    root.search-changed(text);
+                }
+            }
+            Button {
+                text: "Add game";
+                clicked => {
+                    root.add-game();
+                }
+            }
+            Button {
+                text: "Scan again";
+                clicked => {
+                    root.rescan();
+                }
+            }
+        }
+        HorizontalLayout {
+            spacing: 6px;
+            alignment: start;
+            for chip in root.chips: Rectangle {
+                property <bool> selected: root.filter == chip.key;
+                height: 28px;
+                width: chip-text.preferred-width + 20px;
+                border-radius: 14px;
+                background: selected ? Theme.accent : chip-touch.has-hover ? Theme.hover : Theme.surface-raised;
+                animate background { duration: Theme.hover-time; }
+                accessible-role: button;
+                accessible-label: chip.label;
+                chip-text := Text {
+                    text: chip.label + " " + chip.count;
+                    font-size: Theme.caption-size;
+                    color: selected ? Theme.on-accent : Theme.text;
+                    vertical-alignment: center;
+                    horizontal-alignment: center;
+                }
+                chip-touch := TouchArea {
+                    clicked => {
+                        root.filter-changed(chip.key);
+                    }
+                }
+            }
+        }
+        if root.scan-note != "": Caption {
+            text: root.scan-note;
+        }
+        HorizontalLayout {
+            vertical-stretch: 1;
+            spacing: Theme.gap;
+            if root.list-visible: Card {
+                horizontal-stretch: 3;
+                ListView {
+                    for game in root.games: Rectangle {
+                        property <bool> selected: root.has-selection && root.selected-id == game.id;
+                        height: 56px;
+                        background: selected ? Theme.surface-raised : row-touch.has-hover ? Theme.hover : transparent;
+                        animate background { duration: Theme.hover-time; }
+                        accessible-role: list-item;
+                        accessible-label: game.name;
+                        Rectangle {
+                            x: 0;
+                            width: 3px;
+                            height: 20px;
+                            y: (parent.height - self.height) / 2;
+                            border-radius: 2px;
+                            background: selected ? Theme.accent : transparent;
+                        }
+                        HorizontalLayout {
+                            padding-left: 14px;
+                            padding-right: 14px;
+                            spacing: 12px;
+                            VerticalLayout {
+                                horizontal-stretch: 1;
+                                alignment: center;
+                                spacing: 2px;
+                                Text {
+                                    text: game.name;
+                                    font-size: Theme.body-size;
+                                    font-weight: game.running ? 600 : 400;
+                                    color: Theme.text;
+                                    overflow: elide;
+                                }
+                                Text {
+                                    text: game.detail;
+                                    font-size: Theme.caption-size;
+                                    color: game.running ? Theme.hdr-label : Theme.text-muted;
+                                    overflow: elide;
+                                }
+                            }
+                            if root.wide: Text {
+                                text: game.store;
+                                font-size: Theme.caption-size;
+                                color: Theme.text-muted;
+                                vertical-alignment: center;
+                                width: 70px;
+                            }
+                            Text {
+                                text: game.setting;
+                                font-size: Theme.caption-size;
+                                color: Theme.text;
+                                vertical-alignment: center;
+                                horizontal-alignment: right;
+                                width: 140px;
+                                overflow: elide;
+                            }
+                        }
+                        row-touch := TouchArea {
+                            clicked => {
+                                root.select-game(game.id);
+                            }
+                        }
+                    }
+                }
+            }
+            for detail in root.details: GameDetailPanel {
+                horizontal-stretch: 2;
+                min-width: 300px;
+                detail: detail;
+                show-back: !root.wide;
+                back => {
+                    root.close-detail();
+                }
+                set-setting(id, i) => {
+                    root.set-setting(id, i);
+                }
+                set-delay(id, v) => {
+                    root.set-delay(id, v);
+                }
+                set-hold(id, v) => {
+                    root.set-hold(id, v);
+                }
+                reset-timing(id) => {
+                    root.reset-timing(id);
+                }
+                apply-suggestion(id) => {
+                    root.apply-suggestion(id);
+                }
+                open-wiki(url) => {
+                    root.open-wiki(url);
+                }
+                remove-game(id) => {
+                    root.remove-game(id);
+                }
+            }
+        }
+    }
+}
+
+// ---- Displays ---------------------------------------------------------
+
+export component DisplaysPage inherits Rectangle {
+    in property <[DisplayRow]> displays;
+    in property <int> retries;
+    callback set-managed(string, bool);
+    callback set-retries(int);
+
+    ScrollView {
+        VerticalLayout {
+            padding: 28px;
+            spacing: Theme.gap;
+            alignment: start;
+            PageTitle {
+                text: "Displays";
+            }
+            Caption {
+                text: "Huedra switches the managed displays together. Displays connected later are managed automatically when they support HDR.";
+            }
+            for d in root.displays: Card {
+                HorizontalLayout {
+                    padding: 16px;
+                    spacing: 14px;
+                    Rectangle {
+                        width: 36px;
+                        height: 36px;
+                        y: (parent.height - self.height) / 2;
+                        border-radius: Theme.radius-control;
+                        clip: true;
+                        background: Theme.surface-raised;
+                        if d.hdr-on: Image {
+                            source: Theme.spectrum-image;
+                            image-fit: fill;
+                            width: parent.width;
+                            height: parent.height;
+                        }
+                        Text {
+                            text: d.number;
+                            font-size: 16px;
+                            font-weight: 600;
+                            color: d.hdr-on ? #FFFFFF : Theme.text;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+                    VerticalLayout {
+                        horizontal-stretch: 1;
+                        alignment: center;
+                        spacing: 2px;
+                        Text {
+                            text: d.title;
+                            font-size: Theme.body-size;
+                            font-weight: 600;
+                            color: Theme.text;
+                            wrap: word-wrap;
+                        }
+                        Caption {
+                            text: d.detail;
+                        }
+                    }
+                    Switch {
+                        text: d.capable ? (self.checked ? "Managed" : "Not managed") : "Not managed";
+                        checked: d.managed;
+                        enabled: d.capable;
+                        toggled => {
+                            root.set-managed(d.id, self.checked);
+                        }
+                    }
+                }
+            }
+            SettingRow {
+                title: "Retry attempts";
+                description: "Some displays reject the first request while the graphics card changes mode.";
+                SpinBox {
+                    minimum: 0;
+                    maximum: 5;
+                    value: root.retries;
+                    edited(v) => {
+                        root.set-retries(v);
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ---- General ----------------------------------------------------------
+
+export component GeneralPage inherits Rectangle {
+    in property <bool> start-with-windows;
+    in property <int> updates;
+    in property <bool> game-info;
+    in property <int> hold;
+    in property <int> delay;
+    in property <bool> hotkeys;
+    in property <string> hotkey-note;
+    in property <bool> log-titles;
+    in property <string> version;
+    in property <string> data-folder;
+    callback set-start-with-windows(bool);
+    callback set-updates(int);
+    callback set-game-info(bool);
+    callback set-hold(int);
+    callback set-delay(int);
+    callback set-hotkeys(bool);
+    callback set-log-titles(bool);
+
+    ScrollView {
+        VerticalLayout {
+            padding: 28px;
+            spacing: Theme.gap;
+            alignment: start;
+            PageTitle {
+                text: "General";
+            }
+            SettingRow {
+                title: "Start with Windows";
+                description: "Starts in the notification area without opening a window.";
+                Switch {
+                    checked: root.start-with-windows;
+                    toggled => {
+                        root.set-start-with-windows(self.checked);
+                    }
+                }
+            }
+            SettingRow {
+                title: "Updates";
+                description: "Checks once a day and installs signed releases while no game or video is running. The previous version is kept. Release hosting is not set up yet, so no checks are made.";
+                ComboBox {
+                    model: ["Install automatically", "Ask before installing", "Off"];
+                    current-index: root.updates;
+                    selected(value) => {
+                        root.set-updates(self.current-index);
+                    }
+                }
+            }
+            SettingRow {
+                title: "Game information from PCGamingWiki";
+                description: "Sends the Steam ID or the name of each game to pcgamingwiki.com. Results are stored for 30 days.";
+                Switch {
+                    checked: root.game-info;
+                    toggled => {
+                        root.set-game-info(self.checked);
+                    }
+                }
+            }
+            SettingRow {
+                title: "Default hold time (seconds)";
+                description: "Used for games without their own setting.";
+                SpinBox {
+                    minimum: 0;
+                    maximum: 600;
+                    value: root.hold;
+                    edited(v) => {
+                        root.set-hold(v);
+                    }
+                }
+            }
+            SettingRow {
+                title: "Default delay before enabling HDR (seconds)";
+                description: "Used for games without their own setting.";
+                SpinBox {
+                    minimum: 0;
+                    maximum: 120;
+                    value: root.delay;
+                    edited(v) => {
+                        root.set-delay(v);
+                    }
+                }
+            }
+            SettingRow {
+                title: "Keyboard shortcuts";
+                description: "Win+Alt+H turns HDR on or off. Win+Alt+O changes the mode. Win+Alt+P pauses or resumes." + (root.hotkey-note != "" ? " " + root.hotkey-note : "");
+                Switch {
+                    checked: root.hotkeys;
+                    toggled => {
+                        root.set-hotkeys(self.checked);
+                    }
+                }
+            }
+            SettingRow {
+                title: "Record window titles in the log";
+                description: "When off, browser tab names and file names are not written to the log.";
+                Switch {
+                    checked: root.log-titles;
+                    toggled => {
+                        root.set-log-titles(self.checked);
+                    }
+                }
+            }
+            SectionTitle {
+                text: "About";
+            }
+            Card {
+                VerticalLayout {
+                    padding: 16px;
+                    spacing: 8px;
+                    Text {
+                        text: "Huedra " + root.version;
+                        font-size: Theme.body-size;
+                        font-weight: 600;
+                        color: Theme.text;
+                    }
+                    Caption {
+                        text: "Settings and logs: " + root.data-folder;
+                    }
+                    Caption {
+                        text: "Game information from PCGamingWiki (pcgamingwiki.com), licensed CC BY-NC-SA 3.0.";
+                    }
+                    HorizontalLayout {
+                        alignment: start;
+                        AboutSlint {
+                            preferred-height: 120px;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

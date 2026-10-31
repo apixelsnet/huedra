@@ -1,0 +1,342 @@
+// The settings window: navigation and the four pages.
+// Layouts: wide (1000 px and up), medium (680 to 999), compact (below 680,
+// icon rail). Feature doc: docs/features/08-settings-window.md
+
+import { Theme } from "theme.slint";
+import {
+    StatusPage, GamesPage, DisplaysPage, GeneralPage,
+    GameRow, GameDetail, DisplayRow, HistoryRow, StoreChip
+} from "pages.slint";
+
+export { Theme, GameRow, GameDetail, DisplayRow, HistoryRow, StoreChip }
+
+component NavItem inherits Rectangle {
+    in property <string> glyph;
+    in property <string> label;
+    in property <bool> selected;
+    in property <bool> compact;
+    callback activate();
+    height: Theme.nav-row;
+    border-radius: Theme.radius-control;
+    background: selected ? Theme.surface-raised : touch.has-hover ? Theme.hover : transparent;
+    animate background { duration: Theme.hover-time; }
+    accessible-role: tab;
+    accessible-label: label;
+    accessible-item-selected: selected;
+    Rectangle {
+        x: 0;
+        width: 3px;
+        height: selected ? 16px : 0px;
+        y: (parent.height - self.height) / 2;
+        border-radius: 2px;
+        background: Theme.accent;
+        animate height { duration: Theme.control; }
+    }
+    HorizontalLayout {
+        padding-left: root.compact ? 0px : 14px;
+        spacing: 12px;
+        alignment: root.compact ? center : start;
+        Text {
+            text: root.glyph;
+            font-family: Theme.icons;
+            font-size: 16px;
+            color: Theme.text;
+            vertical-alignment: center;
+            width: 20px;
+            horizontal-alignment: center;
+        }
+        if !root.compact: Text {
+            text: root.label;
+            font-size: Theme.body-size;
+            font-weight: root.selected ? 600 : 400;
+            color: Theme.text;
+            vertical-alignment: center;
+        }
+    }
+    touch := TouchArea {
+        clicked => {
+            root.activate();
+        }
+    }
+}
+
+export component SettingsWindow inherits Window {
+    title: "Huedra";
+    icon: root.app-icon;
+    preferred-width: 1040px;
+    preferred-height: 680px;
+    min-width: 520px;
+    min-height: 560px;
+    background: Theme.background;
+    default-font-family: "Segoe UI Variable Text";
+    default-font-size: Theme.body-size;
+
+    in property <image> app-icon;
+    in-out property <int> page: 0;
+    property <bool> wide: self.width >= 1000px;
+    property <bool> compact: self.width < 680px;
+
+    // Status
+    in property <bool> tray-running;
+    in property <bool> hdr-on;
+    in property <string> headline: "SDR";
+    in property <string> detail;
+    in property <string> caption;
+    in property <int> mode;
+    in property <bool> paused;
+    in property <string> pause-note;
+    in property <[HistoryRow]> history;
+    callback set-mode(int);
+    callback toggle-pause();
+    callback start-huedra();
+
+    // Games
+    in property <[GameRow]> games;
+    in property <[StoreChip]> chips;
+    in property <string> filter: "all";
+    in property <int> game-total;
+    in property <[GameDetail]> details;
+    in property <string> selected-id;
+    in property <string> scan-note;
+    callback search-changed(string);
+    callback filter-changed(string);
+    callback select-game(string);
+    callback close-detail();
+    callback add-game();
+    callback rescan();
+    callback set-game-setting(string, int);
+    callback set-game-delay(string, int);
+    callback set-game-hold(string, int);
+    callback reset-game-timing(string);
+    callback apply-suggestion(string);
+    callback open-wiki(string);
+    callback remove-game(string);
+
+    // Displays
+    in property <[DisplayRow]> displays;
+    in property <int> retries;
+    callback set-managed(string, bool);
+    callback set-retries(int);
+
+    // General
+    in property <bool> start-with-windows;
+    in property <int> updates;
+    in property <bool> game-info;
+    in property <int> hold;
+    in property <int> delay;
+    in property <bool> hotkeys;
+    in property <string> hotkey-note;
+    in property <bool> log-titles;
+    in property <string> version;
+    in property <string> data-folder;
+    callback set-start-with-windows(bool);
+    callback set-updates(int);
+    callback set-game-info(bool);
+    callback set-hold(int);
+    callback set-delay(int);
+    callback set-hotkeys(bool);
+    callback set-log-titles(bool);
+
+    HorizontalLayout {
+        // Navigation pane; an icon rail in the compact layout.
+        nav := FocusScope {
+            width: root.compact ? 64px : root.wide ? 240px : 200px;
+            key-pressed(event) => {
+                if event.text == Key.UpArrow && root.page > 0 {
+                    root.page -= 1;
+                    return accept;
+                }
+                if event.text == Key.DownArrow && root.page < 3 {
+                    root.page += 1;
+                    return accept;
+                }
+                reject
+            }
+            VerticalLayout {
+                padding: 8px;
+                padding-top: 14px;
+                spacing: 4px;
+                alignment: start;
+                HorizontalLayout {
+                    height: 44px;
+                    padding-left: root.compact ? 0px : 14px;
+                    spacing: 10px;
+                    alignment: root.compact ? center : start;
+                    Rectangle {
+                        width: 18px;
+                        height: 18px;
+                        y: (parent.height - self.height) / 2;
+                        border-radius: 9px;
+                        border-width: root.hdr-on ? 0px : 2px;
+                        border-color: Theme.sdr;
+                        if root.hdr-on: Image {
+                            source: Theme.dot-image;
+                            width: parent.width;
+                            height: parent.height;
+                        }
+                    }
+                    if !root.compact: Text {
+                        text: "Huedra";
+                        font-size: 16px;
+                        font-weight: 600;
+                        color: Theme.text;
+                        vertical-alignment: center;
+                    }
+                }
+                for item[i] in [
+                    { glyph: "\u{E80F}", label: "Status" },
+                    { glyph: "\u{E7FC}", label: "Games" },
+                    { glyph: "\u{E7F4}", label: "Displays" },
+                    { glyph: "\u{E713}", label: "General" },
+                ]: NavItem {
+                    glyph: item.glyph;
+                    label: item.label;
+                    compact: root.compact;
+                    selected: root.page == i;
+                    activate => {
+                        root.page = i;
+                        nav.focus();
+                    }
+                }
+            }
+        }
+
+        // Pages cross-fade and rise 8 px when the page changes.
+        Rectangle {
+            horizontal-stretch: 1;
+            background: Theme.background;
+            status := StatusPage {
+                property <bool> active: root.page == 0;
+                opacity: active ? 1 : 0;
+                y: active ? 0px : 8px;
+                visible: self.opacity > 0.01;
+                animate opacity, y { duration: Theme.page; easing: ease-out; }
+                tray-running: root.tray-running;
+                hdr-on: root.hdr-on;
+                headline: root.headline;
+                detail: root.detail;
+                caption: root.caption;
+                mode: root.mode;
+                paused: root.paused;
+                pause-note: root.pause-note;
+                history: root.history;
+                set-mode(i) => {
+                    root.set-mode(i);
+                }
+                toggle-pause => {
+                    root.toggle-pause();
+                }
+                start-huedra => {
+                    root.start-huedra();
+                }
+            }
+            GamesPage {
+                property <bool> active: root.page == 1;
+                opacity: active ? 1 : 0;
+                y: active ? 0px : 8px;
+                visible: self.opacity > 0.01;
+                animate opacity, y { duration: Theme.page; easing: ease-out; }
+                wide: root.wide;
+                games: root.games;
+                chips: root.chips;
+                filter: root.filter;
+                total: root.game-total;
+                details: root.details;
+                selected-id: root.selected-id;
+                scan-note: root.scan-note;
+                search-changed(t) => {
+                    root.search-changed(t);
+                }
+                filter-changed(k) => {
+                    root.filter-changed(k);
+                }
+                select-game(id) => {
+                    root.select-game(id);
+                }
+                close-detail => {
+                    root.close-detail();
+                }
+                add-game => {
+                    root.add-game();
+                }
+                rescan => {
+                    root.rescan();
+                }
+                set-setting(id, i) => {
+                    root.set-game-setting(id, i);
+                }
+                set-delay(id, v) => {
+                    root.set-game-delay(id, v);
+                }
+                set-hold(id, v) => {
+                    root.set-game-hold(id, v);
+                }
+                reset-timing(id) => {
+                    root.reset-game-timing(id);
+                }
+                apply-suggestion(id) => {
+                    root.apply-suggestion(id);
+                }
+                open-wiki(url) => {
+                    root.open-wiki(url);
+                }
+                remove-game(id) => {
+                    root.remove-game(id);
+                }
+            }
+            DisplaysPage {
+                property <bool> active: root.page == 2;
+                opacity: active ? 1 : 0;
+                y: active ? 0px : 8px;
+                visible: self.opacity > 0.01;
+                animate opacity, y { duration: Theme.page; easing: ease-out; }
+                displays: root.displays;
+                retries: root.retries;
+                set-managed(id, on) => {
+                    root.set-managed(id, on);
+                }
+                set-retries(n) => {
+                    root.set-retries(n);
+                }
+            }
+            GeneralPage {
+                property <bool> active: root.page == 3;
+                opacity: active ? 1 : 0;
+                y: active ? 0px : 8px;
+                visible: self.opacity > 0.01;
+                animate opacity, y { duration: Theme.page; easing: ease-out; }
+                start-with-windows: root.start-with-windows;
+                updates: root.updates;
+                game-info: root.game-info;
+                hold: root.hold;
+                delay: root.delay;
+                hotkeys: root.hotkeys;
+                hotkey-note: root.hotkey-note;
+                log-titles: root.log-titles;
+                version: root.version;
+                data-folder: root.data-folder;
+                set-start-with-windows(on) => {
+                    root.set-start-with-windows(on);
+                }
+                set-updates(i) => {
+                    root.set-updates(i);
+                }
+                set-game-info(on) => {
+                    root.set-game-info(on);
+                }
+                set-hold(v) => {
+                    root.set-hold(v);
+                }
+                set-delay(v) => {
+                    root.set-delay(v);
+                }
+                set-hotkeys(on) => {
+                    root.set-hotkeys(on);
+                }
+                set-log-titles(on) => {
+                    root.set-log-titles(on);
+                }
+            }
+        }
+    }
+}

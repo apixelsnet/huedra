@@ -1,0 +1,461 @@
+//! The settings file `config.toml`: schema, defaults, limits and version
+//! upgrades. Feature doc: `docs/features/10-config.md`.
+
+use std::path::Path;
+use std::time::Duration;
+
+use serde::{Deserialize, Serialize};
+
+use crate::engine::{Mode, Trigger};
+use crate::files;
+use crate::library::{Game, GameId, Store};
+use crate::paths::NormPath;
+
+/// Schema version written by this build.
+pub const VERSION: u32 = 1;
+/// Files larger than this are refused before parsing.
+pub const MAX_BYTES: u64 = 1 << 20;
+/// Upper limit for start delays.
+pub const MAX_DELAY: Seconds = Seconds(120);
+/// Upper limit for hold times.
+pub const MAX_HOLD: Seconds = Seconds(600);
+/// Upper limit for retry attempts.
+pub const MAX_RETRIES: u32 = 5;
+
+/// A whole number of seconds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct Seconds(u32);
+
+impl Seconds {
+    /// Wraps a number of seconds.
+    pub const fn new(secs: u32) -> Self {
+        Self(secs)
+    }
+
+    /// The number of seconds.
+    pub const fn get(self) -> u32 {
+        self.0
+    }
+
+    /// As a [`Duration`].
+    pub fn duration(self) -> Duration {
+        Duration::from_secs(u64::from(self.0))
+    }
+}
+
+/// How updates are installed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum UpdatePolicy {
+    /// Install signed releases automatically.
+    #[default]
+    Install,
+    /// Ask before installing.
+    Ask,
+    /// Do not check.
+    Off,
+}
+
+/// What Huedra does while a game runs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum GameHdr {
+    /// Turn HDR on while the game runs.
+    #[default]
+    EnableWhileRunning,
+    /// Leave HDR as it is.
+    DoNotChange,
+    /// The game switches HDR itself; leave it as it is.
+    GameControls,
+}
+
+impl GameHdr {
+    /// Text shown to the user.
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::EnableWhileRunning => "Enable while running",
+            Self::DoNotChange => "Do not change",
+            Self::GameControls => "Game controls HDR",
+        }
+    }
+}
+
+/// The whole settings file. Plain data, so its fields are public.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Config {
+    /// Schema version.
+    pub version: u32,
+    /// Mode at start.
+    pub mode: Mode,
+    /// General settings.
+    pub general: General,
+    /// Display settings.
+    pub displays: DisplaySettings,
+    /// Per-game settings and games added by hand.
+    #[serde(rename = "game", skip_serializing_if = "Vec::is_empty")]
+    pub games: Vec<GameSettings>,
+}
+
+/// The General page.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct General {
+    /// Start in the tray when Windows starts.
+    pub start_with_windows: bool,
+    /// Update policy.
+    pub updates: UpdatePolicy,
+    /// Look up games on PCGamingWiki.
+    pub game_info: bool,
+    /// Default start delay.
+    #[serde(rename = "start_delay_secs")]
+    pub start_delay: Seconds,
+    /// Default hold time.
+    #[serde(rename = "hold_secs")]
+    pub hold: Seconds,
+    /// Extra attempts when a display refuses a change.
+    pub retry_attempts: u32,
+    /// Write window titles to the log.
+    pub log_window_titles: bool,
+    /// Register the keyboard shortcuts.
+    pub hotkeys: bool,
+}
+
+impl Default for General {
+    fn default() -> Self {
+        Self {
+            start_with_windows: true,
+            updates: UpdatePolicy::Install,
+            game_info: true,
+            start_delay: Seconds(0),
+            hold: Seconds(10),
+            retry_attempts: 2,
+            log_window_titles: false,
+            hotkeys: true,
+        }
+    }
+}
+
+/// The Displays page.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct DisplaySettings {
+    /// Device paths of HDR displays the user excluded. Every other HDR
+    /// display is managed, including ones connected later.
+    pub unmanaged: Vec<String>,
+}
+
+/// Settings for one game.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GameSettings {
+    /// The game.
+    pub id: GameId,
+    /// Name, for games added by hand.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub name: String,
+    /// Program, for games added by hand.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exe: Option<String>,
+    /// What to do while it runs.
+    #[serde(default)]
+    pub hdr: GameHdr,
+    /// Overrides the default start delay.
+    #[serde(
+        default,
+        rename = "start_delay_secs",
+        skip_serializing_if = "Option::is_none"
+    )]
+    pub start_delay: Option<Seconds>,
+    /// Overrides the default hold time.
+    #[serde(default, rename = "hold_secs", skip_serializing_if = "Option::is_none")]
+    pub hold: Option<Seconds>,
+    /// Start through `huedra launch` (shown in the Games page).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub launch_with_hdr: bool,
+}
+
+impl GameSettings {
+    /// Settings with every value at its default.
+    pub fn new(id: GameId) -> Self {
+        Self {
+            id,
+            name: String::new(),
+            exe: None,
+            hdr: GameHdr::default(),
+            start_delay: None,
+            hold: None,
+            launch_with_hdr: false,
+        }
+    }
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            version: VERSION,
+            mode: Mode::Automatic,
+            general: General::default(),
+            displays: DisplaySettings::default(),
+            games: Vec::new(),
+        }
+    }
+}
+
+/// The settings file could not be used.
+#[derive(Debug, thiserror::Error)]
+pub enum ConfigError {
+    /// Reading or writing failed.
+    #[error("could not access the settings file: {0}")]
+    Io(#[from] std::io::Error),
+    /// The text is not valid TOML or does not fit the schema.
+    #[error("the settings file is not valid: {0}")]
+    Invalid(String),
+    /// Written by a newer version of Huedra.
+    #[error("the settings file was written by a newer version of Huedra (schema {0})")]
+    Newer(u32),
+}
+
+impl Config {
+    /// Parses settings text, upgrading older schemas and bringing values into
+    /// range.
+    ///
+    /// # Errors
+    /// [`ConfigError`] for oversized, invalid or newer files.
+    pub fn parse(text: &str) -> Result<Self, ConfigError> {
+        // Notepad and Windows PowerShell 5.1 may start the file with a BOM.
+        let text = text.strip_prefix('\u{feff}').unwrap_or(text);
+        if text.len() as u64 > MAX_BYTES {
+            return Err(ConfigError::Invalid("larger than 1 MB".into()));
+        }
+        let table: toml::Table = text
+            .parse()
+            .map_err(|e: toml::de::Error| ConfigError::Invalid(e.message().to_owned()))?;
+        let version = table
+            .get("version")
+            .and_then(toml::Value::as_integer)
+            .unwrap_or(i64::from(VERSION));
+        if version > i64::from(VERSION) {
+            return Err(ConfigError::Newer(
+                u32::try_from(version).unwrap_or(u32::MAX),
+            ));
+        }
+        // Version 1 is the first schema; upgrades from later versions go here.
+        let mut config: Self = table
+            .try_into()
+            .map_err(|e: toml::de::Error| ConfigError::Invalid(e.message().to_owned()))?;
+        config.version = VERSION;
+        config.clamp();
+        Ok(config)
+    }
+
+    /// The settings as TOML text.
+    ///
+    /// # Errors
+    /// [`ConfigError::Invalid`] if serialisation fails (it should not).
+    pub fn to_toml(&self) -> Result<String, ConfigError> {
+        toml::to_string_pretty(self).map_err(|e| ConfigError::Invalid(e.to_string()))
+    }
+
+    /// Loads the file; a missing file gives the defaults.
+    ///
+    /// # Errors
+    /// See [`Self::parse`].
+    pub fn load(path: &Path) -> Result<Self, ConfigError> {
+        match files::read_limited(path, MAX_BYTES)? {
+            Some(text) => Self::parse(&text),
+            None => Ok(Self::default()),
+        }
+    }
+
+    /// Saves the file atomically.
+    ///
+    /// # Errors
+    /// I/O errors.
+    pub fn save(&self, path: &Path) -> Result<(), ConfigError> {
+        files::write_atomic(path, self.to_toml()?.as_bytes())?;
+        Ok(())
+    }
+
+    fn clamp(&mut self) {
+        let g = &mut self.general;
+        g.start_delay = g.start_delay.min(MAX_DELAY);
+        g.hold = g.hold.min(MAX_HOLD);
+        g.retry_attempts = g.retry_attempts.min(MAX_RETRIES);
+        for game in &mut self.games {
+            game.start_delay = game.start_delay.map(|d| d.min(MAX_DELAY));
+            game.hold = game.hold.map(|h| h.min(MAX_HOLD));
+        }
+    }
+
+    /// Settings for a game, if any were saved.
+    pub fn game(&self, id: &GameId) -> Option<&GameSettings> {
+        self.games.iter().find(|g| &g.id == id)
+    }
+
+    /// Settings for a game, created with defaults when missing.
+    pub fn game_mut(&mut self, id: &GameId) -> &mut GameSettings {
+        if let Some(i) = self.games.iter().position(|g| &g.id == id) {
+            &mut self.games[i]
+        } else {
+            self.games.push(GameSettings::new(id.clone()));
+            let last = self.games.len() - 1;
+            &mut self.games[last]
+        }
+    }
+
+    /// Games the user added by hand, as library entries.
+    pub fn manual_games(&self) -> Vec<Game> {
+        self.games
+            .iter()
+            .filter_map(|s| {
+                let exe = s.exe.clone()?;
+                let folder = NormPath::new(&exe)
+                    .parent()
+                    .map(|_| parent_as_written(&exe))
+                    .unwrap_or_default();
+                let name = if s.name.is_empty() {
+                    crate::paths::display_name(&exe).to_owned()
+                } else {
+                    s.name.clone()
+                };
+                Some(Game {
+                    id: s.id.clone(),
+                    name,
+                    store: Store::Manual,
+                    install_dir: folder,
+                    exe: Some(exe),
+                })
+            })
+            .collect()
+    }
+
+    /// The trigger a running game produces, or `None` when Huedra should
+    /// leave HDR alone for it.
+    pub fn trigger_for(&self, game: &Game) -> Option<Trigger> {
+        let settings = self.game(&game.id);
+        let hdr = settings.map(|s| s.hdr).unwrap_or_default();
+        if hdr != GameHdr::EnableWhileRunning {
+            return None;
+        }
+        Some(Trigger {
+            label: game.name.clone(),
+            delay: settings
+                .and_then(|s| s.start_delay)
+                .unwrap_or(self.general.start_delay)
+                .duration(),
+            hold: settings
+                .and_then(|s| s.hold)
+                .unwrap_or(self.general.hold)
+                .duration(),
+        })
+    }
+
+    /// Whether an HDR-capable display is managed.
+    pub fn is_managed(&self, device_path: &str) -> bool {
+        !self
+            .displays
+            .unmanaged
+            .iter()
+            .any(|d| d.eq_ignore_ascii_case(device_path))
+    }
+
+    /// Number of attempts per switch (first try plus retries).
+    pub fn attempts(&self) -> u32 {
+        1 + self.general.retry_attempts
+    }
+}
+
+/// The folder part of a path, keeping its original case.
+fn parent_as_written(path: &str) -> String {
+    path.rfind(['\\', '/'])
+        .map(|i| path[..i].to_owned())
+        .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn defaults_round_trip() {
+        let config = Config::default();
+        let text = config.to_toml().expect("serialise");
+        assert_eq!(Config::parse(&text).expect("parse"), config, "round trip");
+        assert_eq!(Config::parse("").expect("empty"), config, "empty file");
+        assert_eq!(config.general.hold, Seconds(10), "default hold");
+        assert!(config.general.game_info, "game info on by default");
+        assert_eq!(config.general.updates, UpdatePolicy::Install, "updates");
+        assert_eq!(config.attempts(), 3, "one try plus two retries");
+    }
+
+    #[test]
+    fn reads_and_clamps() {
+        let text = r#"
+            version = 1
+            mode = "always-hdr"
+            unknown_key = "ignored"
+            [general]
+            hold_secs = 99999
+            [[game]]
+            id = "steam:1091500"
+            hdr = "do-not-change"
+            [[game]]
+            id = "manual:tool"
+            name = "Tool"
+            exe = 'C:\Games\Tool\Tool.exe'
+            hold_secs = 5
+        "#;
+        let config = Config::parse(text).expect("parse");
+        assert_eq!(config.mode, Mode::AlwaysHdr, "mode");
+        assert_eq!(config.general.hold, MAX_HOLD, "clamped");
+        let manual = config.manual_games();
+        assert_eq!(manual.len(), 1, "one manual game");
+        assert_eq!(manual[0].install_dir, r"C:\Games\Tool", "folder");
+        let trigger = config.trigger_for(&manual[0]).expect("enabled by default");
+        assert_eq!(trigger.hold, Duration::from_secs(5), "own hold time");
+        let steam = Game {
+            id: GameId::from_raw("steam:1091500"),
+            name: "Cyberpunk 2077".into(),
+            store: Store::Steam,
+            install_dir: r"D:\x".into(),
+            exe: None,
+        };
+        assert!(config.trigger_for(&steam).is_none(), "do not change");
+    }
+
+    #[test]
+    fn accepts_byte_order_mark() {
+        let config = Config::parse("\u{feff}mode = \"always-sdr\"").expect("parse");
+        assert_eq!(config.mode, Mode::AlwaysSdr, "BOM ignored");
+    }
+
+    #[test]
+    fn rejects_bad_files() {
+        assert!(
+            matches!(Config::parse("version = 99"), Err(ConfigError::Newer(99))),
+            "newer"
+        );
+        assert!(
+            matches!(Config::parse("mode = 3"), Err(ConfigError::Invalid(_))),
+            "wrong type"
+        );
+        let huge = "#".repeat(2 << 20);
+        assert!(
+            matches!(Config::parse(&huge), Err(ConfigError::Invalid(_))),
+            "size"
+        );
+    }
+
+    #[test]
+    fn game_mut_inserts_once() {
+        let mut config = Config::default();
+        let id = GameId::from_raw("steam:1");
+        config.game_mut(&id).hdr = GameHdr::DoNotChange;
+        config.game_mut(&id).hold = Some(Seconds(3));
+        assert_eq!(config.games.len(), 1, "one entry");
+        assert!(config.is_managed("x"), "managed by default");
+        config.displays.unmanaged.push("X".into());
+        assert!(!config.is_managed("x"), "excluded");
+    }
+}

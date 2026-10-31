@@ -16,4 +16,14 @@ HDR support and notes for each game, from PCGamingWiki.
 ## Done when
 Every installed Steam game on this PC gets a result or a clear "not found", within the rate limit.
 
-Status: not started (phase 3).
+## Result (2026-10-31) — phase 3
+Code: `crates/huedra-core/src/gameinfo.rs` (paths, parsing, markup cleaning, cache, suggestions), `crates/huedra-win/src/http.rs` (WinHTTP), `crates/huedra-ui/src/lookups.rs` (worker).
+- Steam games: `/api/appid.php?appid=N`, following the redirect and reading the final address; others, or a Steam game without a page: `action=query&list=search` by title. Then `action=parse&prop=wikitext&redirects=1`, reading `|hdr`, `|hdr notes` and `|ray tracing`.
+- Notes are cleaned of links (internal and external), templates (except `{{term|...}}`), references, emphasis and tags, and cut at 600 characters.
+- One request per second at most, on a background thread of the settings process only; User-Agent `Huedra/<version> (...)`; responses over 4 MB are refused. Results, including "not found", are kept 30 days in `gameinfo.toml`; network failures are not stored and are retried next time.
+- Suggestions: supported or limited gives "Enable while running", not supported gives "Do not change"; shown as a button, never applied automatically. Games added by hand are not looked up.
+
+Verified on this PC: all 22 store games were looked up; 16 pages were found (for example Resident Evil 4 (2023): limited, with notes; Hades II: no HDR), 6 games show "Not found on PCGamingWiki".
+Not verified: behaviour behind a proxy; that the wiki's rate limits are never reached with very large libraries.
+
+Status: done.
