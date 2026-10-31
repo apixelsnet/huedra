@@ -5,6 +5,8 @@
 //! workspace still builds and tests on Linux.
 
 #[cfg(windows)]
+pub mod audio;
+#[cfg(windows)]
 pub mod clock;
 #[cfg(windows)]
 pub mod console;
@@ -23,6 +25,8 @@ pub mod http;
 #[cfg(windows)]
 pub mod instance;
 #[cfg(windows)]
+pub mod job;
+#[cfg(windows)]
 pub mod menu;
 #[cfg(windows)]
 pub mod pipe;
@@ -36,3 +40,5 @@ pub mod shell;
 pub mod stores;
 #[cfg(windows)]
 pub mod tray;
+#[cfg(windows)]
+pub mod window;

@@ -19,7 +19,7 @@ Code: `crates/huedra-ui/ui/{theme,pages,app}.slint`, `crates/huedra-ui/src/{app,
 - Pages: Status (spectrum card that fades in over 400 ms while HDR is on, mode selector, pause, recent changes), Games (search, store filters, list, detail with HDR setting, delay, hold, PCGamingWiki information and suggestion, Add game, Scan again), Displays (managed switch per HDR display, peak brightness, retry attempts), General (start with Windows, updates, PCGamingWiki, default times, shortcuts, window titles in the log, About with the Slint attribution).
 - Layouts: navigation 240 px wide (1000 px and up), 200 px (680 to 999), icon rail of 64 px below 680; on narrow layouts the game detail replaces the list with a "Back to the list" button. Pages cross-fade and rise 8 px in 150 ms; every duration is zero when Windows "Animation effects" is off.
 - Every change is saved at once (atomic write) and the tray process is asked to reload. Start with Windows writes or removes `HKCU\...\Run\Huedra`; nothing else touches the registry.
-- `huedra settings [status|games|displays|general]` opens on a page; a second request brings the open window to the front. Size, position and maximized state are kept in `window.toml` (local app-data); a position off every monitor is ignored.
+- `huedra settings [status|games|video|displays|general]` opens on a page; a second request brings the open window to the front. Size, position and maximized state are kept in `window.toml` (local app-data); a position off every monitor is ignored.
 
 Verified on this PC: all four pages render as designed in the dark theme at 100 % scaling in the wide layout; the Status page follows the tray within one second (a real game, Dispatch, showed "HDR is on" with both displays); 8.8 MB private memory per window; the window handle exists about 30 to 45 ms after the process starts.
 Not verified: the light theme; the medium and compact layouts (an attempt was stopped because a game was in use on this PC); keyboard-only use; 150 % and 200 % scaling; the Add game dialog and the Start with Windows switch. The controls take the Windows accent colour (Fluent style) rather than ultramarine.
@@ -50,4 +50,24 @@ Verified on this PC: all pages in dark and light, wide and compact; light to dar
 ## Result (2026-10-31) — game icons
 - The game list shows each game's icon at 32 px on the left and the detail panel at 40 px beside the title (`GameIcon`); until an icon arrives, or when there is none, the game's first letter on a tinted square. Icons arrive one by one while the list is already usable. Sources and caching: see 13.
 
+## Result (2026-10-31) — Start with HDR
+- Games detail: a "Start with HDR" section with the Steam launch option (read-only field and a Copy button that uses the field's own copy) for Steam games, or "Create a desktop shortcut" for games of other stores with a known program. General: toggle for "Start with HDR" in the menu of programs. See 06.
+
+Not verified: the window was not opened for these parts (built and type-checked only).
+
 Status: done.
+
+## Result (2026-10-31) — Video players page
+- New page between Games and Displays (`huedra settings video`); Displays and General move down one. See 05 for its contents. New control `TextBox`: a line of text applied with Enter or on leaving the field.
+- Controls in setting rows on the Video players, Displays and General pages now carry the row's title as their accessible name; before, screen readers announced an unnamed switch, spin box or combo box.
+- General's default hold time says it also applies to video.
+- Test method that leaves the owner's screen alone: the window runs on a separate desktop (`CreateDesktop`, process started with `lpDesktop`), and a helper on that desktop captures it with `PrintWindow` and drives it through UI Automation and posted key messages.
+
+Verified on this PC that way: the Video players page (see 05); the Games detail of a Steam game shows the Start with HDR section with the launch option holding the program's path and a Copy button; the General switch for the Explorer menu wrote `HKCU\Software\Classes\exefile\shell\Huedra.StartWithHdr` (text, icon, `launch -- "%1"`) and removed it again, leaving no empty `exefile` key.
+Not verified: the Copy button (it would overwrite the owner's clipboard) and the desktop shortcut button (no game here from a store other than Steam or Xbox).
+
+## Result (2026-10-31) — Displays: only the display showing the content
+Code: `DisplaysPage` in `crates/huedra-ui/ui/pages.slint`, `show_displays` and `wire_displays` in `crates/huedra-ui/src/app.rs`.
+- A switch above the display list, on by default: "Only the display showing the content".
+
+Verified on this PC on a hidden desktop: the switch is on with no `content_only` line in the file; off wrote `content_only = false`, on again wrote `content_only = true`. Exe 9,859,072 bytes (about 141 KB under the limit).

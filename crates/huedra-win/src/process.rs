@@ -5,15 +5,23 @@
 
 use std::ffi::c_void;
 use std::mem::size_of;
+use std::os::windows::process::CommandExt as _;
+use std::path::Path;
+use std::process::Stdio;
 
-use windows::Win32::Foundation::{HANDLE, INVALID_HANDLE_VALUE};
+use windows::Win32::Foundation::{
+    HANDLE, HANDLE_FLAG_INHERIT, HANDLE_FLAGS, INVALID_HANDLE_VALUE, SetHandleInformation,
+};
+use windows::Win32::System::Console::{
+    GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE,
+};
 use windows::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, PROCESSENTRY32W, Process32FirstW, Process32NextW, TH32CS_SNAPPROCESS,
 };
 use windows::Win32::System::Threading::{
-    INFINITE, OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
-    PROCESS_SYNCHRONIZE, QueryFullProcessImageNameW, RegisterWaitForSingleObject, UnregisterWaitEx,
-    WT_EXECUTEONLYONCE,
+    CREATE_BREAKAWAY_FROM_JOB, CREATE_NO_WINDOW, INFINITE, OpenProcess, PROCESS_NAME_WIN32,
+    PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE, QueryFullProcessImageNameW,
+    RegisterWaitForSingleObject, UnregisterWaitEx, WT_EXECUTEONLYONCE,
 };
 use windows::core::PWSTR;
 
@@ -47,6 +55,36 @@ fn path_of(process: HANDLE) -> Option<String> {
     .ok()?;
     buffer.truncate(len as usize);
     Some(String::from_utf16_lossy(&buffer))
+}
+
+/// Starts a program in the background with no console window, no
+/// arguments and no inherited input or output (a caller reading this
+/// process's output would otherwise wait for it too), outside the job this
+/// process is in when that job allows it.
+pub fn spawn_detached(program: &Path) -> bool {
+    // This process's own standard handles were inherited and are marked
+    // inheritable, so the new process would receive them as well. Children
+    // started later through `std::process` still get them: it passes
+    // duplicates.
+    for which in [STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, STD_ERROR_HANDLE] {
+        // SAFETY: reads this process's standard handle.
+        if let Ok(handle) = unsafe { GetStdHandle(which) }
+            && !handle.is_invalid()
+        {
+            // SAFETY: clears the inherit flag of a handle this process owns.
+            let _ = unsafe { SetHandleInformation(handle, HANDLE_FLAG_INHERIT.0, HANDLE_FLAGS(0)) };
+        }
+    }
+    let spawn = |flags: u32| {
+        std::process::Command::new(program)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .creation_flags(flags)
+            .spawn()
+            .is_ok()
+    };
+    spawn(CREATE_NO_WINDOW.0 | CREATE_BREAKAWAY_FROM_JOB.0) || spawn(CREATE_NO_WINDOW.0)
 }
 
 /// The ids of all running processes. Used only while following a launcher.

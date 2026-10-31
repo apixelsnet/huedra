@@ -51,4 +51,7 @@ Verified on this PC: a forced panic in the settings window (a window resized by 
 
 Verified on this PC, 24 end-to-end checks against the release build: version, help and usage errors; `games`; status with and without the tray; a second start opening the settings window; Always HDR, Automatic with its hold, a real program set up as a game (on in about 2 s, held 3 s after it closed, then SDR), pause and resume, toggle on and off, SDR at the moment `exit` returns, the saved mode applied at the next start.
 
-Status: done except `launch` and `uninstall` (phases 4 and 5).
+## Result (2026-10-31) — phase 4
+- `launch` and `uninstall` added (see 06). `Request::Launch { pid, program }` is answered once HDR is on, or with the reason it stays off. `launch` passes the started program's exit code on.
+
+Status: done.

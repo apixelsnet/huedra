@@ -25,4 +25,14 @@ Code: `crates/huedra-core/src/engine.rs`, `crates/huedra-core/src/tracker.rs`.
 
 Verified on this PC with Character Map as a test game (3 s hold): HDR on at start, held 3 s after closing, then SDR with the reason "Character Map closed; hold time of 3 seconds elapsed"; launcher case (first copy closed after 2 s, second copy adopted, HDR stayed on); Always HDR, Always SDR, pause and resume; outside changes reported and left alone.
 
+## Result (2026-10-31) — Per-display triggers
+Code: `Target` and `Engine::retarget` in `crates/huedra-core/src/engine.rs`.
+- Each trigger carries a target: every managed display, or only some (empty while its window is not known, so nothing switches). A display turns on only for triggers that cover it; its delay, hold and reason come from those triggers alone.
+- `retarget` moves a running trigger: the new display turns on, the old one holds for the trigger's hold time and then turns off with the reason "X moved to another display".
+- Turning HDR off outside Huedra, or a refused switch to HDR, now silences only the triggers covering that display; the shortcut still silences all.
+- Each display remembers the trigger that last kept it on, replacing the single "last ended" record.
+
+Verified: unit test (no window, then one display, moving to the other with hold and reason, a second display's trigger unaffected by the first display being turned off outside). Build green, 88 tests.
+Not verified on this PC: a real switch of one display while the other stays in SDR.
+
 Status: done.

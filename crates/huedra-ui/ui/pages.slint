@@ -3,7 +3,7 @@
 
 import { ScrollView, ListView, AboutSlint } from "std-widgets.slint";
 import { Theme } from "theme.slint";
-import { FocusRing, Toggle, ActionButton, SearchBox, NumberBox, Dropdown } from "controls.slint";
+import { FocusRing, Toggle, ActionButton, SearchBox, NumberBox, Dropdown, CopyField, TextBox } from "controls.slint";
 
 export struct GameRow {
     id: string,
@@ -35,6 +35,12 @@ export struct GameDetail {
     wiki-url: string,
     suggestion: string,
     suggestion-index: int,
+    // Steam launch option for Launch with HDR; empty for other stores.
+    launch-option: string,
+    // Whether a desktop shortcut can start it with HDR (its program is known).
+    shortcut: bool,
+    // Result of the last shortcut made for it.
+    launch-note: string,
 }
 
 export struct DisplayRow {
@@ -45,6 +51,21 @@ export struct DisplayRow {
     capable: bool,
     managed: bool,
     hdr-on: bool,
+}
+
+export struct VideoAppRow {
+    key: string,
+    name: string,
+    choices: [string],
+    index: int,
+    active: bool,
+}
+
+export struct SiteRow {
+    key: string,
+    name: string,
+    address: string,
+    on: bool,
 }
 
 export struct HistoryRow {
@@ -443,6 +464,7 @@ component GameDetailPanel inherits Card {
     callback apply-suggestion(string);
     callback open-wiki(string);
     callback remove-game(string);
+    callback create-shortcut(string);
 
     ScrollView {
         // At least the preferred height, so rows keep their wrapped text
@@ -547,6 +569,41 @@ component GameDetailPanel inherits Card {
                     }
                 }
             }
+            if root.detail.launch-option != "" || root.detail.shortcut: Rectangle {
+                height: 1px;
+                background: Theme.border;
+            }
+            if root.detail.launch-option != "" || root.detail.shortcut: SectionTitle {
+                text: "Start with HDR";
+            }
+            if root.detail.launch-option != "" || root.detail.shortcut: Caption {
+                text: "For games that go wrong when HDR changes while they start. HDR is turned on first, then the game starts, and HDR stays on until it closes.";
+            }
+            if root.detail.launch-option != "": VerticalLayout {
+                spacing: 6px;
+                Text {
+                    text: "Steam launch option (in Steam: the game's Properties, General, Launch options)";
+                    font-size: Theme.body-size;
+                    color: Theme.text;
+                    wrap: word-wrap;
+                }
+                CopyField {
+                    text: root.detail.launch-option;
+                    label: "Steam launch option";
+                }
+            }
+            if root.detail.shortcut: HorizontalLayout {
+                alignment: start;
+                ActionButton {
+                    text: "Create a desktop shortcut";
+                    clicked => {
+                        root.create-shortcut(root.detail.id);
+                    }
+                }
+            }
+            if root.detail.launch-note != "": Caption {
+                text: root.detail.launch-note;
+            }
             Rectangle {
                 height: 1px;
                 background: Theme.border;
@@ -625,6 +682,7 @@ export component GamesPage inherits Rectangle {
     callback apply-suggestion(string);
     callback open-wiki(string);
     callback remove-game(string);
+    callback create-shortcut(string);
 
     property <bool> has-selection: root.details.length > 0;
     property <bool> list-visible: root.wide || !root.has-selection;
@@ -882,6 +940,214 @@ export component GamesPage inherits Rectangle {
                 remove-game(id) => {
                     root.remove-game(id);
                 }
+                create-shortcut(id) => {
+                    root.create-shortcut(id);
+                }
+            }
+        }
+    }
+}
+
+// ---- Video players ----------------------------------------------------
+
+// One program in a list card: its name and what Huedra does for it.
+component VideoAppLine inherits HorizontalLayout {
+    in property <VideoAppRow> app;
+    callback chosen(int);
+    padding-left: 16px;
+    padding-right: 16px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+    spacing: 16px;
+    VerticalLayout {
+        horizontal-stretch: 1;
+        alignment: center;
+        Text {
+            text: root.app.name;
+            font-size: Theme.body-size;
+            color: Theme.text;
+            wrap: word-wrap;
+        }
+        if root.app.active: Caption {
+            text: "Keeping HDR on";
+        }
+    }
+    Centered {
+        horizontal-stretch: 0;
+        Dropdown {
+            width: 220px;
+            accessible-label: root.app.name;
+            model: root.app.choices;
+            current-index: root.app.index;
+            selected(value) => {
+                root.chosen(self.current-index);
+            }
+        }
+    }
+}
+
+// A card listing programs, with a line between them.
+component VideoAppList inherits Card {
+    in property <[VideoAppRow]> apps;
+    callback chosen(string, int);
+    VerticalLayout {
+        for app[i] in root.apps: VerticalLayout {
+            if i > 0: Rectangle {
+                height: 1px;
+                background: Theme.border;
+            }
+            VideoAppLine {
+                app: app;
+                chosen(index) => {
+                    root.chosen(app.key, index);
+                }
+            }
+        }
+    }
+}
+
+export component VideoPage inherits Rectangle {
+    in property <[VideoAppRow]> players;
+    in property <[VideoAppRow]> browsers;
+    in property <string> keywords;
+    in property <bool> full-screen-only;
+    in property <bool> sdr-with-rtx;
+    in property <string> rtx-note;
+    in property <[SiteRow]> sites;
+    in property <int> hold;
+    in property <bool> hold-custom;
+    in property <int> default-hold;
+    callback set-app(string, int);
+    callback set-keywords(string);
+    callback set-full-screen-only(bool);
+    callback set-sdr-with-rtx(bool);
+    callback set-site(string, bool);
+    callback set-hold(int);
+    callback reset-hold();
+
+    ScrollView {
+        // At least the preferred height, so rows keep their wrapped text
+        // when the page is taller than the window (the default is the
+        // minimum height, which squeezes them). Setting one size drops the
+        // default for the other, so the width is set as well.
+        content-width: self.visible-width;
+        content-height: max(self.visible-height, body.preferred-height);
+        body := VerticalLayout {
+            padding: 28px;
+            spacing: Theme.gap;
+            alignment: start;
+            PageTitle {
+                text: "Video players";
+            }
+            Caption {
+                text: "HDR turns on while a player shows a file whose name contains one of the words below, and turns off after the hold time once it no longer does.";
+            }
+            // The field takes the card's width: the words do not fit beside
+            // the description in narrow layouts.
+            Card {
+                VerticalLayout {
+                    padding: 16px;
+                    padding-top: 12px;
+                    spacing: 2px;
+                    Text {
+                        text: "Words that mark HDR video";
+                        font-size: Theme.body-size;
+                        color: Theme.text;
+                        wrap: word-wrap;
+                    }
+                    Caption {
+                        text: "Separated by commas; Enter applies them. Whole words count; case, dots, dashes and underscores are ignored. Leave empty for the default words.";
+                    }
+                    Rectangle {
+                        height: 8px;
+                    }
+                    TextBox {
+                        value: root.keywords;
+                        label: "Words that mark HDR video";
+                        accepted(text) => {
+                            root.set-keywords(text);
+                        }
+                    }
+                }
+            }
+            SettingRow {
+                title: "Only in full screen";
+                description: "Video in a window leaves the display as it is.";
+                Toggle {
+                    accessible-label: "Only in full screen";
+                    checked: root.full-screen-only;
+                    toggled => {
+                        root.set-full-screen-only(self.checked);
+                    }
+                }
+            }
+            SettingRow {
+                title: "SDR video with RTX Video HDR";
+                description: root.rtx-note;
+                Toggle {
+                    accessible-label: "SDR video with RTX Video HDR";
+                    checked: root.sdr-with-rtx;
+                    toggled => {
+                        root.set-sdr-with-rtx(self.checked);
+                    }
+                }
+            }
+            SettingRow {
+                title: "Hold time for video (seconds)";
+                description: root.hold-custom ? "Used instead of the default hold time (" + root.default-hold + " s)." : "The default hold time from General.";
+                if root.hold-custom: ActionButton {
+                    text: "Use the default";
+                    clicked => {
+                        root.reset-hold();
+                    }
+                }
+                NumberBox {
+                    accessible-label: "Hold time for video";
+                    minimum: 0;
+                    maximum: 600;
+                    value: root.hold;
+                    edited(v) => {
+                        root.set-hold(v);
+                    }
+                }
+            }
+            SectionTitle {
+                text: "Players";
+            }
+            VideoAppList {
+                apps: root.players;
+                chosen(key, index) => {
+                    root.set-app(key, index);
+                }
+            }
+            SectionTitle {
+                text: "Browsers";
+            }
+            Caption {
+                text: "Browsers turn HDR on through the Huedra browser extension, which marks the tab while an HDR video is open on YouTube or a full-screen video plays on a streaming site below, and for full-screen video with sound when SDR video with RTX Video HDR applies. Otherwise browsers never change the display.";
+            }
+            VideoAppList {
+                apps: root.browsers;
+                chosen(key, index) => {
+                    root.set-app(key, index);
+                }
+            }
+            SectionTitle {
+                text: "Streaming sites";
+            }
+            Caption {
+                text: "These sites do not show whether a video is in HDR. For a site turned on here, full-screen video counts as HDR video. Turn a site on only if it streams HDR to your browser.";
+            }
+            for site in root.sites: SettingRow {
+                title: site.name;
+                description: site.address;
+                Toggle {
+                    accessible-label: site.name;
+                    checked: site.on;
+                    toggled => {
+                        root.set-site(site.key, self.checked);
+                    }
+                }
             }
         }
     }
@@ -892,8 +1158,10 @@ export component GamesPage inherits Rectangle {
 export component DisplaysPage inherits Rectangle {
     in property <[DisplayRow]> displays;
     in property <int> retries;
+    in property <bool> content-only;
     callback set-managed(string, bool);
     callback set-retries(int);
+    callback set-content-only(bool);
 
     ScrollView {
         // At least the preferred height, so rows keep their wrapped text
@@ -910,7 +1178,18 @@ export component DisplaysPage inherits Rectangle {
                 text: "Displays";
             }
             Caption {
-                text: "Huedra switches the managed displays together. Displays connected later are managed automatically when they support HDR.";
+                text: "Huedra switches only managed displays. Displays connected later are managed automatically when they support HDR.";
+            }
+            SettingRow {
+                title: "Only the display showing the content";
+                description: "A game or video turns HDR on only for the display its window is on, and HDR follows the window to another display. Off: every managed display switches together.";
+                Toggle {
+                    accessible-label: "Only the display showing the content";
+                    checked: root.content-only;
+                    toggled => {
+                        root.set-content-only(self.checked);
+                    }
+                }
             }
             for d in root.displays: Card {
                 HorizontalLayout {
@@ -970,6 +1249,7 @@ export component DisplaysPage inherits Rectangle {
                 title: "Retry attempts";
                 description: "Some displays reject the first request while the graphics card changes mode.";
                 NumberBox {
+                    accessible-label: "Retry attempts";
                     minimum: 0;
                     maximum: 5;
                     value: root.retries;
@@ -986,6 +1266,7 @@ export component DisplaysPage inherits Rectangle {
 
 export component GeneralPage inherits Rectangle {
     in property <bool> start-with-windows;
+    in property <bool> context-menu;
     in property <int> updates;
     in property <bool> game-info;
     in property <int> hold;
@@ -996,6 +1277,7 @@ export component GeneralPage inherits Rectangle {
     in property <string> version;
     in property <string> data-folder;
     callback set-start-with-windows(bool);
+    callback set-context-menu(bool);
     callback set-updates(int);
     callback set-game-info(bool);
     callback set-hold(int);
@@ -1021,6 +1303,7 @@ export component GeneralPage inherits Rectangle {
                 title: "Start with Windows";
                 description: "Starts in the notification area without opening a window.";
                 Toggle {
+                    accessible-label: "Start with Windows";
                     checked: root.start-with-windows;
                     toggled => {
                         root.set-start-with-windows(self.checked);
@@ -1028,9 +1311,21 @@ export component GeneralPage inherits Rectangle {
                 }
             }
             SettingRow {
+                title: "\"Start with HDR\" in the menu of programs";
+                description: "Right-click a program in File Explorer and choose Show more options, then Start with HDR. HDR turns on before the program starts and stays on until it closes.";
+                Toggle {
+                    accessible-label: "\"Start with HDR\" in the menu of programs";
+                    checked: root.context-menu;
+                    toggled => {
+                        root.set-context-menu(self.checked);
+                    }
+                }
+            }
+            SettingRow {
                 title: "Updates";
                 description: "Checks once a day and installs signed releases while no game or video is running. The previous version is kept. Release hosting is not set up yet, so no checks are made.";
                 Dropdown {
+                    accessible-label: "Updates";
                     model: ["Install automatically", "Ask before installing", "Off"];
                     current-index: root.updates;
                     selected(value) => {
@@ -1042,6 +1337,7 @@ export component GeneralPage inherits Rectangle {
                 title: "Game information and icons";
                 description: "Looks up HDR support on pcgamingwiki.com, which receives the Steam ID or the name of each game, and icons in Discord's public list of games. Results are stored for 30 days. When off, icons come from the games' own programs.";
                 Toggle {
+                    accessible-label: "Game information and icons";
                     checked: root.game-info;
                     toggled => {
                         root.set-game-info(self.checked);
@@ -1050,8 +1346,9 @@ export component GeneralPage inherits Rectangle {
             }
             SettingRow {
                 title: "Default hold time (seconds)";
-                description: "Used for games without their own setting.";
+                description: "Used for games without their own setting, and for video unless set on the Video players page.";
                 NumberBox {
+                    accessible-label: "Default hold time (seconds)";
                     minimum: 0;
                     maximum: 600;
                     value: root.hold;
@@ -1064,6 +1361,7 @@ export component GeneralPage inherits Rectangle {
                 title: "Default delay before enabling HDR (seconds)";
                 description: "Used for games without their own setting.";
                 NumberBox {
+                    accessible-label: "Default delay before enabling HDR (seconds)";
                     minimum: 0;
                     maximum: 120;
                     value: root.delay;
@@ -1076,6 +1374,7 @@ export component GeneralPage inherits Rectangle {
                 title: "Keyboard shortcuts";
                 description: "Win+Alt+H turns HDR on or off. Win+Alt+O changes the mode. Win+Alt+P pauses or resumes." + (root.hotkey-note != "" ? " " + root.hotkey-note : "");
                 Toggle {
+                    accessible-label: "Keyboard shortcuts";
                     checked: root.hotkeys;
                     toggled => {
                         root.set-hotkeys(self.checked);
@@ -1086,6 +1385,7 @@ export component GeneralPage inherits Rectangle {
                 title: "Record window titles in the log";
                 description: "When off, browser tab names and file names are not written to the log.";
                 Toggle {
+                    accessible-label: "Record window titles in the log";
                     checked: root.log-titles;
                     toggled => {
                         root.set-log-titles(self.checked);

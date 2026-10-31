@@ -12,6 +12,8 @@ mod client;
 mod games;
 #[cfg(windows)]
 mod hdr;
+#[cfg(windows)]
+mod launch;
 
 use std::process::ExitCode;
 
@@ -27,7 +29,7 @@ fn main() -> ExitCode {
         }
     };
     match run(command) {
-        Ok(()) => ExitCode::SUCCESS,
+        Ok(code) => code,
         Err(error) => {
             eprintln!("huedra: {error:#}");
             ExitCode::FAILURE
@@ -36,8 +38,11 @@ fn main() -> ExitCode {
 }
 
 #[cfg(windows)]
-fn run(command: Command) -> anyhow::Result<()> {
+fn run(command: Command) -> anyhow::Result<ExitCode> {
     match command {
+        // The started program's exit code is passed on.
+        Command::Launch(program) => return launch::run(&program),
+        Command::Uninstall => launch::uninstall()?,
         Command::Version => println!("{APP_NAME} {VERSION}"),
         Command::Help => println!("{APP_NAME} {VERSION}\n\n{USAGE}"),
         Command::Hdr(hdr) => hdr::run(hdr)?,
@@ -59,7 +64,7 @@ fn run(command: Command) -> anyhow::Result<()> {
             huedra_ui::run(huedra_core::locations::Locations::resolve()?, page)?;
         }
     }
-    Ok(())
+    Ok(ExitCode::SUCCESS)
 }
 
 /// Writes a panic to the log before the process ends. Release builds abort
@@ -85,13 +90,13 @@ fn log_panics() {
 }
 
 #[cfg(not(windows))]
-fn run(command: Command) -> anyhow::Result<()> {
+fn run(command: Command) -> anyhow::Result<ExitCode> {
     match command {
         Command::Version => println!("{APP_NAME} {VERSION}"),
         Command::Help => println!("{APP_NAME} {VERSION}\n\n{USAGE}"),
         _ => anyhow::bail!("Huedra runs on Windows only"),
     }
-    Ok(())
+    Ok(ExitCode::SUCCESS)
 }
 
 /// Opens the settings window as its own process.

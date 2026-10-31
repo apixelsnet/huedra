@@ -240,6 +240,71 @@ export component SearchBox inherits Rectangle {
     }
 }
 
+// A line of text applied with Enter or when the field loses the keyboard,
+// not on every key press. A value changed elsewhere shows at once, except
+// while being typed.
+export component TextBox inherits Rectangle {
+    in property <string> value;
+    in property <string> label;
+    callback accepted(string);
+
+    function commit() {
+        if input.text != root.value {
+            root.accepted(input.text);
+            // Shows the value as it was stored, which may be tidied.
+            input.text = root.value;
+        }
+    }
+
+    changed value => {
+        if !input.has-focus {
+            input.text = root.value;
+        }
+    }
+
+    height: Theme.button-height;
+    min-width: 160px;
+    border-radius: Theme.radius-control;
+    border-width: 1px;
+    border-color: Theme.border;
+    background: input.has-focus ? Theme.surface : touch.has-hover ? Theme.hover : Theme.surface-raised;
+    clip: true;
+    forward-focus: input;
+    touch := TouchArea {
+        mouse-cursor: MouseCursor.text;
+        clicked => {
+            input.focus();
+        }
+    }
+    input := TextInput {
+        x: 10px;
+        width: parent.width - 20px;
+        height: parent.height;
+        text: root.value;
+        single-line: true;
+        font-size: Theme.body-size;
+        color: Theme.text;
+        vertical-alignment: center;
+        selection-background-color: Theme.accent.with-alpha(0.45);
+        selection-foreground-color: Theme.text;
+        accessible-label: root.label;
+        accepted => {
+            root.commit();
+        }
+        changed has-focus => {
+            if !self.has-focus {
+                root.commit();
+            }
+        }
+    }
+    FieldLine {
+        x: 0;
+        y: parent.height - self.height;
+        width: parent.width;
+        active: input.has-focus;
+    }
+}
+
 // A small button inside a field.
 component FieldButton inherits Rectangle {
     in property <string> glyph;
@@ -554,6 +619,51 @@ export component Dropdown inherits Rectangle {
                     }
                 }
             }
+        }
+    }
+}
+
+// Read-only text for the user to paste elsewhere, such as a launch option,
+// with a Copy button. The text can also be selected by hand.
+export component CopyField inherits HorizontalLayout {
+    in property <string> text;
+    in property <string> label;
+    property <bool> copied;
+    spacing: 8px;
+    changed text => {
+        self.copied = false;
+    }
+    Rectangle {
+        horizontal-stretch: 1;
+        height: Theme.button-height;
+        min-width: 160px;
+        border-radius: Theme.radius-control;
+        border-width: 1px;
+        border-color: Theme.border;
+        background: Theme.surface-raised;
+        clip: true;
+        field := TextInput {
+            x: 10px;
+            width: parent.width - 20px;
+            height: parent.height;
+            text: root.text;
+            read-only: true;
+            single-line: true;
+            font-size: Theme.body-size;
+            color: Theme.text;
+            vertical-alignment: center;
+            selection-background-color: Theme.accent.with-alpha(0.45);
+            selection-foreground-color: Theme.text;
+            accessible-label: root.label;
+        }
+    }
+    ActionButton {
+        text: root.copied ? "Copied" : "Copy";
+        clicked => {
+            field.select-all();
+            field.copy();
+            field.clear-selection();
+            root.copied = true;
         }
     }
 }

@@ -24,4 +24,15 @@ Code: `crates/huedra-win/src/{event_loop,foreground,process}.rs`, `crates/huedra
 Verified on this PC: 0 ms of processor time over 60 s idle, 2 threads, 1.7 MB private memory (11 MB working set, mostly shared system DLLs).
 Not verified: detection latency (no measurement yet); 10 idle minutes (60 s measured); the title-change hook (phase 4).
 
-Status: done for games; video titles in phase 4.
+## Result (2026-10-31) — phase 4
+- Title and move hooks are per process (`SetWinEventHook` with a process id), installed only for known video programs; see `05-video.md`. Repeated window-change events for one process are queued once.
+
+## Result (2026-10-31) — Game window display
+Code: `find_game_window`, `place_game`, `game_target`, `retarget_all` in `crates/huedra/src/app.rs`; `main_monitor` in `crates/huedra-win/src/window.rs`; `Tracker::trigger_of`.
+- With Displays, "Only the display showing the content" on (the default), a game turns HDR on only for the display of its largest visible window; until it has a window, nothing switches (owner's choice: games that read HDR state only at startup may miss it). The display is read again when the game comes to the front and on its window moves (a per-process hook), and kept while the window is minimised. A launcher's successor takes over its display when its window appears.
+- Changing the setting applies to running games and video at once.
+
+Verified: build green (clippy for Windows with `-D warnings`).
+Not verified on this PC: any game; the owner tests it.
+
+Status: done for games; video titles in progress (phase 4).

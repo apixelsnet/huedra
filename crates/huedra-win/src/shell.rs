@@ -1,8 +1,18 @@
 //! Small shell services for the settings window: opening a web page, the
-//! file picker, a program's icon, and the Windows "Animation effects"
-//! setting.
+//! file picker, a program's icon, desktop shortcuts, and the Windows
+//! "Animation effects" setting.
 
 use std::mem::size_of;
+use std::path::{Path, PathBuf};
+
+use windows::Win32::System::Com::{
+    CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED, CoCreateInstance, CoInitializeEx,
+    CoTaskMemFree, CoUninitialize, IPersistFile,
+};
+use windows::Win32::UI::Shell::{
+    FOLDERID_Desktop, IShellLinkW, KF_FLAG_DEFAULT, SHGetKnownFolderPath, ShellLink,
+};
+use windows::core::Interface as _;
 
 use windows::Win32::Graphics::Gdi::{
     BI_RGB, BITMAPINFO, BITMAPINFOHEADER, CreateCompatibleDC, DIB_RGB_COLORS, DeleteDC,
@@ -65,6 +75,72 @@ pub fn pick_program(title: &str) -> Option<String> {
     }
     let len = file.iter().position(|&c| c == 0).unwrap_or(file.len());
     Some(String::from_utf16_lossy(&file[..len]))
+}
+
+/// The current user's desktop folder.
+pub fn desktop_folder() -> Option<PathBuf> {
+    // SAFETY: asks for a known folder; the returned string is freed below.
+    let path = unsafe { SHGetKnownFolderPath(&FOLDERID_Desktop, KF_FLAG_DEFAULT, None) }.ok()?;
+    // SAFETY: a null-terminated string from the shell, read before it is freed.
+    let text = unsafe { path.to_string() }.ok();
+    // SAFETY: allocated by the shell with CoTaskMemAlloc and freed once.
+    unsafe { CoTaskMemFree(Some(path.0.cast_const().cast())) };
+    text.map(PathBuf::from)
+}
+
+/// A shortcut (`.lnk`) to write.
+#[derive(Debug, Clone, Copy)]
+pub struct Shortcut<'a> {
+    /// The program it starts.
+    pub target: &'a str,
+    /// Its arguments.
+    pub arguments: &'a str,
+    /// The folder it starts in.
+    pub working_dir: &'a str,
+    /// The file whose first icon it shows.
+    pub icon: &'a str,
+    /// Tooltip text.
+    pub description: &'a str,
+}
+
+/// Writes a shortcut file, replacing one of the same name.
+///
+/// # Errors
+/// The COM error from the shell.
+pub fn create_shortcut(file: &Path, shortcut: &Shortcut<'_>) -> windows::core::Result<()> {
+    let _com = init_com();
+    // SAFETY: creates the shell's link object in this process.
+    let link: IShellLinkW = unsafe { CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER) }?;
+    // SAFETY: each call copies the string it is given.
+    unsafe {
+        link.SetPath(&HSTRING::from(shortcut.target))?;
+        link.SetArguments(&HSTRING::from(shortcut.arguments))?;
+        link.SetWorkingDirectory(&HSTRING::from(shortcut.working_dir))?;
+        link.SetIconLocation(&HSTRING::from(shortcut.icon), 0)?;
+        link.SetDescription(&HSTRING::from(shortcut.description))?;
+    }
+    let persist: IPersistFile = link.cast()?;
+    // SAFETY: writes the link to `file`; the path string outlives the call.
+    unsafe { persist.Save(&HSTRING::from(file.as_os_str()), true) }
+}
+
+/// Initialises COM on this thread for the guard's lifetime. A thread
+/// already initialised (S_FALSE, or another apartment type) keeps working;
+/// only a successful call is balanced by the guard.
+pub(crate) fn init_com() -> Option<ComGuard> {
+    // SAFETY: initialises COM on this thread; balanced by the guard.
+    let init = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) };
+    init.is_ok().then_some(ComGuard)
+}
+
+/// Balances a successful `CoInitializeEx`.
+pub(crate) struct ComGuard;
+
+impl Drop for ComGuard {
+    fn drop(&mut self) {
+        // SAFETY: matches the successful CoInitializeEx on this thread.
+        unsafe { CoUninitialize() };
+    }
 }
 
 /// Whether Windows "Animation effects" are on. Defaults to on if unknown.

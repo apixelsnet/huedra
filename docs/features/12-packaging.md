@@ -52,4 +52,7 @@ Pre-release checklist (testers on other machines, before the first public releas
 - A display at 150 % and at 200 % in Windows: the settings window and the tray icon (08, 07).
 - Narrator or NVDA: every page of the settings window can be read and used (08).
 
-Status: phase 0 done. Release archive, start-up entry and uninstall come in phase 5.
+## Result (2026-10-31) — phase 4
+- `huedra uninstall` exists early because Launch with HDR writes a registry key: it closes the tray and removes every value and key Huedra writes (start-up value, "Start with HDR" menu entry). See 06.
+
+Status: phase 0 done, `uninstall` done. Release archive and start-up entry come in phase 5.

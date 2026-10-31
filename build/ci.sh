@@ -27,6 +27,13 @@ cargo deny --workspace check
 step "test"
 cargo test --workspace $locked
 
+step "extension icons"
+icons=$(mktemp -d)
+cargo run -q -p huedra-core --example extension_icons $locked -- "$icons"
+for icon in "$icons"/*.png; do
+  cmp -s "$icon" "extras/browser/icons/${icon##*/}" || { echo "extras/browser/icons is out of date: run the extension_icons example" >&2; exit 1; }
+done
+
 step "doc"
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps $locked
 

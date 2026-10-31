@@ -40,6 +40,9 @@ pub enum Event {
     Foreground(u32),
     /// A watched process exited.
     ProcessExited(u32),
+    /// A top-level window of a watched video program changed its title or
+    /// position (see [`crate::window::ProcessHook`]).
+    WindowChanged(u32),
     /// A timer set with [`EventLoop::set_timer`] fired.
     Timer(TimerId),
     /// The display configuration changed (`WM_DISPLAYCHANGE`).
@@ -76,8 +79,19 @@ thread_local! {
 }
 
 /// Queues an event and makes sure `GetMessageW` returns to process it.
+/// Window changes already waiting in the queue are not queued twice: a
+/// window being dragged reports every step.
 pub(crate) fn push(event: Event) {
-    QUEUE.with_borrow_mut(|q| q.push_back(event));
+    let queued = QUEUE.with_borrow_mut(|q| {
+        if matches!(event, Event::WindowChanged(_)) && q.contains(&event) {
+            return false;
+        }
+        q.push_back(event);
+        true
+    });
+    if !queued {
+        return;
+    }
     let window = WINDOW.get();
     if window != 0 {
         Waker(window).post(WM_WAKE, 0);

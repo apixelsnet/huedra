@@ -37,7 +37,7 @@ Command line:
 
 ```text
 huedra                       Start Huedra in the notification area.
-huedra settings [page]       Open the settings window (status, games, displays, general).
+huedra settings [page]       Open the settings window (status, games, video, displays, general).
 huedra status                Show what the running Huedra is doing.
 huedra games                 List the games found in every store.
 huedra mode automatic|hdr|sdr

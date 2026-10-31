@@ -5,7 +5,7 @@
 //! [`Engine::next_deadline`]. Principal rule: Huedra turns off only the HDR
 //! that it turned on. Feature doc: `docs/features/02-engine.md`.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
@@ -73,6 +73,29 @@ pub struct Trigger {
     pub delay: Duration,
     /// How long HDR stays on after it ends.
     pub hold: Duration,
+    /// The displays it wants in HDR.
+    pub target: Target,
+}
+
+/// Which managed displays a trigger wants in HDR.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum Target {
+    /// Every managed display.
+    #[default]
+    All,
+    /// Only these displays, such as the one showing the game or video.
+    /// Empty while its window is not known yet: nothing switches.
+    Only(BTreeSet<DisplayId>),
+}
+
+impl Target {
+    /// Whether the trigger wants this display in HDR.
+    pub fn covers(&self, display: &DisplayId) -> bool {
+        match self {
+            Self::All => true,
+            Self::Only(displays) => displays.contains(display),
+        }
+    }
 }
 
 /// Where a managed display stands.
@@ -174,6 +197,16 @@ struct Active {
 struct Slot {
     phase: Phase,
     observed: HdrState,
+    /// The trigger that last kept this display in HDR: its hold time and
+    /// name apply when HDR turns off.
+    holder: Option<Holder>,
+}
+
+#[derive(Debug, Clone)]
+struct Holder {
+    trigger: TriggerId,
+    label: String,
+    hold: Duration,
 }
 
 /// The decision engine. See the module documentation.
@@ -184,8 +217,6 @@ pub struct Engine {
     default_hold: Duration,
     slots: BTreeMap<DisplayId, Slot>,
     active: BTreeMap<TriggerId, Active>,
-    /// Label and hold time of the trigger that ended last.
-    last_ended: Option<(String, Duration)>,
 }
 
 impl Engine {
@@ -213,6 +244,7 @@ impl Engine {
                     Slot {
                         phase,
                         observed: *state,
+                        holder: None,
                     },
                 )
             })
@@ -223,7 +255,6 @@ impl Engine {
             default_hold,
             slots,
             active: BTreeMap::new(),
-            last_ended: None,
         };
         let mut outcome = Outcome::default();
         engine.evaluate(now, &mut outcome);
@@ -259,6 +290,7 @@ impl Engine {
                     Slot {
                         phase,
                         observed: *state,
+                        holder: None,
                     },
                 );
             }
@@ -287,10 +319,21 @@ impl Engine {
 
     /// A trigger ended.
     pub fn trigger_ended(&mut self, now: Instant, id: &TriggerId) -> Outcome {
-        if let Some(ended) = self.active.remove(id) {
-            self.last_ended = Some((ended.trigger.label, ended.trigger.hold));
-        }
+        self.active.remove(id);
         self.run(now)
+    }
+
+    /// Changes the displays a running trigger wants in HDR, for example
+    /// after its window moved to another display. A display it leaves
+    /// holds HDR for the trigger's hold time, as if it had ended there.
+    pub fn retarget(&mut self, now: Instant, id: &TriggerId, target: Target) -> Outcome {
+        match self.active.get_mut(id) {
+            Some(active) if active.trigger.target != target => {
+                active.trigger.target = target;
+                self.run(now)
+            }
+            _ => Outcome::default(),
+        }
     }
 
     /// Changes the mode.
@@ -372,7 +415,7 @@ impl Engine {
                 HdrState::On => {
                     slot.phase = Phase::Sdr;
                     slot.observed = HdrState::Off;
-                    self.suppress_all();
+                    self.suppress_covering(display);
                 }
                 HdrState::Off => {
                     slot.phase = Phase::Holding {
@@ -463,6 +506,15 @@ impl Engine {
         }
     }
 
+    /// Silences the triggers that want this display in HDR.
+    fn suppress_covering(&mut self, display: &DisplayId) {
+        for active in self.active.values_mut() {
+            if active.trigger.target.covers(display) {
+                active.suppressed = true;
+            }
+        }
+    }
+
     fn observe_one(&mut self, display: &DisplayId, state: HdrState, outcome: &mut Outcome) {
         let Some(slot) = self.slots.get_mut(display) else {
             return;
@@ -491,7 +543,7 @@ impl Engine {
                     NoteKind::External,
                     "HDR was turned off outside Huedra",
                 ));
-                self.suppress_all();
+                self.suppress_covering(display);
             }
             _ => {}
         }
@@ -504,19 +556,31 @@ impl Engine {
             }
             self.paused_until = None;
         }
-        let live = || self.active.values().filter(|a| !a.suppressed);
-        let ready = live()
-            .filter(|a| now >= a.started + a.trigger.delay)
-            .min_by_key(|a| a.started)
-            .map(|a| a.trigger.label.clone());
-        let pending = live().map(|a| a.started + a.trigger.delay).min();
-        let (ended_label, hold) = self
-            .last_ended
-            .clone()
-            .unwrap_or_else(|| (String::new(), self.default_hold));
-
+        let mode = self.mode;
+        let default_hold = self.default_hold;
+        let active = &self.active;
         for (id, slot) in &mut self.slots {
-            match self.mode {
+            // Only the triggers that want this display count for it.
+            let live = || {
+                active
+                    .iter()
+                    .filter(|(_, a)| !a.suppressed && a.trigger.target.covers(id))
+            };
+            let first_ready = live()
+                .filter(|(_, a)| now >= a.started + a.trigger.delay)
+                .min_by_key(|(_, a)| a.started);
+            if let Some((trigger, a)) = first_ready {
+                slot.holder = Some(Holder {
+                    trigger: trigger.clone(),
+                    label: a.trigger.label.clone(),
+                    hold: a.trigger.hold,
+                });
+            }
+            let ready = first_ready.map(|(_, a)| a.trigger.label.clone());
+            let pending = live().map(|(_, a)| a.started + a.trigger.delay).min();
+            let hold = slot.holder.as_ref().map_or(default_hold, |h| h.hold);
+            let off_reason = closed_reason(slot.holder.as_ref(), active, hold);
+            match mode {
                 Mode::AlwaysHdr => match slot.phase {
                     Phase::Sdr | Phase::Waiting { .. } => {
                         slot.phase = Phase::HdrByHuedra;
@@ -550,8 +614,8 @@ impl Engine {
                     (Phase::HdrByHuedra, None, Some(_)) => {}
                     (Phase::HdrByHuedra, None, None) if hold.is_zero() => {
                         slot.phase = Phase::Sdr;
-                        let reason = closed_reason(&ended_label, hold);
-                        switch(outcome, id, slot, HdrState::Off, &reason);
+                        slot.holder = None;
+                        switch(outcome, id, slot, HdrState::Off, &off_reason);
                     }
                     (Phase::HdrByHuedra, None, None) => {
                         slot.phase = Phase::Holding { until: now + hold };
@@ -559,8 +623,8 @@ impl Engine {
                     (Phase::Holding { until }, None, None) => {
                         if now >= until {
                             slot.phase = Phase::Sdr;
-                            let reason = closed_reason(&ended_label, hold);
-                            switch(outcome, id, slot, HdrState::Off, &reason);
+                            slot.holder = None;
+                            switch(outcome, id, slot, HdrState::Off, &off_reason);
                         }
                     }
                 },
@@ -589,13 +653,22 @@ fn switch(outcome: &mut Outcome, id: &DisplayId, slot: &mut Slot, state: HdrStat
     });
 }
 
-fn closed_reason(label: &str, hold: Duration) -> String {
+/// Why a display returns to SDR: its last trigger closed, or moved to
+/// another display while still running.
+fn closed_reason(
+    holder: Option<&Holder>,
+    active: &BTreeMap<TriggerId, Active>,
+    hold: Duration,
+) -> String {
     let secs = hold.as_secs();
     let unit = if secs == 1 { "second" } else { "seconds" };
-    if label.is_empty() {
-        format!("No trigger is active; hold time of {secs} {unit} elapsed")
-    } else {
-        format!("{label} closed; hold time of {secs} {unit} elapsed")
+    match holder {
+        None => format!("No trigger is active; hold time of {secs} {unit} elapsed"),
+        Some(h) if active.contains_key(&h.trigger) => format!(
+            "{} moved to another display; hold time of {secs} {unit} elapsed",
+            h.label
+        ),
+        Some(h) => format!("{} closed; hold time of {secs} {unit} elapsed", h.label),
     }
 }
 
@@ -614,6 +687,7 @@ mod tests {
             label: "Cyberpunk 2077".into(),
             delay: Duration::from_secs(delay),
             hold: HOLD,
+            target: Target::All,
         }
     }
 
@@ -870,6 +944,58 @@ mod tests {
         );
         e.set_displays(t0, &[]);
         assert!(e.status(t0).displays.is_empty(), "removed");
+    }
+
+    #[test]
+    fn target_switches_only_its_displays() {
+        let t0 = Instant::now();
+        let (one, two) = (display(), DisplayId::new("monitor-2"));
+        let both = [(one.clone(), HdrState::Off), (two.clone(), HdrState::Off)];
+        let (mut e, _) = Engine::new(Mode::Automatic, HOLD, &both, &[], t0);
+        let only = |d: &DisplayId| Target::Only(BTreeSet::from([d.clone()]));
+        let id = TriggerId::new("video:chrome:1");
+
+        // Window not known yet: nothing switches.
+        let mut video = game(0);
+        video.target = Target::Only(BTreeSet::new());
+        let out = e.trigger_started(t0, id.clone(), video);
+        assert!(out.actions.is_empty(), "no window");
+
+        let out = e.retarget(t0, &id, only(&two));
+        let on_two = Action {
+            display: two.clone(),
+            state: HdrState::On,
+        };
+        assert_eq!(out.actions, vec![on_two], "only the window's display");
+        assert!(
+            e.retarget(t0, &id, only(&two)).actions.is_empty(),
+            "same target"
+        );
+
+        // The window moves: the new display turns on, the old one holds.
+        let out = e.retarget(t0 + secs(1), &id, only(&one));
+        assert_eq!(out.actions, on(), "new display on");
+        let phases = e.status(t0).displays;
+        let until = t0 + secs(1) + HOLD;
+        assert_eq!(phases[1].1, Phase::Holding { until }, "old holds");
+        let out = e.tick(until);
+        assert_eq!(out.actions.len(), 1, "old display off");
+        assert_eq!(out.actions[0].display, two, "old display");
+        assert_eq!(
+            out.notes[0].reason,
+            "Cyberpunk 2077 moved to another display; hold time of 10 seconds elapsed",
+            "reason"
+        );
+
+        // Turning HDR off on one display silences only its triggers.
+        let other = TriggerId::new("video:mpv:2");
+        let mut player = game(0);
+        player.target = only(&two);
+        e.trigger_started(t0 + secs(20), other.clone(), player);
+        e.observe(t0 + secs(21), &one, HdrState::Off);
+        let running = e.active_triggers();
+        assert_eq!(running.len(), 1, "one trigger silenced");
+        assert_eq!(running[0].0, other, "the other display's trigger runs");
     }
 
     #[test]

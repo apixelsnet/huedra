@@ -1,21 +1,41 @@
-//! Registry access: reading store keys, the start-up entry, and the Windows
-//! light or dark app setting.
-//! Feature docs: `04-game-library.md`, `08-settings-window.md`, `12-packaging.md`.
+//! Registry access: reading store keys, the start-up entry, the "Start with
+//! HDR" entry in Explorer's menu, the Windows light or dark app setting and
+//! NVIDIA's RTX Video HDR switch.
+//! Everything Huedra writes is under `HKEY_CURRENT_USER` and removed by
+//! [`remove_all`].
+//! Feature docs: `04-game-library.md`, `05-video.md`, `06-launch-with-hdr.md`,
+//! `08-settings-window.md`, `12-packaging.md`.
 
 use huedra_core::library::registry::RegistryEntry;
 use windows::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_SUCCESS};
 use windows::Win32::System::Registry::{
     HKEY, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_NOTIFY, KEY_READ, KEY_WOW64_32KEY,
     REG_NOTIFY_CHANGE_LAST_SET, REG_SZ, RRF_RT_REG_DWORD, RRF_RT_REG_EXPAND_SZ, RRF_RT_REG_SZ,
-    RegCloseKey, RegDeleteKeyValueW, RegEnumKeyExW, RegGetValueW, RegNotifyChangeKeyValue,
-    RegOpenKeyExW, RegSetKeyValueW,
+    RegCloseKey, RegDeleteKeyValueW, RegDeleteKeyW, RegDeleteTreeW, RegEnumKeyExW, RegGetValueW,
+    RegNotifyChangeKeyValue, RegOpenKeyExW, RegQueryInfoKeyW, RegSetKeyValueW,
 };
 use windows::core::{HSTRING, PWSTR};
 
 const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
 const RUN_VALUE: &str = "Huedra";
+/// The "Start with HDR" verb on programs (`exefile`), for this user only.
+const MENU_KEY: &str = r"Software\Classes\exefile\shell\Huedra.StartWithHdr";
+/// Parents of [`MENU_KEY`], removed when nothing else is in them.
+const MENU_PARENTS: [&str; 2] = [
+    r"Software\Classes\exefile\shell",
+    r"Software\Classes\exefile",
+];
+const MENU_COMMAND_KEY: &str = r"Software\Classes\exefile\shell\Huedra.StartWithHdr\command";
 const THEME_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
 const THEME_VALUE: &str = "AppsUseLightTheme";
+/// The display adapters' device class; each adapter has a numbered subkey
+/// (`0000`, `0001`, ...) where its driver keeps settings.
+const DISPLAY_CLASS_KEY: &str =
+    r"SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}";
+/// NVIDIA's RTX Video HDR switch in an adapter's key: 0 or missing for off,
+/// 5 for on. Written by the NVIDIA app and Control Panel; not a documented
+/// interface.
+const RTX_VIDEO_HDR_VALUE: &str = "_User_Global_VAL_TrueHDR";
 const MAX_SUBKEYS: u32 = 4096;
 const MAX_STRING_BYTES: u32 = 64 * 1024;
 
@@ -26,6 +46,8 @@ pub enum Hive {
     CurrentUser,
     /// `HKEY_LOCAL_MACHINE`, 32-bit view (where the game stores write).
     LocalMachine32,
+    /// `HKEY_LOCAL_MACHINE`, native view.
+    LocalMachine,
 }
 
 struct Key(HKEY);
@@ -41,6 +63,7 @@ fn open(hive: Hive, path: &str) -> Option<Key> {
     let (root, access) = match hive {
         Hive::CurrentUser => (HKEY_CURRENT_USER, KEY_READ),
         Hive::LocalMachine32 => (HKEY_LOCAL_MACHINE, KEY_READ | KEY_WOW64_32KEY),
+        Hive::LocalMachine => (HKEY_LOCAL_MACHINE, KEY_READ),
     };
     let mut key = HKEY::default();
     // SAFETY: opens a key for reading; `key` receives the handle.
@@ -87,7 +110,47 @@ pub fn subkeys(hive: Hive, path: &str, names: &[&str]) -> Vec<RegistryEntry> {
     let Some(parent) = open(hive, path) else {
         return Vec::new();
     };
-    let mut entries = Vec::new();
+    subkey_names(&parent)
+        .into_iter()
+        .filter_map(|key_name| {
+            let child = open(hive, &format!(r"{path}\{key_name}"))?;
+            let values = names
+                .iter()
+                .filter_map(|n| read_string(&child, n).map(|v| ((*n).to_owned(), v)))
+                .collect();
+            Some(RegistryEntry {
+                key: key_name,
+                values,
+            })
+        })
+        .collect()
+}
+
+/// Whether NVIDIA RTX Video HDR is turned on for any NVIDIA display
+/// adapter; `None` when there is none. Reading needs no elevation.
+pub fn rtx_video_hdr() -> Option<bool> {
+    let parent = open(Hive::LocalMachine, DISPLAY_CLASS_KEY)?;
+    let mut found = None;
+    for name in subkey_names(&parent) {
+        if name.len() != 4 || !name.bytes().all(|b| b.is_ascii_digit()) {
+            continue;
+        }
+        let Some(adapter) = open(Hive::LocalMachine, &format!(r"{DISPLAY_CLASS_KEY}\{name}"))
+        else {
+            continue;
+        };
+        if !read_string(&adapter, "ProviderName").is_some_and(|p| p.contains("NVIDIA")) {
+            continue;
+        }
+        let on = read_dword(&adapter, RTX_VIDEO_HDR_VALUE).is_some_and(|v| v != 0);
+        found = Some(found == Some(true) || on);
+    }
+    found
+}
+
+/// The names of a key's subkeys.
+fn subkey_names(parent: &Key) -> Vec<String> {
+    let mut found = Vec::new();
     for index in 0..MAX_SUBKEYS {
         let mut name = [0_u16; 256];
         let mut len = 256_u32;
@@ -107,20 +170,9 @@ pub fn subkeys(hive: Hive, path: &str, names: &[&str]) -> Vec<RegistryEntry> {
         if status != ERROR_SUCCESS {
             break;
         }
-        let key_name = String::from_utf16_lossy(&name[..len as usize]);
-        let Some(child) = open(hive, &format!(r"{path}\{key_name}")) else {
-            continue;
-        };
-        let values = names
-            .iter()
-            .filter_map(|n| read_string(&child, n).map(|v| ((*n).to_owned(), v)))
-            .collect();
-        entries.push(RegistryEntry {
-            key: key_name,
-            values,
-        });
+        found.push(String::from_utf16_lossy(&name[..len as usize]));
     }
-    entries
+    found
 }
 
 /// The command in the start-up entry, if there is one.
@@ -133,31 +185,123 @@ pub fn startup_command() -> Option<String> {
 /// # Errors
 /// The Windows error when the key cannot be written.
 pub fn set_startup(command: Option<&str>) -> windows::core::Result<()> {
-    let key = HSTRING::from(RUN_KEY);
-    let value = HSTRING::from(RUN_VALUE);
-    let status = match command {
-        Some(command) => {
-            let data: Vec<u16> = command.encode_utf16().chain([0]).collect();
-            let bytes = u32::try_from(data.len() * 2).unwrap_or(u32::MAX);
-            // SAFETY: `data` is a null-terminated UTF-16 string of `bytes` bytes.
-            unsafe {
-                RegSetKeyValueW(
-                    HKEY_CURRENT_USER,
-                    &key,
-                    &value,
-                    REG_SZ.0,
-                    Some(data.as_ptr().cast()),
-                    bytes,
-                )
+    match command {
+        Some(command) => write_string(RUN_KEY, RUN_VALUE, command),
+        None => {
+            let (key, value) = (HSTRING::from(RUN_KEY), HSTRING::from(RUN_VALUE));
+            // SAFETY: deletes one value of the current user's Run key.
+            match unsafe { RegDeleteKeyValueW(HKEY_CURRENT_USER, &key, &value) } {
+                ERROR_FILE_NOT_FOUND => ERROR_SUCCESS,
+                other => other,
             }
+            .ok()
         }
-        // SAFETY: deletes one value of the current user's Run key.
-        None => match unsafe { RegDeleteKeyValueW(HKEY_CURRENT_USER, &key, &value) } {
-            ERROR_FILE_NOT_FOUND => ERROR_SUCCESS,
-            other => other,
-        },
+    }
+}
+
+/// The command of the "Start with HDR" entry, if there is one.
+pub fn context_menu_command() -> Option<String> {
+    string(Hive::CurrentUser, MENU_COMMAND_KEY, "")
+}
+
+/// Adds the "Start with HDR" entry to the menu of programs in Explorer
+/// (under "Show more options" on Windows 11), or removes it.
+///
+/// # Errors
+/// The Windows error when the key cannot be written or removed.
+pub fn set_context_menu(entry: Option<ContextMenu<'_>>) -> windows::core::Result<()> {
+    let Some(entry) = entry else {
+        delete_tree(MENU_KEY)?;
+        // Writing the entry created these when they were missing.
+        for parent in MENU_PARENTS {
+            delete_if_empty(parent);
+        }
+        return Ok(());
     };
-    status.ok()
+    write_string(MENU_KEY, "", entry.text)?;
+    write_string(MENU_KEY, "Icon", entry.icon)?;
+    write_string(MENU_COMMAND_KEY, "", entry.command)
+}
+
+/// The "Start with HDR" entry.
+#[derive(Debug, Clone, Copy)]
+pub struct ContextMenu<'a> {
+    /// The text shown.
+    pub text: &'a str,
+    /// The program whose icon is shown.
+    pub icon: &'a str,
+    /// The command run, with `%1` for the program clicked.
+    pub command: &'a str,
+}
+
+/// Removes every key and value Huedra wrote: the start-up entry and the
+/// "Start with HDR" entry. Missing ones are not an error.
+///
+/// # Errors
+/// The first Windows error.
+pub fn remove_all() -> windows::core::Result<()> {
+    let startup = set_startup(None);
+    let menu = set_context_menu(None);
+    startup.and(menu)
+}
+
+/// Writes a string value under `HKEY_CURRENT_USER`, creating the key.
+fn write_string(path: &str, name: &str, text: &str) -> windows::core::Result<()> {
+    let data: Vec<u16> = text.encode_utf16().chain([0]).collect();
+    let bytes = u32::try_from(data.len() * 2).unwrap_or(u32::MAX);
+    // SAFETY: `data` is a null-terminated UTF-16 string of `bytes` bytes.
+    unsafe {
+        RegSetKeyValueW(
+            HKEY_CURRENT_USER,
+            &HSTRING::from(path),
+            &HSTRING::from(name),
+            REG_SZ.0,
+            Some(data.as_ptr().cast()),
+            bytes,
+        )
+    }
+    .ok()
+}
+
+/// Deletes a key under `HKEY_CURRENT_USER` that has no subkeys and no values.
+fn delete_if_empty(path: &str) {
+    let Some(key) = open(Hive::CurrentUser, path) else {
+        return;
+    };
+    let (mut subkeys, mut values) = (0_u32, 0_u32);
+    // SAFETY: asks only for the two counts.
+    let status = unsafe {
+        RegQueryInfoKeyW(
+            key.0,
+            None,
+            None,
+            None,
+            Some(&raw mut subkeys),
+            None,
+            None,
+            Some(&raw mut values),
+            None,
+            None,
+            None,
+            None,
+        )
+    };
+    drop(key);
+    if status == ERROR_SUCCESS && subkeys == 0 && values == 0 {
+        // SAFETY: deletes an empty key of the current user's registry.
+        let _ = unsafe { RegDeleteKeyW(HKEY_CURRENT_USER, &HSTRING::from(path)) };
+    }
+}
+
+/// Deletes a key under `HKEY_CURRENT_USER` with everything below it.
+fn delete_tree(path: &str) -> windows::core::Result<()> {
+    // SAFETY: deletes one key of the current user's registry that Huedra
+    // created.
+    match unsafe { RegDeleteTreeW(HKEY_CURRENT_USER, &HSTRING::from(path)) } {
+        ERROR_FILE_NOT_FOUND => ERROR_SUCCESS,
+        other => other,
+    }
+    .ok()
 }
 
 /// Whether Windows asks apps for their light appearance (Settings >

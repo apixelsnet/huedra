@@ -10,14 +10,16 @@ use std::time::Duration;
 
 use huedra_core::config::{Config, GameHdr, GameSettings, Seconds, UpdatePolicy};
 use huedra_core::display::{Display, HdrState, HdrSupport};
-use huedra_core::engine::Mode;
+use huedra_core::engine::{Mode, TriggerId};
 use huedra_core::gameinfo::{Cache, GameInfo};
 use huedra_core::geometry::WindowGeometry;
 use huedra_core::icon::{self, TrayIcon};
 use huedra_core::ipc::{HistoryKind, Request, Response, StatusReport};
+use huedra_core::launch;
 use huedra_core::library::{Game, GameId, Store};
 use huedra_core::locations::Locations;
 use huedra_core::paths::{NormPath, display_name};
+use huedra_core::video::{self, StreamingSite, VideoApp};
 use huedra_win::{display, instance, pipe, registry, shell, stores};
 use slint::{
     CloseRequestResponse, ComponentHandle, Image, Model, ModelRc, PhysicalPosition, PhysicalSize,
@@ -26,7 +28,10 @@ use slint::{
 
 use crate::icons;
 use crate::lookups::{self, Lookup};
-use crate::ui::{DisplayRow, GameDetail, GameRow, HistoryRow, SettingsWindow, StoreChip, Theme};
+use crate::ui::{
+    DisplayRow, GameDetail, GameRow, HistoryRow, SettingsWindow, SiteRow, StoreChip, Theme,
+    VideoAppRow,
+};
 
 /// The window's title; also used to find an open window.
 const TITLE: &str = "Huedra";
@@ -45,10 +50,12 @@ pub enum Page {
     Status = 0,
     /// Games.
     Games = 1,
+    /// Video players.
+    Video = 2,
     /// Displays.
-    Displays = 2,
+    Displays = 3,
     /// General.
-    General = 3,
+    General = 4,
 }
 
 impl Page {
@@ -57,6 +64,7 @@ impl Page {
         match name.to_ascii_lowercase().as_str() {
             "status" => Some(Self::Status),
             "games" => Some(Self::Games),
+            "video" => Some(Self::Video),
             "displays" => Some(Self::Displays),
             "general" => Some(Self::General),
             _ => None,
@@ -80,6 +88,8 @@ struct State {
     search: String,
     filter: String,
     selected: Option<GameId>,
+    /// Result of the last desktop shortcut made, for the game it was made for.
+    launch_note: Option<(GameId, String)>,
 }
 
 thread_local! {
@@ -149,17 +159,20 @@ pub fn run(locations: Locations, page: Page) -> Result<(), slint::PlatformError>
         search: String::new(),
         filter: "all".into(),
         selected: None,
+        launch_note: None,
     };
     STATE.set(Some(state));
 
     with_state(|s| {
         show_games(&ui, s);
+        show_video(&ui, s);
         show_displays(&ui, s);
         show_general(&ui, s);
         show_status(&ui, s, None);
     });
     wire_status(&ui);
     wire_games(&ui);
+    wire_video(&ui);
     wire_displays(&ui);
     wire_general(&ui);
     restore_geometry(&ui);
@@ -357,6 +370,7 @@ fn set_running(ui: &SettingsWindow, state: &mut State, running: Vec<String>) {
     if state.running != running {
         state.running = running;
         show_games(ui, state);
+        show_video(ui, state);
     }
 }
 
@@ -563,6 +577,58 @@ fn detail_of(state: &State, game: &Game) -> GameDetail {
         wiki_url: info.and_then(GameInfo::page_url).unwrap_or_default().into(),
         suggestion: suggestion.map(GameHdr::label).unwrap_or_default().into(),
         suggestion_index: suggestion.map_or(-1, index),
+        launch_option: match (game.store, huedra_exe()) {
+            (Store::Steam, Some(exe)) => launch::steam_option(&exe).into(),
+            _ => Default::default(),
+        },
+        shortcut: can_shortcut(game),
+        launch_note: state
+            .launch_note
+            .as_ref()
+            .filter(|(id, _)| *id == game.id)
+            .map(|(_, note)| note.as_str())
+            .unwrap_or_default()
+            .into(),
+    }
+}
+
+/// This program's path, for launch options, shortcuts and menu entries.
+fn huedra_exe() -> Option<String> {
+    std::env::current_exe()
+        .ok()
+        .map(|exe| exe.display().to_string())
+}
+
+/// Whether a desktop shortcut can start the game directly. Steam games use
+/// the launch option instead (started directly, they restart through Steam,
+/// outside Huedra's reach), and Xbox games cannot be started by path.
+fn can_shortcut(game: &Game) -> bool {
+    game.exe.is_some() && !matches!(game.store, Store::Steam | Store::Xbox)
+}
+
+/// Writes "<game> (with HDR)" on the desktop and describes the result.
+fn create_shortcut(game: &Game) -> String {
+    let (Some(exe), Some(program)) = (huedra_exe(), game.exe.as_deref()) else {
+        return "The shortcut could not be made: the game's program is not known.".to_owned();
+    };
+    let Some(desktop) = shell::desktop_folder() else {
+        return "The shortcut could not be made: the desktop folder was not found.".to_owned();
+    };
+    let file = desktop.join(launch::shortcut_file_name(&game.name));
+    let working_dir = std::path::Path::new(program)
+        .parent()
+        .map(|dir| dir.display().to_string())
+        .unwrap_or_default();
+    let shortcut = shell::Shortcut {
+        target: &exe,
+        arguments: &launch::shortcut_arguments(program),
+        working_dir: &working_dir,
+        icon: program,
+        description: &format!("Starts {} with HDR on", game.name),
+    };
+    match shell::create_shortcut(&file, &shortcut) {
+        Ok(()) => format!("Shortcut created on the desktop: {}.", file.display()),
+        Err(error) => format!("The shortcut could not be made: {}.", error.message()),
     }
 }
 
@@ -674,6 +740,16 @@ fn wire_games(ui: &SettingsWindow) {
         if let Some(ui) = weak.upgrade() {
             start_icons(&ui);
         }
+    });
+    let r = refresh.clone();
+    ui.on_create_shortcut(move |id| {
+        r(&|s| {
+            let id = GameId::from_raw(id.as_str());
+            if let Some(game) = s.games.iter().find(|g| g.id == id) {
+                let note = create_shortcut(game);
+                s.launch_note = Some((id, note));
+            }
+        });
     });
     let r = refresh.clone();
     ui.on_remove_game(move |id| {
@@ -798,9 +874,13 @@ fn show_displays(ui: &SettingsWindow, state: &State) {
         .collect();
     ui.set_displays(ModelRc::new(VecModel::from(rows)));
     ui.set_retries(i32::try_from(state.config.general.retry_attempts).unwrap_or(0));
+    ui.set_content_only(state.config.displays.content_only);
 }
 
 fn wire_displays(ui: &SettingsWindow) {
+    ui.on_set_content_only(|on| {
+        with_state(|s| edit(s, |c| c.displays.content_only = on));
+    });
     ui.on_set_managed(|id, managed| {
         with_state(|s| {
             let id = id.to_string();
@@ -825,11 +905,130 @@ fn wire_displays(ui: &SettingsWindow) {
     });
 }
 
+// ---- Video players ----------------------------------------------------
+
+fn video_row(state: &State, app: VideoApp) -> VideoAppRow {
+    let choices = app.choices();
+    let mode = state.config.video.mode(app);
+    let labels: Vec<slint::SharedString> = choices.iter().map(|c| c.label().into()).collect();
+    VideoAppRow {
+        key: app.key().into(),
+        name: app.label().into(),
+        choices: ModelRc::new(VecModel::from(labels)),
+        // A browser set to While open behaves as When HDR video plays.
+        index: choices
+            .iter()
+            .position(|c| *c == mode)
+            .and_then(|i| i32::try_from(i).ok())
+            .unwrap_or(0),
+        active: state
+            .running
+            .iter()
+            .any(|id| video::app_of(&TriggerId::new(id.as_str())) == Some(app)),
+    }
+}
+
+fn show_video(ui: &SettingsWindow, state: &State) {
+    let rows = |browsers: bool| -> ModelRc<VideoAppRow> {
+        let rows: Vec<VideoAppRow> = VideoApp::ALL
+            .into_iter()
+            .filter(|app| app.is_browser() == browsers)
+            .map(|app| video_row(state, app))
+            .collect();
+        ModelRc::new(VecModel::from(rows))
+    };
+    ui.set_video_players(rows(false));
+    ui.set_video_browsers(rows(true));
+    let v = &state.config.video;
+    ui.set_video_keywords(video::keywords_text(&v.keywords).into());
+    ui.set_video_full_screen_only(v.full_screen_only);
+    ui.set_video_sdr_with_rtx(v.sdr_with_rtx);
+    ui.set_video_rtx_note(rtx_note(registry::rtx_video_hdr()).into());
+    let sites: Vec<SiteRow> = StreamingSite::ALL
+        .into_iter()
+        .map(|site| SiteRow {
+            key: site.key().into(),
+            name: site.label().into(),
+            address: site.address().into(),
+            on: v.sites.contains(&site),
+        })
+        .collect();
+    ui.set_video_sites(ModelRc::new(VecModel::from(sites)));
+    ui.set_video_hold(v.hold.map_or(0, secs));
+    ui.set_video_hold_custom(v.hold.is_some());
+}
+
+/// The description of the RTX Video HDR switch, from the NVIDIA setting
+/// (`None` without an NVIDIA graphics card).
+fn rtx_note(rtx: Option<bool>) -> &'static str {
+    match rtx {
+        Some(true) => {
+            "RTX Video HDR is on in the NVIDIA settings. Full-screen video with sound in a player or browser turns HDR on, so the driver can convert it."
+        }
+        Some(false) => {
+            "RTX Video HDR is off in the NVIDIA settings, so this has no effect now. When it is on, full-screen video with sound turns HDR on, so the driver can convert it."
+        }
+        None => "Needs an NVIDIA RTX graphics card; none was found.",
+    }
+}
+
+fn wire_video(ui: &SettingsWindow) {
+    let weak = ui.as_weak();
+    let edit_video = move |change: &dyn Fn(&mut Config)| {
+        with_state(|s| {
+            edit(s, change);
+            if let Some(ui) = weak.upgrade() {
+                show_video(&ui, s);
+            }
+        });
+    };
+    let edit_video = std::rc::Rc::new(edit_video);
+    let e = edit_video.clone();
+    ui.on_set_video_app(move |key, index| {
+        let Some(app) = VideoApp::ALL.into_iter().find(|a| a.key() == key.as_str()) else {
+            return;
+        };
+        let Some(mode) = usize::try_from(index)
+            .ok()
+            .and_then(|i| app.choices().get(i).copied())
+        else {
+            return;
+        };
+        e(&|c| c.video.set_mode(app, mode));
+    });
+    let e = edit_video.clone();
+    ui.on_set_video_keywords(move |text| {
+        e(&|c| c.video.set_keywords_text(&text));
+    });
+    let e = edit_video.clone();
+    ui.on_set_video_full_screen_only(move |on| {
+        e(&|c| c.video.full_screen_only = on);
+    });
+    let e = edit_video.clone();
+    ui.on_set_video_sdr_with_rtx(move |on| {
+        e(&|c| c.video.sdr_with_rtx = on);
+    });
+    let e = edit_video.clone();
+    ui.on_set_video_site(move |key, on| {
+        if let Some(site) = StreamingSite::from_key(&key) {
+            e(&|c| c.video.set_site(site, on));
+        }
+    });
+    let e = edit_video.clone();
+    ui.on_set_video_hold(move |v| {
+        e(&|c| c.video.hold = Some(seconds(v, huedra_core::config::MAX_HOLD)));
+    });
+    ui.on_reset_video_hold(move || {
+        edit_video(&|c| c.video.hold = None);
+    });
+}
+
 // ---- General ----------------------------------------------------------
 
 fn show_general(ui: &SettingsWindow, state: &State) {
     let g = &state.config.general;
     ui.set_start_with_windows(registry::startup_command().is_some());
+    ui.set_context_menu(registry::context_menu_command().is_some());
     ui.set_updates(match g.updates {
         UpdatePolicy::Install => 0,
         UpdatePolicy::Ask => 1,
@@ -854,6 +1053,23 @@ fn wire_general(ui: &SettingsWindow) {
         });
         if let Some(ui) = weak.upgrade() {
             ui.set_start_with_windows(registry::startup_command().is_some());
+        }
+    });
+    let weak = ui.as_weak();
+    ui.on_set_context_menu(move |on| {
+        let exe = huedra_exe();
+        let command = exe.as_deref().map(launch::context_menu_command);
+        let entry = match (&exe, &command) {
+            (Some(exe), Some(command)) if on => Some(registry::ContextMenu {
+                text: "Start with HDR",
+                icon: exe,
+                command,
+            }),
+            _ => None,
+        };
+        let _ = registry::set_context_menu(entry);
+        if let Some(ui) = weak.upgrade() {
+            ui.set_context_menu(registry::context_menu_command().is_some());
         }
     });
     ui.on_set_updates(|index| {

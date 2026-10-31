@@ -1,15 +1,17 @@
 //! The settings file `config.toml`: schema, defaults, limits and version
 //! upgrades. Feature doc: `docs/features/10-config.md`.
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
-use crate::engine::{Mode, Trigger};
+use crate::engine::{Mode, Target, Trigger};
 use crate::files;
 use crate::library::{Game, GameId, Store};
 use crate::paths::NormPath;
+use crate::video::{self, Assessment, PlayerHdr, StreamingSite, VideoApp, VideoKind, VideoWindow};
 
 /// Schema version written by this build.
 pub const VERSION: u32 = 1;
@@ -93,6 +95,8 @@ pub struct Config {
     pub general: General,
     /// Display settings.
     pub displays: DisplaySettings,
+    /// Video players and browsers.
+    pub video: VideoSettings,
     /// Per-game settings and games added by hand.
     #[serde(rename = "game", skip_serializing_if = "Vec::is_empty")]
     pub games: Vec<GameSettings>,
@@ -138,12 +142,118 @@ impl Default for General {
 }
 
 /// The Displays page.
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct DisplaySettings {
     /// Device paths of HDR displays the user excluded. Every other HDR
     /// display is managed, including ones connected later.
     pub unmanaged: Vec<String>,
+    /// A game or video turns HDR on only for the display its window is
+    /// on. Off: every managed display switches together.
+    pub content_only: bool,
+}
+
+impl Default for DisplaySettings {
+    fn default() -> Self {
+        Self {
+            unmanaged: Vec::new(),
+            content_only: true,
+        }
+    }
+}
+
+/// The Video players page.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct VideoSettings {
+    /// Words in a player's title that mark HDR video.
+    pub keywords: Vec<String>,
+    /// Video in a window does not change the display.
+    pub full_screen_only: bool,
+    /// With NVIDIA RTX Video HDR on, full-screen SDR video with sound turns
+    /// HDR on too, so the driver can convert it.
+    pub sdr_with_rtx: bool,
+    /// Streaming sites where full-screen video counts as HDR (the browser
+    /// extension marks it); none unless chosen.
+    #[serde(skip_serializing_if = "BTreeSet::is_empty")]
+    pub sites: BTreeSet<StreamingSite>,
+    /// Overrides the default hold time for video.
+    #[serde(rename = "hold_secs", skip_serializing_if = "Option::is_none")]
+    pub hold: Option<Seconds>,
+    /// Per-program choices; programs not listed use
+    /// [`PlayerHdr::WhenHdrPlays`].
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub apps: BTreeMap<VideoApp, PlayerHdr>,
+}
+
+impl Default for VideoSettings {
+    fn default() -> Self {
+        Self {
+            keywords: default_keywords(),
+            full_screen_only: true,
+            sdr_with_rtx: true,
+            sites: BTreeSet::new(),
+            hold: None,
+            apps: BTreeMap::new(),
+        }
+    }
+}
+
+/// The words that mark HDR video in a player's title unless changed.
+pub fn default_keywords() -> Vec<String> {
+    ["HDR", "HDR10", "Dolby Vision", "DoVi", "BT.2020"]
+        .map(String::from)
+        .to_vec()
+}
+
+impl VideoSettings {
+    /// The choice for one program.
+    pub fn mode(&self, app: VideoApp) -> PlayerHdr {
+        self.apps.get(&app).copied().unwrap_or_default()
+    }
+
+    /// Sets the choice for one program; the default is not written.
+    pub fn set_mode(&mut self, app: VideoApp, mode: PlayerHdr) {
+        if mode == PlayerHdr::default() {
+            self.apps.remove(&app);
+        } else {
+            self.apps.insert(app, mode);
+        }
+    }
+
+    /// Sets the keywords from one line separated by commas; an empty line
+    /// restores the default words.
+    pub fn set_keywords_text(&mut self, text: &str) {
+        let keywords = video::parse_keywords(text);
+        self.keywords = if keywords.is_empty() {
+            default_keywords()
+        } else {
+            keywords
+        };
+    }
+
+    /// Turns the rule for one streaming site on or off.
+    pub fn set_site(&mut self, site: StreamingSite, on: bool) {
+        if on {
+            self.sites.insert(site);
+        } else {
+            self.sites.remove(&site);
+        }
+    }
+
+    /// Decides for one program from its windows; `rtx_on` is whether
+    /// NVIDIA RTX Video HDR is turned on.
+    pub fn assess(&self, app: VideoApp, rtx_on: bool, windows: &[VideoWindow]) -> Assessment {
+        video::assess(
+            app,
+            self.mode(app),
+            &self.keywords,
+            &self.sites,
+            self.full_screen_only,
+            self.sdr_with_rtx && rtx_on,
+            windows,
+        )
+    }
 }
 
 /// Settings for one game.
@@ -197,6 +307,7 @@ impl Default for Config {
             mode: Mode::Automatic,
             general: General::default(),
             displays: DisplaySettings::default(),
+            video: VideoSettings::default(),
             games: Vec::new(),
         }
     }
@@ -282,6 +393,7 @@ impl Config {
         g.start_delay = g.start_delay.min(MAX_DELAY);
         g.hold = g.hold.min(MAX_HOLD);
         g.retry_attempts = g.retry_attempts.min(MAX_RETRIES);
+        self.video.hold = self.video.hold.map(|h| h.min(MAX_HOLD));
         for game in &mut self.games {
             game.start_delay = game.start_delay.map(|d| d.min(MAX_DELAY));
             game.hold = game.hold.map(|h| h.min(MAX_HOLD));
@@ -348,7 +460,18 @@ impl Config {
                 .and_then(|s| s.hold)
                 .unwrap_or(self.general.hold)
                 .duration(),
+            target: Target::All,
         })
+    }
+
+    /// The trigger of video in a program.
+    pub fn video_trigger(&self, app: VideoApp, kind: VideoKind) -> Trigger {
+        Trigger {
+            label: video::trigger_label(app, kind),
+            delay: self.general.start_delay.duration(),
+            hold: self.video.hold.unwrap_or(self.general.hold).duration(),
+            target: Target::All,
+        }
     }
 
     /// Whether an HDR-capable display is managed.
@@ -425,6 +548,76 @@ mod tests {
     }
 
     #[test]
+    fn video_settings() {
+        let text = r#"
+            [video]
+            full_screen_only = false
+            hold_secs = 4
+            [video.apps]
+            mpv-net = "while-open"
+            chrome = "never"
+        "#;
+        let config = Config::parse(text).expect("parse");
+        assert_eq!(
+            config.video.mode(VideoApp::MpvNet),
+            PlayerHdr::WhileOpen,
+            "listed"
+        );
+        assert_eq!(
+            config.video.mode(VideoApp::Chrome),
+            PlayerHdr::Never,
+            "browser"
+        );
+        assert_eq!(
+            config.video.mode(VideoApp::Vlc),
+            PlayerHdr::WhenHdrPlays,
+            "default"
+        );
+        assert_eq!(config.video.keywords.len(), 5, "default keywords kept");
+        let trigger = config.video_trigger(VideoApp::Mpv, VideoKind::Hdr);
+        assert_eq!(trigger.label, "HDR video in mpv", "label");
+        assert_eq!(trigger.hold, Duration::from_secs(4), "video hold");
+        let text = config.to_toml().expect("serialise");
+        assert!(
+            text.contains("mpv-net = \"while-open\""),
+            "keys written: {text}"
+        );
+        assert_eq!(Config::parse(&text).expect("again"), config, "round trip");
+        assert!(
+            Config::default().video.full_screen_only,
+            "full screen by default"
+        );
+        assert!(config.video.sdr_with_rtx, "SDR video with RTX by default");
+        let off = Config::parse("[video]\nsdr_with_rtx = false").expect("parse");
+        assert!(!off.video.sdr_with_rtx, "turned off");
+        assert!(config.video.sites.is_empty(), "no sites by default");
+        let mut sites =
+            Config::parse("[video]\nsites = [\"hbo-max\", \"netflix\"]").expect("parse");
+        assert_eq!(
+            sites.video.sites,
+            BTreeSet::from([StreamingSite::Netflix, StreamingSite::HboMax]),
+            "sites read"
+        );
+        sites.video.set_site(StreamingSite::HboMax, false);
+        let text = sites.to_toml().expect("serialise");
+        assert!(text.contains("sites = [\"netflix\"]"), "written: {text}");
+        assert_eq!(Config::parse(&text).expect("again"), sites, "round trip");
+    }
+
+    #[test]
+    fn video_edits() {
+        let mut video = VideoSettings::default();
+        video.set_mode(VideoApp::Vlc, PlayerHdr::Never);
+        assert_eq!(video.mode(VideoApp::Vlc), PlayerHdr::Never, "set");
+        video.set_mode(VideoApp::Vlc, PlayerHdr::WhenHdrPlays);
+        assert!(video.apps.is_empty(), "default not written");
+        video.set_keywords_text("HLG, PQ");
+        assert_eq!(video.keywords, ["HLG", "PQ"].map(String::from), "typed");
+        video.set_keywords_text("  ");
+        assert_eq!(video.keywords, default_keywords(), "empty restores");
+    }
+
+    #[test]
     fn accepts_byte_order_mark() {
         let config = Config::parse("\u{feff}mode = \"always-sdr\"").expect("parse");
         assert_eq!(config.mode, Mode::AlwaysSdr, "BOM ignored");
@@ -457,5 +650,20 @@ mod tests {
         assert!(config.is_managed("x"), "managed by default");
         config.displays.unmanaged.push("X".into());
         assert!(!config.is_managed("x"), "excluded");
+    }
+
+    #[test]
+    fn content_only_by_default() {
+        assert!(Config::default().displays.content_only, "default on");
+        let config = Config::parse("[displays]\nunmanaged = []\n").ok();
+        assert!(
+            config.is_some_and(|c| c.displays.content_only),
+            "missing key keeps the default"
+        );
+        let config = Config::parse("[displays]\ncontent_only = false\n").ok();
+        assert!(
+            config.is_some_and(|c| !c.displays.content_only),
+            "turned off"
+        );
     }
 }

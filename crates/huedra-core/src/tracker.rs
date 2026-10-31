@@ -57,6 +57,11 @@ impl Tracker {
         self.processes.contains_key(&pid)
     }
 
+    /// The trigger a tracked process belongs to.
+    pub fn trigger_of(&self, pid: Pid) -> Option<&TriggerId> {
+        self.processes.get(&pid).map(|p| &p.trigger)
+    }
+
     /// Whether a trigger has a process or a follow window.
     pub fn is_active(&self, trigger: &TriggerId) -> bool {
         self.follows.contains_key(trigger) || self.processes.values().any(|p| &p.trigger == trigger)

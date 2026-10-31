@@ -13,7 +13,7 @@ A config from every earlier version loads, and a power cut during a write never 
 
 ## Result (2026-10-31) — phase 2
 Code: `crates/huedra-core/src/{config,files,logfile,clock}.rs`, `crates/huedra/src/paths.rs`.
-- Schema version 1: `mode`, `[general]` (`start_with_windows`, `updates`, `game_info`, `start_delay_secs`, `hold_secs`, `retry_attempts`, `log_window_titles`, `hotkeys`), `[displays] unmanaged`, `[[game]]` (`id`, `name`, `exe`, `hdr`, `start_delay_secs`, `hold_secs`, `launch_with_hdr`). Unknown keys are ignored; a newer schema is refused rather than overwritten; values are clamped (delay 120 s, hold 600 s, retries 5). A leading byte-order mark is accepted.
+- Schema version 1: `mode`, `[general]` (`start_with_windows`, `updates`, `game_info`, `start_delay_secs`, `hold_secs`, `retry_attempts`, `log_window_titles`, `hotkeys`), `[displays] unmanaged`, `content_only` (default true: HDR only on the display showing the game or video), `[[game]]` (`id`, `name`, `exe`, `hdr`, `start_delay_secs`, `hold_secs`, `launch_with_hdr`). Unknown keys are ignored; a newer schema is refused rather than overwritten; values are clamped (delay 120 s, hold 600 s, retries 5). A leading byte-order mark is accepted.
 - Files over 1 MB are refused before reading; writes go to `<name>.tmp`, are flushed, then renamed over the old file.
 - Portable mode: a file named `portable` next to the exe keeps everything in `data\` beside it.
 - Log `huedra.log`, 1 MB, rotated to `huedra.log.1`; one line per entry. Window titles are not logged at all yet.
@@ -33,3 +33,9 @@ Not verified: a power cut during a write.
 Verified on this PC: mode changed from the command line while the settings window was open, then a setting changed in the window: both changes kept.
 
 Status: done.
+
+## Result (2026-10-31) — phase 4
+- `[video]`: `keywords`, `full_screen_only` (default true), `sdr_with_rtx` (default true), `sites` (streaming sites where full-screen video counts as HDR: `netflix`, `disney-plus`, `prime-video`, `hbo-max`, `apple-tv`; none by default), `hold_secs` (optional, clamped to 600), and `[video.apps]` mapping a program key (`vlc`, `mpv`, `mpv-net`, `mpc-hc`, `mpc-be`, `pot-player`, `chrome`, `edge`, `firefox`, `brave`, `opera`, `vivaldi`) to `when-hdr-plays`, `while-open` or `never`. Still schema version 1: older files get the defaults.
+
+## Result (2026-10-31) — Video players page
+- The settings window writes `[video.apps]` only for programs not set to `when-hdr-plays`, and an empty keyword line restores the default words (`config::default_keywords`). The tray's "Never for" uses the same `VideoSettings::set_mode`.

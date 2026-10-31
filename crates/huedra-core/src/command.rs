@@ -4,13 +4,14 @@
 use crate::display::{DisplaySelector, HdrState};
 use crate::engine::Mode;
 use crate::ipc::Request;
+use crate::launch::{self, LaunchCommand};
 
 /// Help text printed by `huedra --help` and after a usage error.
 pub const USAGE: &str = "\
 Usage:
   huedra                       Start Huedra in the notification area.
   huedra settings [page]       Open the settings window, optionally on a page:
-                               status, games, displays or general.
+                               status, games, video, displays or general.
   huedra status                Show what the running Huedra is doing.
   huedra games                 List the games found in every store.
   huedra mode automatic|hdr|sdr
@@ -19,6 +20,12 @@ Usage:
   huedra resume                Resume automatic switching.
   huedra toggle                Turn HDR on or off, as Win+Alt+H does.
   huedra exit                  Close the running Huedra.
+  huedra launch -- <program> [arguments]
+                               Turn HDR on, start the program, and keep HDR
+                               on until it ends. As a Steam launch option:
+                               \"<path to huedra.exe>\" launch -- %command%
+  huedra uninstall             Close Huedra and remove everything it added
+                               to the registry.
   huedra hdr status            List the displays and their HDR state.
   huedra hdr on  [--display N | all]
   huedra hdr off [--display N | all]
@@ -44,6 +51,10 @@ pub enum Command {
     Remote(Request),
     /// List the games found in every store.
     Games,
+    /// Start a program with HDR on.
+    Launch(LaunchCommand),
+    /// Remove every registry entry Huedra wrote.
+    Uninstall,
 }
 
 /// The `hdr` subcommands.
@@ -84,6 +95,12 @@ pub enum UsageError {
     /// `pause` with a value that is not 1 to 1440 minutes.
     #[error("`{0}` is not a number of minutes from 1 to 1440")]
     BadMinutes(String),
+    /// `launch` without a program.
+    #[error("`launch` needs a program: huedra launch -- <program> [arguments]")]
+    MissingProgram,
+    /// `launch` with a batch file, which would run through `cmd.exe`.
+    #[error("`{0}` is a batch file; `launch` starts programs only")]
+    BatchFile(String),
 }
 
 /// Parses the arguments after the program name.
@@ -114,6 +131,9 @@ where
         "resume" => Command::Remote(Request::Resume),
         "toggle" => Command::Remote(Request::ToggleHdr),
         "exit" => Command::Remote(Request::Exit),
+        "uninstall" => Command::Uninstall,
+        // Everything after `launch` belongs to the program.
+        "launch" => return parse_launch(args).map(Command::Launch),
         _ => return Err(UsageError::UnknownCommand(first)),
     };
     match args.next() {
@@ -138,6 +158,24 @@ fn parse_hdr(args: &mut impl Iterator<Item = String>) -> Result<HdrCommand, Usag
         Some(other) => return Err(UsageError::UnexpectedArgument(other)),
     };
     Ok(HdrCommand::Set { state, displays })
+}
+
+fn parse_launch(args: impl Iterator<Item = String>) -> Result<LaunchCommand, UsageError> {
+    let mut args = args.peekable();
+    if args.peek().is_some_and(|a| a == "--") {
+        args.next();
+    }
+    let program = args.next().ok_or(UsageError::MissingProgram)?;
+    if program.trim().is_empty() {
+        return Err(UsageError::MissingProgram);
+    }
+    if launch::is_batch_file(&program) {
+        return Err(UsageError::BatchFile(program));
+    }
+    Ok(LaunchCommand {
+        program,
+        args: args.collect(),
+    })
 }
 
 fn parse_mode(value: Option<&str>) -> Result<Mode, UsageError> {
@@ -254,6 +292,45 @@ mod tests {
             "zero minutes"
         );
         assert_eq!(run("exit"), Ok(Command::Remote(Request::Exit)), "exit");
+    }
+
+    #[test]
+    fn launch_commands() {
+        let launch = |args: &[&str]| parse(args.iter().map(|a| (*a).to_owned()));
+        assert_eq!(
+            launch(&[
+                "launch",
+                "--",
+                r"D:\Games\Foo\foo.exe",
+                "-dx12",
+                "--",
+                "x y"
+            ]),
+            Ok(Command::Launch(LaunchCommand {
+                program: r"D:\Games\Foo\foo.exe".into(),
+                args: vec!["-dx12".into(), "--".into(), "x y".into()],
+            })),
+            "arguments pass through unchanged"
+        );
+        assert_eq!(
+            launch(&["launch", "foo.exe"]),
+            Ok(Command::Launch(LaunchCommand {
+                program: "foo.exe".into(),
+                args: Vec::new(),
+            })),
+            "without --"
+        );
+        assert_eq!(
+            launch(&["launch", "--"]),
+            Err(UsageError::MissingProgram),
+            "no program"
+        );
+        assert_eq!(
+            launch(&["launch", "--", "start.bat"]),
+            Err(UsageError::BatchFile("start.bat".into())),
+            "batch file"
+        );
+        assert_eq!(run("uninstall"), Ok(Command::Uninstall), "uninstall");
     }
 
     #[test]

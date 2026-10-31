@@ -34,6 +34,15 @@ pub enum Request {
     ToggleHdr,
     /// Read the settings file again.
     Reload,
+    /// Turn HDR on for a program about to start through `huedra launch`,
+    /// and keep it on while the launching process lives. Answered once HDR
+    /// is on, or with the reason it stays off.
+    Launch {
+        /// Process id of `huedra launch`.
+        pid: u32,
+        /// The program it starts, to name the game.
+        program: String,
+    },
     /// Close the tray process.
     Exit,
 }
@@ -189,6 +198,10 @@ mod tests {
                 mode: Mode::AlwaysSdr,
             },
             Request::Pause { minutes: 60 },
+            Request::Launch {
+                pid: 7,
+                program: r"D:\Games\Foo\foo.exe".into(),
+            },
             Request::Exit,
         ] {
             let bytes = encode(&request).expect("encode");

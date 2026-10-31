@@ -1,34 +1,44 @@
 //! The tray role: watches programs and displays, runs the engine, shows the
 //! icon and menu, and answers the command line and the settings window.
-//! Feature docs: `02-engine.md`, `03-watchers.md`, `07-tray-hotkeys.md`.
+//! Feature docs: `02-engine.md`, `03-watchers.md`, `05-video.md`,
+//! `06-launch-with-hdr.md`, `07-tray-hotkeys.md`.
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 use std::time::{Duration, Instant};
 
 use anyhow::Context as _;
 use huedra_core::config::{Config, GameHdr};
 use huedra_core::display::{Display, DisplayId, HdrState};
-use huedra_core::engine::{Engine, Mode, Note, NoteKind, Outcome, Phase, Status, TriggerId};
+use huedra_core::engine::{
+    Engine, Mode, Note, NoteKind, Outcome, Phase, Status, Target, Trigger, TriggerId,
+};
 use huedra_core::files;
 use huedra_core::icon::TrayIcon;
 use huedra_core::ipc::{DisplayReport, HistoryEntry, HistoryKind, Request, Response, StatusReport};
+use huedra_core::launch;
 use huedra_core::library::{GameId, Library};
 use huedra_core::logfile::{self, LogFile};
 use huedra_core::tracker::{Exit, Pid, Tracker};
+use huedra_core::video::{self, PlayerHdr, VideoApp, VideoKind};
 use huedra_win::event_loop::{Event, EventLoop, Flow, TimerId, Waker};
 use huedra_win::hotkey::{Hotkey, Hotkeys};
 use huedra_win::menu::{self, MenuEntry};
 use huedra_win::pipe::{PipeError, PipeServer};
 use huedra_win::process::{self, ExitWatch};
-use huedra_win::{clock, display, foreground, tray};
+use huedra_win::window::{ProcessHook, Watch};
+use huedra_win::{audio, clock, display, foreground, registry, tray, window};
 
 use huedra_core::locations::Locations;
 use huedra_win::stores;
 
 const ENGINE_TIMER: TimerId = TimerId(1);
 const FOLLOW_TIMER: TimerId = TimerId(2);
+const VIDEO_TIMER: TimerId = TimerId(3);
 /// How often the process list is read while following a launcher.
 const FOLLOW_POLL: Duration = Duration::from_secs(1);
+/// How often a video program is read again while SDR video can count
+/// (RTX Video HDR): full screen and sound send no window events.
+const VIDEO_POLL: Duration = Duration::from_secs(2);
 const HISTORY_LEN: usize = 50;
 const PAUSE_MINUTES: u32 = 60;
 /// Longest pause accepted from a client.
@@ -69,9 +79,27 @@ struct App {
     engine: Engine,
     tracker: Tracker,
     watches: HashMap<Pid, ExitWatch>,
+    /// The display showing each tracked game process's main window, when
+    /// HDR follows the content; kept while the window is minimised.
+    game_monitors: HashMap<Pid, u32>,
+    /// Window-move hooks of tracked game processes, so HDR follows a game
+    /// moved to another display.
+    game_moves: HashMap<Pid, ProcessHook>,
     /// Processes that already ran when a follow window opened; only newer
     /// ones can be a launcher's successor.
     follow_known: HashSet<u32>,
+    /// Video players and browsers that came to the front, watched until
+    /// they exit.
+    videos: HashMap<Pid, VideoProcess>,
+    /// Whether NVIDIA RTX Video HDR is on, read when a video program comes
+    /// to the front and on reload.
+    rtx_video_hdr: bool,
+    /// The process in the foreground.
+    foreground: u32,
+    /// Whether [`VIDEO_TIMER`] runs.
+    video_polling: bool,
+    /// Running `huedra launch` processes; HDR is held while each lives.
+    launches: HashMap<Pid, ExitWatch>,
     displays: Vec<Display>,
     saved_owned: Vec<DisplayId>,
     history: VecDeque<HistoryEntry>,
@@ -107,7 +135,14 @@ impl App {
             _foreground: foreground::ForegroundHook::install(),
             tracker: Tracker::default(),
             watches: HashMap::new(),
+            game_monitors: HashMap::new(),
+            game_moves: HashMap::new(),
             follow_known: HashSet::new(),
+            videos: HashMap::new(),
+            rtx_video_hdr: registry::rtx_video_hdr() == Some(true),
+            foreground: 0,
+            video_polling: false,
+            launches: HashMap::new(),
             saved_owned: owned,
             history: VecDeque::new(),
             waker: host.waker(),
@@ -129,6 +164,7 @@ impl App {
         if let Some(pid) = foreground::foreground_pid() {
             app.on_foreground(host, now, pid);
         }
+        app.update_video_poll(host);
         app.refresh_tray(now);
         Ok(app)
     }
@@ -138,12 +174,21 @@ impl App {
         match event {
             Event::Foreground(pid) => self.on_foreground(host, now, pid),
             Event::ProcessExited(pid) => self.on_exit(host, now, Pid(pid)),
+            Event::WindowChanged(pid) => {
+                let pid = Pid(pid);
+                if self.videos.contains_key(&pid) {
+                    self.assess_video(host, now, pid);
+                } else {
+                    self.place_game(host, now, pid);
+                }
+            }
             Event::Timer(ENGINE_TIMER) => {
                 host.kill_timer(ENGINE_TIMER);
                 let outcome = self.engine.tick(now);
                 self.apply(host, now, outcome);
             }
             Event::Timer(FOLLOW_TIMER) => self.on_follow_tick(host, now),
+            Event::Timer(VIDEO_TIMER) => self.on_video_tick(host, now),
             Event::Timer(_) => {}
             Event::DisplayChanged => self.on_display_change(host, now),
             Event::Hotkey(key) => self.on_hotkey(host, now, key),
@@ -169,6 +214,7 @@ impl App {
                 }
             }
         }
+        self.update_video_poll(host);
         self.refresh_tray(now);
         Flow::Continue
     }
@@ -176,21 +222,35 @@ impl App {
     // --- Watchers -------------------------------------------------------
 
     fn on_foreground(&mut self, host: &EventLoop, now: Instant, pid: u32) {
+        self.foreground = pid;
         let pid = Pid(pid);
+        if self.videos.contains_key(&pid) {
+            self.rtx_video_hdr = registry::rtx_video_hdr() == Some(true);
+            self.assess_video(host, now, pid);
+            return;
+        }
         if self.tracker.is_tracked(pid) {
+            self.place_game(host, now, pid);
             return;
         }
         let Some(path) = process::image_path(pid.0) else {
             return;
         };
         if self.tracker.is_following() && self.tracker.adopt(pid, &path, now).is_some() {
-            self.watch(pid);
+            if self.watch(pid) {
+                self.place_game(host, now, pid);
+            }
+            return;
+        }
+        if let Some(app) = VideoApp::from_exe(&path) {
+            self.rtx_video_hdr = registry::rtx_video_hdr() == Some(true);
+            self.watch_video(host, now, pid, app);
             return;
         }
         let Some(game) = self.library.find(&path).cloned() else {
             return;
         };
-        let Some(trigger) = self.config.trigger_for(&game) else {
+        let Some(mut trigger) = self.config.trigger_for(&game) else {
             return;
         };
         if !self.watch(pid) {
@@ -198,8 +258,90 @@ impl App {
         }
         let id = TriggerId::new(game.id.as_str());
         if self.tracker.track(pid, id.clone(), &game.install_dir, now) {
+            self.find_game_window(pid);
+            trigger.target = self.game_target(&id);
             self.log_line(&format!("{} started.", trigger.label));
             let outcome = self.engine.trigger_started(now, id, trigger);
+            self.apply(host, now, outcome);
+        } else {
+            self.place_game(host, now, pid);
+        }
+    }
+
+    // --- Displays showing the content -------------------------------------
+
+    /// The displays a trigger wants, given the Windows numbers of the
+    /// displays its windows are on: those displays when HDR follows the
+    /// content, otherwise every managed display.
+    fn target_for(&self, monitors: &BTreeSet<u32>) -> Target {
+        if !self.config.displays.content_only {
+            return Target::All;
+        }
+        Target::Only(
+            self.displays
+                .iter()
+                .filter(|d| monitors.contains(&d.number))
+                .map(|d| d.id.clone())
+                .collect(),
+        )
+    }
+
+    /// The displays a game wants: those of its processes' main windows.
+    fn game_target(&self, id: &TriggerId) -> Target {
+        let monitors = self
+            .game_monitors
+            .iter()
+            .filter(|(pid, _)| self.tracker.trigger_of(**pid) == Some(id))
+            .map(|(_, monitor)| *monitor)
+            .collect();
+        self.target_for(&monitors)
+    }
+
+    /// Notes the display of a tracked game process's main window, and
+    /// watches its window moves. A process without a window keeps the
+    /// display it was last seen on.
+    fn find_game_window(&mut self, pid: Pid) {
+        if !self.config.displays.content_only {
+            return;
+        }
+        if !self.game_moves.contains_key(&pid)
+            && let Some(hook) = ProcessHook::install(pid.0, Watch::Moves)
+        {
+            self.game_moves.insert(pid, hook);
+        }
+        if let Some(monitor) = window::main_monitor(pid.0) {
+            self.game_monitors.insert(pid, monitor);
+        }
+    }
+
+    /// Moves a running game's HDR to the display its window is on now.
+    fn place_game(&mut self, host: &EventLoop, now: Instant, pid: Pid) {
+        let Some(id) = self.tracker.trigger_of(pid).cloned() else {
+            return;
+        };
+        self.find_game_window(pid);
+        let outcome = self.engine.retarget(now, &id, self.game_target(&id));
+        if outcome != Outcome::default() {
+            self.apply(host, now, outcome);
+        }
+    }
+
+    /// Applies a change of the Displays setting to running games and
+    /// video.
+    fn retarget_all(&mut self, host: &EventLoop, now: Instant) {
+        let pids: Vec<Pid> = self.tracker.pids().collect();
+        for pid in &pids {
+            self.find_game_window(*pid);
+        }
+        if !self.config.displays.content_only {
+            self.game_moves.clear();
+        }
+        let ids: BTreeSet<TriggerId> = pids
+            .iter()
+            .filter_map(|pid| self.tracker.trigger_of(*pid).cloned())
+            .collect();
+        for id in ids {
+            let outcome = self.engine.retarget(now, &id, self.game_target(&id));
             self.apply(host, now, outcome);
         }
     }
@@ -216,8 +358,151 @@ impl App {
         }
     }
 
+    // --- Video ----------------------------------------------------------
+
+    /// Starts following a video program's window titles. Programs set to
+    /// Never are not watched at all.
+    fn watch_video(&mut self, host: &EventLoop, now: Instant, pid: Pid, app: VideoApp) {
+        if self.config.video.mode(app) == PlayerHdr::Never {
+            return;
+        }
+        let Some(titles) = ProcessHook::install(pid.0, Watch::Titles) else {
+            return;
+        };
+        let Some(exit) = ExitWatch::new(pid.0, self.waker) else {
+            return;
+        };
+        self.videos.insert(
+            pid,
+            VideoProcess {
+                app,
+                _titles: titles,
+                moves: None,
+                _exit: exit,
+                playing: None,
+                target: Target::All,
+                sdr_full_screen: false,
+            },
+        );
+        self.assess_video(host, now, pid);
+    }
+
+    /// Reads a video program's windows again and starts or ends its trigger.
+    fn assess_video(&mut self, host: &EventLoop, now: Instant, pid: Pid) {
+        let Some(app) = self.videos.get(&pid).map(|v| v.app) else {
+            return;
+        };
+        let assessment =
+            self.config
+                .video
+                .assess(app, self.rtx_video_hdr, &window::windows_of(pid.0));
+        // Browsers play sound from helper processes of the same program,
+        // so any process of the program counts.
+        let sound = assessment.sdr_full_screen
+            && audio::playing(|other| {
+                process::image_path(other).is_some_and(|p| VideoApp::from_exe(&p) == Some(app))
+            });
+        let playing = assessment.playing(sound);
+        let target = self.target_for(&assessment.monitors);
+        let follow = self.config.displays.content_only && playing.is_some();
+        let Some(proc) = self.videos.get_mut(&pid) else {
+            return;
+        };
+        // Window moves matter while an HDR title waits for full screen, and
+        // while video plays and HDR follows its window to another display.
+        match (assessment.candidate || follow, proc.moves.is_some()) {
+            (true, false) => proc.moves = ProcessHook::install(pid.0, Watch::Moves),
+            (false, true) => proc.moves = None,
+            _ => {}
+        }
+        proc.sdr_full_screen = assessment.sdr_full_screen;
+        let id = video::trigger_id(app, pid.0);
+        if playing.is_some() == proc.playing.is_some() {
+            if playing.is_some() && proc.target != target {
+                proc.target = target.clone();
+                let outcome = self.engine.retarget(now, &id, target);
+                self.apply(host, now, outcome);
+            }
+            return;
+        }
+        let previous = std::mem::replace(&mut proc.playing, playing);
+        proc.target = target.clone();
+        let outcome = match (playing, previous) {
+            (Some(kind), _) => {
+                let mut trigger = self.config.video_trigger(app, kind);
+                trigger.target = target;
+                self.log_line(&format!("{} started.", trigger.label));
+                self.engine.trigger_started(now, id, trigger)
+            }
+            (None, Some(kind)) => {
+                self.log_line(&format!("{} ended.", video::trigger_label(app, kind)));
+                self.engine.trigger_ended(now, &id)
+            }
+            (None, None) => return,
+        };
+        self.apply(host, now, outcome);
+    }
+
+    /// Reads again the video programs that SDR video could make want HDR:
+    /// the one in the foreground and those with a full-screen window.
+    fn on_video_tick(&mut self, host: &EventLoop, now: Instant) {
+        let pids: Vec<Pid> = self
+            .videos
+            .iter()
+            .filter(|(pid, v)| pid.0 == self.foreground || v.sdr_full_screen || v.playing.is_some())
+            .map(|(pid, _)| *pid)
+            .collect();
+        for pid in pids {
+            self.assess_video(host, now, pid);
+        }
+    }
+
+    /// Runs [`VIDEO_TIMER`] only while SDR video can count and a video
+    /// program is in the foreground or keeps SDR video in full screen.
+    fn update_video_poll(&mut self, host: &EventLoop) {
+        let sdr = self.config.video.sdr_with_rtx && self.rtx_video_hdr;
+        let needed = self.videos.iter().any(|(pid, v)| {
+            v.sdr_full_screen
+                || v.playing == Some(VideoKind::Sdr)
+                || (sdr && pid.0 == self.foreground)
+        });
+        if needed == self.video_polling {
+            return;
+        }
+        self.video_polling = needed;
+        if needed {
+            host.set_timer(VIDEO_TIMER, VIDEO_POLL);
+        } else {
+            host.kill_timer(VIDEO_TIMER);
+        }
+    }
+
+    /// Stops watching a video program and ends its trigger.
+    fn forget_video(&mut self, host: &EventLoop, now: Instant, pid: Pid) {
+        let Some(proc) = self.videos.remove(&pid) else {
+            return;
+        };
+        if let Some(kind) = proc.playing {
+            self.log_line(&format!("{} ended.", video::trigger_label(proc.app, kind)));
+            let outcome = self
+                .engine
+                .trigger_ended(now, &video::trigger_id(proc.app, pid.0));
+            self.apply(host, now, outcome);
+        }
+    }
+
     fn on_exit(&mut self, host: &EventLoop, now: Instant, pid: Pid) {
+        self.forget_video(host, now, pid);
+        if self.launches.remove(&pid).is_some() {
+            let id = launch::trigger_id(pid.0);
+            let label = self.engine.label(&id).unwrap_or("A program").to_owned();
+            self.log_line(&format!("{label} ended (started with HDR)."));
+            let outcome = self.engine.trigger_ended(now, &id);
+            self.apply(host, now, outcome);
+        }
         self.watches.remove(&pid);
+        self.game_monitors.remove(&pid);
+        self.game_moves.remove(&pid);
         match self.tracker.exited(pid, now) {
             Exit::Ended(id) => {
                 let label = self.engine.label(&id).unwrap_or(id.as_str()).to_owned();
@@ -249,7 +534,9 @@ impl App {
                     huedra_core::paths::display_name(&path),
                     id.as_str()
                 ));
-                if !self.watch(pid) {
+                if self.watch(pid) {
+                    self.place_game(host, now, pid);
+                } else {
                     // It exited at once; treat it like any other exit.
                     self.on_exit(host, now, pid);
                 }
@@ -280,6 +567,70 @@ impl App {
             .engine
             .set_displays(now, &managed(&self.config, &self.displays));
         self.apply(host, now, outcome);
+    }
+
+    // --- Launch with HDR -------------------------------------------------
+
+    /// Turns HDR on at once for a program `huedra launch` is about to
+    /// start, and holds it while that launching process lives. The answer
+    /// says whether HDR is on, so the game starts only afterwards.
+    fn launch(&mut self, host: &EventLoop, now: Instant, pid: Pid, program: &str) -> Response {
+        if self.launches.contains_key(&pid) {
+            return Response::Failed {
+                message: "This launch is already known.".to_owned(),
+            };
+        }
+        let Some(watch) = ExitWatch::new(pid.0, self.waker) else {
+            return Response::Failed {
+                message: "Huedra could not follow the launch, so HDR was not turned on.".to_owned(),
+            };
+        };
+        self.launches.insert(pid, watch);
+        let game = self.library.find(program).cloned();
+        let label = game
+            .as_ref()
+            .map_or_else(|| program_label(program), |g| g.name.clone());
+        let hold = game
+            .as_ref()
+            .and_then(|g| self.config.game(&g.id))
+            .and_then(|s| s.hold)
+            .unwrap_or(self.config.general.hold)
+            .duration();
+        self.log_line(&format!("{label} is starting with HDR."));
+        // Before the program starts it has no window to follow: the main
+        // display turns on, where games open by default (every managed
+        // display when HDR does not follow the content).
+        let main: BTreeSet<u32> = self
+            .displays
+            .iter()
+            .filter(|d| d.primary)
+            .map(|d| d.number)
+            .collect();
+        let trigger = Trigger {
+            label,
+            delay: Duration::ZERO,
+            hold,
+            target: self.target_for(&main),
+        };
+        let outcome = self
+            .engine
+            .trigger_started(now, launch::trigger_id(pid.0), trigger);
+        self.apply(host, now, outcome);
+        let status = self.engine.status(now);
+        let message = if status.hdr_on {
+            "HDR is on."
+        } else if status.mode == Mode::AlwaysSdr {
+            "HDR stays off: Huedra is in Always SDR mode."
+        } else if status.paused_until.is_some() {
+            "HDR stays off: automatic switching is paused."
+        } else if status.displays.is_empty() {
+            "HDR stays off: no display Huedra manages supports HDR."
+        } else {
+            "HDR could not be turned on; see Huedra's log."
+        };
+        Response::Done {
+            message: message.to_owned(),
+        }
     }
 
     // --- User commands --------------------------------------------------
@@ -335,6 +686,25 @@ impl App {
     }
 
     fn never_for(&mut self, host: &EventLoop, now: Instant, id: &TriggerId, label: &str) {
+        if let Some(app) = video::app_of(id) {
+            self.edit_config(|c| {
+                c.video.set_mode(app, PlayerHdr::Never);
+            });
+            self.log_line(&format!(
+                "{}: HDR will no longer be changed for video in this program.",
+                app.label()
+            ));
+            let pids: Vec<Pid> = self
+                .videos
+                .iter()
+                .filter(|(_, v)| v.app == app)
+                .map(|(pid, _)| *pid)
+                .collect();
+            for pid in pids {
+                self.forget_video(host, now, pid);
+            }
+            return;
+        }
         self.edit_config(|c| c.game_mut(&GameId::from_raw(id.as_str())).hdr = GameHdr::DoNotChange);
         self.log_line(&format!(
             "{label}: HDR will no longer be changed for this game."
@@ -359,7 +729,12 @@ impl App {
             radio(MENU_ALWAYS_SDR, "Always SDR", mode == Mode::AlwaysSdr),
             MenuEntry::Separator,
         ];
-        let game = self.engine.active_triggers().into_iter().next();
+        // "Never for" applies to games and video programs, not to launches.
+        let game = self
+            .engine
+            .active_triggers()
+            .into_iter()
+            .find(|(id, _)| !launch::is_launch(id));
         if let Some((_, label)) = &game {
             entries.push(item(MENU_NEVER, &format!("Never for {label}")));
         }
@@ -429,6 +804,7 @@ impl App {
                 self.reload(host, now);
                 done("The settings were reloaded.")
             }
+            Request::Launch { pid, program } => self.launch(host, now, Pid(*pid), program),
             Request::Exit => return (done("Huedra has closed."), Flow::Exit),
         };
         (response, Flow::Continue)
@@ -455,6 +831,16 @@ impl App {
             outcome.notes.extend(more.notes);
         }
         self.apply(host, now, outcome);
+        self.retarget_all(host, now);
+        self.rtx_video_hdr = registry::rtx_video_hdr() == Some(true);
+        let pids: Vec<(Pid, VideoApp)> = self.videos.iter().map(|(p, v)| (*p, v.app)).collect();
+        for (pid, app) in pids {
+            if self.config.video.mode(app) == PlayerHdr::Never {
+                self.forget_video(host, now, pid);
+            } else {
+                self.assess_video(host, now, pid);
+            }
+        }
         self.log_line("Settings reloaded.");
     }
 
@@ -680,6 +1066,34 @@ impl App {
             Some(d) => format!("Display {}", d.number),
             None => "a display".to_owned(),
         }
+    }
+}
+
+/// A video player or browser being watched.
+struct VideoProcess {
+    app: VideoApp,
+    _titles: ProcessHook,
+    /// Present only while an HDR title waits for full screen.
+    moves: Option<ProcessHook>,
+    _exit: ExitWatch,
+    /// What its running trigger is for; `None` when it has none.
+    playing: Option<VideoKind>,
+    /// The displays its running trigger wants.
+    target: Target,
+    /// Whether SDR video can count and a window is full screen, so it is
+    /// read again on [`VIDEO_TIMER`].
+    sdr_full_screen: bool,
+}
+
+/// A program's name for the log and the menu when it is not a known game:
+/// its file name without `.exe`.
+fn program_label(program: &str) -> String {
+    let name = huedra_core::paths::display_name(program);
+    let len = name.len();
+    if len > 4 && name.is_char_boundary(len - 4) && name[len - 4..].eq_ignore_ascii_case(".exe") {
+        name[..len - 4].to_owned()
+    } else {
+        name.to_owned()
     }
 }
 

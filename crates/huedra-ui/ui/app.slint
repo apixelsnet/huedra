@@ -6,11 +6,11 @@ import { Palette } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { FocusRing } from "controls.slint";
 import {
-    StatusPage, GamesPage, DisplaysPage, GeneralPage,
-    GameRow, GameDetail, DisplayRow, HistoryRow, StoreChip
+    StatusPage, GamesPage, VideoPage, DisplaysPage, GeneralPage,
+    GameRow, GameDetail, DisplayRow, HistoryRow, StoreChip, VideoAppRow, SiteRow
 } from "pages.slint";
 
-export { Theme, GameRow, GameDetail, DisplayRow, HistoryRow, StoreChip }
+export { Theme, GameRow, GameDetail, DisplayRow, HistoryRow, StoreChip, VideoAppRow, SiteRow }
 
 component NavItem inherits Rectangle {
     in property <string> glyph;
@@ -145,15 +145,36 @@ export component SettingsWindow inherits Window {
     callback apply-suggestion(string);
     callback open-wiki(string);
     callback remove-game(string);
+    callback create-shortcut(string);
 
     // Displays
+    in property <[VideoAppRow]> video-players;
+    in property <[VideoAppRow]> video-browsers;
+    in property <string> video-keywords;
+    in property <bool> video-full-screen-only;
+    in property <bool> video-sdr-with-rtx;
+    in property <string> video-rtx-note;
+    in property <[SiteRow]> video-sites;
+    in property <int> video-hold;
+    in property <bool> video-hold-custom;
+    callback set-video-app(string, int);
+    callback set-video-keywords(string);
+    callback set-video-full-screen-only(bool);
+    callback set-video-sdr-with-rtx(bool);
+    callback set-video-site(string, bool);
+    callback set-video-hold(int);
+    callback reset-video-hold();
+
     in property <[DisplayRow]> displays;
     in property <int> retries;
+    in property <bool> content-only;
     callback set-managed(string, bool);
     callback set-retries(int);
+    callback set-content-only(bool);
 
     // General
     in property <bool> start-with-windows;
+    in property <bool> context-menu;
     in property <int> updates;
     in property <bool> game-info;
     in property <int> hold;
@@ -164,6 +185,7 @@ export component SettingsWindow inherits Window {
     in property <string> version;
     in property <string> data-folder;
     callback set-start-with-windows(bool);
+    callback set-context-menu(bool);
     callback set-updates(int);
     callback set-game-info(bool);
     callback set-hold(int);
@@ -186,7 +208,7 @@ export component SettingsWindow inherits Window {
                     self.keyboard = true;
                     return accept;
                 }
-                if event.text == Key.DownArrow && root.page < 3 {
+                if event.text == Key.DownArrow && root.page < 4 {
                     root.page += 1;
                     self.keyboard = true;
                     return accept;
@@ -227,6 +249,7 @@ export component SettingsWindow inherits Window {
                 for item[i] in [
                     { glyph: "\u{E80F}", label: "Status" },
                     { glyph: "\u{E7FC}", label: "Games" },
+                    { glyph: "\u{E714}", label: "Video players" },
                     { glyph: "\u{E7F4}", label: "Displays" },
                     { glyph: "\u{E713}", label: "General" },
                 ]: NavItem {
@@ -326,29 +349,75 @@ export component SettingsWindow inherits Window {
                 remove-game(id) => {
                     root.remove-game(id);
                 }
+                create-shortcut(id) => {
+                    root.create-shortcut(id);
+                }
+            }
+            VideoPage {
+                property <bool> active: root.page == 2;
+                opacity: active ? 1 : 0;
+                y: active ? 0px : 8px;
+                visible: self.opacity > 0.01;
+                animate opacity, y { duration: Theme.page; easing: ease-out; }
+                players: root.video-players;
+                browsers: root.video-browsers;
+                keywords: root.video-keywords;
+                full-screen-only: root.video-full-screen-only;
+                sdr-with-rtx: root.video-sdr-with-rtx;
+                rtx-note: root.video-rtx-note;
+                sites: root.video-sites;
+                hold: root.video-hold-custom ? root.video-hold : root.hold;
+                hold-custom: root.video-hold-custom;
+                default-hold: root.hold;
+                set-app(key, i) => {
+                    root.set-video-app(key, i);
+                }
+                set-keywords(text) => {
+                    root.set-video-keywords(text);
+                }
+                set-full-screen-only(on) => {
+                    root.set-video-full-screen-only(on);
+                }
+                set-sdr-with-rtx(on) => {
+                    root.set-video-sdr-with-rtx(on);
+                }
+                set-site(key, on) => {
+                    root.set-video-site(key, on);
+                }
+                set-hold(v) => {
+                    root.set-video-hold(v);
+                }
+                reset-hold => {
+                    root.reset-video-hold();
+                }
             }
             DisplaysPage {
-                property <bool> active: root.page == 2;
+                property <bool> active: root.page == 3;
                 opacity: active ? 1 : 0;
                 y: active ? 0px : 8px;
                 visible: self.opacity > 0.01;
                 animate opacity, y { duration: Theme.page; easing: ease-out; }
                 displays: root.displays;
                 retries: root.retries;
+                content-only: root.content-only;
                 set-managed(id, on) => {
                     root.set-managed(id, on);
+                }
+                set-content-only(on) => {
+                    root.set-content-only(on);
                 }
                 set-retries(n) => {
                     root.set-retries(n);
                 }
             }
             GeneralPage {
-                property <bool> active: root.page == 3;
+                property <bool> active: root.page == 4;
                 opacity: active ? 1 : 0;
                 y: active ? 0px : 8px;
                 visible: self.opacity > 0.01;
                 animate opacity, y { duration: Theme.page; easing: ease-out; }
                 start-with-windows: root.start-with-windows;
+                context-menu: root.context-menu;
                 updates: root.updates;
                 game-info: root.game-info;
                 hold: root.hold;
@@ -360,6 +429,9 @@ export component SettingsWindow inherits Window {
                 data-folder: root.data-folder;
                 set-start-with-windows(on) => {
                     root.set-start-with-windows(on);
+                }
+                set-context-menu(on) => {
+                    root.set-context-menu(on);
                 }
                 set-updates(i) => {
                     root.set-updates(i);

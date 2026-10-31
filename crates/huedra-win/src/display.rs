@@ -257,7 +257,7 @@ fn is_primary(path: &DISPLAYCONFIG_PATH_INFO, modes: &[DISPLAYCONFIG_MODE_INFO])
 }
 
 /// `\\.\DISPLAY2` gives 2, the number Windows shows under "Identify".
-fn gdi_number(gdi_name: &str) -> u32 {
+pub(crate) fn gdi_number(gdi_name: &str) -> u32 {
     gdi_name
         .rsplit("DISPLAY")
         .next()
@@ -334,7 +334,7 @@ fn peak_luminance() -> HashMap<String, Nits> {
     peaks
 }
 
-fn wide_to_string(wide: &[u16]) -> String {
+pub(crate) fn wide_to_string(wide: &[u16]) -> String {
     let len = wide.iter().position(|&c| c == 0).unwrap_or(wide.len());
     String::from_utf16_lossy(&wide[..len])
 }
