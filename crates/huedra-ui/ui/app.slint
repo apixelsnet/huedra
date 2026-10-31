@@ -2,7 +2,9 @@
 // Layouts: wide (1000 px and up), medium (680 to 999), compact (below 680,
 // icon rail). Feature doc: docs/features/08-settings-window.md
 
+import { Palette } from "std-widgets.slint";
 import { Theme } from "theme.slint";
+import { FocusRing } from "controls.slint";
 import {
     StatusPage, GamesPage, DisplaysPage, GeneralPage,
     GameRow, GameDetail, DisplayRow, HistoryRow, StoreChip
@@ -15,6 +17,8 @@ component NavItem inherits Rectangle {
     in property <string> label;
     in property <bool> selected;
     in property <bool> compact;
+    // The navigation pane has the keyboard focus, reached with the keyboard.
+    in property <bool> keyboard-focus;
     callback activate();
     height: Theme.nav-row;
     border-radius: Theme.radius-control;
@@ -58,6 +62,11 @@ component NavItem inherits Rectangle {
             root.activate();
         }
     }
+    if root.selected && root.keyboard-focus: FocusRing {
+        width: parent.width;
+        height: parent.height;
+        border-radius: Theme.radius-control;
+    }
 }
 
 export component SettingsWindow inherits Window {
@@ -73,8 +82,33 @@ export component SettingsWindow inherits Window {
 
     in property <image> app-icon;
     in-out property <int> page: 0;
-    property <bool> wide: self.width >= 1000px;
-    property <bool> compact: self.width < 680px;
+    // Set when the width changes rather than bound to it: the layouts below
+    // depend on them and in turn constrain the width.
+    property <bool> wide: true;
+    property <bool> compact: false;
+    changed width => {
+        root.fit-layout();
+    }
+    init => {
+        root.fit-layout();
+        root.apply-theme();
+    }
+
+    // The Windows light or dark app setting, watched by Huedra itself:
+    // Slint's own tracking can miss a change while the window is open.
+    in property <bool> light-theme: true;
+    changed light-theme => {
+        root.apply-theme();
+    }
+
+    function apply-theme() {
+        Palette.color-scheme = root.light-theme ? ColorScheme.light : ColorScheme.dark;
+    }
+
+    function fit-layout() {
+        root.wide = root.width >= 1000px;
+        root.compact = root.width < 680px;
+    }
 
     // Status
     in property <bool> tray-running;
@@ -139,15 +173,22 @@ export component SettingsWindow inherits Window {
 
     HorizontalLayout {
         // Navigation pane; an icon rail in the compact layout.
+        // Up and Down change the page while the pane has the keyboard.
         nav := FocusScope {
+            property <bool> keyboard;
             width: root.compact ? 64px : root.wide ? 240px : 200px;
+            focus-gained(reason) => {
+                self.keyboard = reason == FocusReason.tab-navigation;
+            }
             key-pressed(event) => {
                 if event.text == Key.UpArrow && root.page > 0 {
                     root.page -= 1;
+                    self.keyboard = true;
                     return accept;
                 }
                 if event.text == Key.DownArrow && root.page < 3 {
                     root.page += 1;
+                    self.keyboard = true;
                     return accept;
                 }
                 reject
@@ -193,9 +234,11 @@ export component SettingsWindow inherits Window {
                     label: item.label;
                     compact: root.compact;
                     selected: root.page == i;
+                    keyboard-focus: nav.has-focus && nav.keyboard;
                     activate => {
                         root.page = i;
                         nav.focus();
+                        nav.keyboard = false;
                     }
                 }
             }

@@ -42,4 +42,14 @@ Open: cargo deny warns that allow-listed licences are unused, because there are 
 - `deny.toml` checks only the shipped target (`x86_64-pc-windows-msvc`); with both targets, Linux-only dependencies of Windows-only crates (zbus through Slint's winit backend) entered the graph. Newly allowed licences: BSD-2-Clause, BSL-1.0 and `LicenseRef-Slint-Royalty-free-2.0` (attribution shown in General > About). `RUSTSEC-2026-0192` (ttf-parser unmaintained, used by Slint) is ignored with a note.
 - Release profile now `opt-level = "z"`: 10.2 MB with `"s"`, 9.3 MB with `"z"`. That is above the 8 MB target; most of the size is Slint's text and accessibility stack. Executable packers were ruled out because they trigger antivirus false positives.
 
+## Result (2026-10-31) — open items
+- Executable size after the settings-window fixes: 9.38 MB (9,375,744 bytes). Built without Slint's `accessibility` feature it is 9.19 MB, so the screen-reader support costs only 187 KB and stays. The rest is Slint itself (text layout and shaping, system fonts, number formatting data, SVG text), which its features do not switch off while `std` is on. The 8 MB target is not reachable without replacing the UI toolkit; it needs a new figure. After the settings window stopped using the Fluent widgets: 9.29 MB (9,292,288 bytes).
+
+Size limit set by the owner: 10 MB (10,000,000 bytes). `build/ci.sh` fails the build above it. With game icons (PNG and JPEG decoding): 9.47 MB (9,472,512 bytes).
+
+Pre-release checklist (testers on other machines, before the first public release):
+- Windows 10, or Windows 11 before 24H2: HDR on and off through the older interface (01).
+- A display at 150 % and at 200 % in Windows: the settings window and the tray icon (08, 07).
+- Narrator or NVDA: every page of the settings window can be read and used (08).
+
 Status: phase 0 done. Release archive, start-up entry and uninstall come in phase 5.

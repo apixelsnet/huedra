@@ -29,13 +29,17 @@ fn read(path: &Path) -> Option<String> {
         .flatten()
 }
 
-fn steam_games() -> Vec<Game> {
-    let Some(root) = registry::string(Hive::CurrentUser, r"Software\Valve\Steam", "SteamPath")
+/// Steam's own folder, when Steam is installed.
+pub fn steam_root() -> Option<PathBuf> {
+    registry::string(Hive::CurrentUser, r"Software\Valve\Steam", "SteamPath")
         .or_else(|| registry::string(Hive::LocalMachine32, r"SOFTWARE\Valve\Steam", "InstallPath"))
-    else {
+        .map(|root| PathBuf::from(root.replace('/', r"\")))
+}
+
+fn steam_games() -> Vec<Game> {
+    let Some(root) = steam_root() else {
         return Vec::new();
     };
-    let root = PathBuf::from(root.replace('/', r"\"));
     let mut libraries = read(&root.join(r"steamapps\libraryfolders.vdf"))
         .map(|text| steam::library_folders(&text))
         .unwrap_or_default();

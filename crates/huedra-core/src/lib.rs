@@ -16,6 +16,7 @@ pub mod files;
 pub mod gameinfo;
 pub mod geometry;
 pub mod icon;
+pub mod icons;
 pub mod ipc;
 pub mod library;
 pub mod locations;

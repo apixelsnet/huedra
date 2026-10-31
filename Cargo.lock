@@ -1650,8 +1650,10 @@ version = "0.1.0"
 dependencies = [
  "huedra-core",
  "huedra-win",
+ "png",
  "slint",
  "slint-build",
+ "zune-jpeg",
 ]
 
 [[package]]

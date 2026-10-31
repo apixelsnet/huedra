@@ -93,6 +93,18 @@ pub struct GameInfo {
 }
 
 impl GameInfo {
+    /// The ray tracing field in plain words, or `None` when the page does
+    /// not say (empty, "unknown" or "n/a").
+    pub fn ray_tracing_label(&self) -> Option<&'static str> {
+        match self.ray_tracing.trim().to_ascii_lowercase().as_str() {
+            "true" => Some("Supported"),
+            "limited" => Some("Limited support"),
+            "false" => Some("Not supported"),
+            "hackable" => Some("Through a modification"),
+            _ => None,
+        }
+    }
+
     /// Whether the result is older than [`MAX_AGE_SECS`].
     pub fn is_stale(&self, now: u64) -> bool {
         now.saturating_sub(self.fetched) > MAX_AGE_SECS
@@ -323,6 +335,23 @@ fn decode(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ray_tracing_in_plain_words() {
+        let mut info = GameInfo {
+            id: GameId::from_raw("steam:1"),
+            page: None,
+            hdr: WikiHdr::Unknown,
+            hdr_notes: String::new(),
+            ray_tracing: "false".into(),
+            fetched: 0,
+        };
+        assert_eq!(info.ray_tracing_label(), Some("Not supported"), "false");
+        info.ray_tracing = "True".into();
+        assert_eq!(info.ray_tracing_label(), Some("Supported"), "true");
+        info.ray_tracing = "unknown".into();
+        assert_eq!(info.ray_tracing_label(), None, "unknown is left out");
+    }
 
     #[test]
     fn reads_the_video_fields() {

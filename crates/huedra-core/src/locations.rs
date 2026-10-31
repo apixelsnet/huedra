@@ -18,6 +18,8 @@ pub struct Locations {
     pub game_info: PathBuf,
     /// `window.toml`, the settings window's size and position (local).
     pub window: PathBuf,
+    /// `icons\`, the game icons and their index (local).
+    pub icons: PathBuf,
     /// Whether portable mode is on.
     pub portable: bool,
 }
@@ -63,6 +65,7 @@ impl Locations {
             log: local.join("huedra.log"),
             game_info: local.join("gameinfo.toml"),
             window: local.join("window.toml"),
+            icons: local.join("icons"),
             portable,
         }
     }

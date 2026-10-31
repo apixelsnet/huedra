@@ -1,12 +1,15 @@
 // The four pages of the settings window and the parts they share.
 // Feature doc: docs/features/08-settings-window.md
 
-import { Button, Switch, ComboBox, LineEdit, SpinBox, ScrollView, ListView, AboutSlint } from "std-widgets.slint";
+import { ScrollView, ListView, AboutSlint } from "std-widgets.slint";
 import { Theme } from "theme.slint";
+import { FocusRing, Toggle, ActionButton, SearchBox, NumberBox, Dropdown } from "controls.slint";
 
 export struct GameRow {
     id: string,
     name: string,
+    icon: image,
+    initial: string,
     store: string,
     detail: string,
     setting: string,
@@ -16,6 +19,8 @@ export struct GameRow {
 export struct GameDetail {
     id: string,
     name: string,
+    icon: image,
+    initial: string,
     store: string,
     path: string,
     setting-index: int,
@@ -83,6 +88,46 @@ component Caption inherits Text {
     wrap: word-wrap;
 }
 
+// Centres its children vertically without capping the row it sits in. A
+// row is never taller than the smallest maximum height among its parts, and
+// fixed-height controls have one, so wrapped text beside them was cut off.
+component Centered inherits VerticalLayout {
+    Rectangle {
+        vertical-stretch: 1;
+    }
+    @children
+    Rectangle {
+        vertical-stretch: 1;
+    }
+}
+
+// A game's icon, or its first letter on a tinted square while it has none.
+component GameIcon inherits Rectangle {
+    in property <image> icon;
+    in property <string> initial;
+    in property <length> size: 32px;
+    width: root.size;
+    height: root.size;
+    border-radius: root.size / 5;
+    clip: true;
+    background: root.icon.width > 0 ? transparent : Theme.surface-raised;
+    accessible-role: none;
+    if root.icon.width > 0: Image {
+        width: parent.width;
+        height: parent.height;
+        source: root.icon;
+        image-fit: contain;
+    }
+    if root.icon.width == 0: Text {
+        text: root.initial;
+        font-size: root.size * 0.45;
+        font-weight: 600;
+        color: Theme.text-muted;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
+
 component SettingRow inherits Card {
     in property <string> title;
     in property <string> description;
@@ -107,11 +152,13 @@ component SettingRow inherits Card {
                 text: root.description;
             }
         }
-        HorizontalLayout {
+        Centered {
             horizontal-stretch: 0;
-            alignment: end;
-            spacing: 8px;
-            @children
+            HorizontalLayout {
+                alignment: end;
+                spacing: 8px;
+                @children
+            }
         }
     }
 }
@@ -135,22 +182,14 @@ component Badge inherits Rectangle {
     }
 }
 
-component Glyph inherits Text {
-    font-family: Theme.icons;
-    font-size: 16px;
-    color: Theme.text;
-    vertical-alignment: center;
-    horizontal-alignment: center;
-    accessible-role: none;
-}
-
-// A three-way segmented control for the mode.
+// A three-way segmented control for the mode; Left and Right change it.
 component ModeSelector inherits Rectangle {
     in property <int> mode;
     callback chosen(int);
     height: Theme.button-height + 4px;
     border-radius: Theme.radius-control + 2px;
     background: Theme.surface-raised;
+    forward-focus: focus;
     accessible-role: tab-list;
     HorizontalLayout {
         padding: 2px;
@@ -163,6 +202,9 @@ component ModeSelector inherits Rectangle {
             accessible-role: tab;
             accessible-label: label;
             accessible-item-selected: selected;
+            accessible-action-default => {
+                root.chosen(i);
+            }
             Text {
                 text: label;
                 font-size: Theme.body-size;
@@ -177,6 +219,28 @@ component ModeSelector inherits Rectangle {
                 }
             }
         }
+    }
+    focus := FocusScope {
+        x: 0;
+        width: 0px;
+        key-pressed(event) => {
+            if event.text == Key.LeftArrow && root.mode > 0 {
+                root.chosen(root.mode - 1);
+                return accept;
+            }
+            if event.text == Key.RightArrow && root.mode < 2 {
+                root.chosen(root.mode + 1);
+                return accept;
+            }
+            reject
+        }
+    }
+    if focus.has-focus: FocusRing {
+        x: -3px;
+        y: -3px;
+        width: parent.width + 6px;
+        height: parent.height + 6px;
+        border-radius: root.border-radius + 3px;
     }
 }
 
@@ -256,7 +320,13 @@ export component StatusPage inherits Rectangle {
     callback start-huedra();
 
     ScrollView {
-        VerticalLayout {
+        // At least the preferred height, so rows keep their wrapped text
+        // when the page is taller than the window (the default is the
+        // minimum height, which squeezes them). Setting one size drops the
+        // default for the other, so the width is set as well.
+        content-width: self.visible-width;
+        content-height: max(self.visible-height, body.preferred-height);
+        body := VerticalLayout {
             padding: 28px;
             spacing: Theme.gap;
             alignment: start;
@@ -274,7 +344,7 @@ export component StatusPage inherits Rectangle {
                         text: "Huedra is not running, so HDR is not switched automatically.";
                         color: Theme.text;
                     }
-                    Button {
+                    ActionButton {
                         text: "Start Huedra";
                         primary: true;
                         clicked => {
@@ -310,7 +380,7 @@ export component StatusPage inherits Rectangle {
             SettingRow {
                 title: "Pause automatic switching";
                 description: root.paused ? root.pause-note : "The current state is kept and no switching occurs until the pause ends.";
-                Button {
+                ActionButton {
                     text: root.paused ? "Resume" : "Pause for 1 hour";
                     enabled: root.tray-running;
                     clicked => {
@@ -348,8 +418,7 @@ export component StatusPage inherits Rectangle {
                             text: entry.detail;
                         }
                     }
-                    VerticalLayout {
-                        alignment: center;
+                    Centered {
                         Badge {
                             kind: entry.kind;
                             text: entry.kind == "hdr" ? "HDR" : entry.kind == "external" ? "External" : entry.kind == "failed" ? "Failed" : "SDR";
@@ -376,25 +445,43 @@ component GameDetailPanel inherits Card {
     callback remove-game(string);
 
     ScrollView {
-        VerticalLayout {
+        // At least the preferred height, so rows keep their wrapped text
+        // when the page is taller than the window (the default is the
+        // minimum height, which squeezes them). Setting one size drops the
+        // default for the other, so the width is set as well.
+        content-width: self.visible-width;
+        content-height: max(self.visible-height, body.preferred-height);
+        body := VerticalLayout {
             padding: 18px;
             spacing: 12px;
             alignment: start;
             if root.show-back: HorizontalLayout {
                 alignment: start;
-                Button {
+                ActionButton {
                     text: "Back to the list";
                     clicked => {
                         root.back();
                     }
                 }
             }
-            Text {
-                text: root.detail.name;
-                font-size: Theme.heading-size;
-                font-weight: 600;
-                color: Theme.text;
-                wrap: word-wrap;
+            HorizontalLayout {
+                spacing: 12px;
+                Centered {
+                    GameIcon {
+                        size: 40px;
+                        icon: root.detail.icon;
+                        initial: root.detail.initial;
+                    }
+                }
+                Text {
+                    horizontal-stretch: 1;
+                    text: root.detail.name;
+                    font-size: Theme.heading-size;
+                    font-weight: 600;
+                    color: Theme.text;
+                    vertical-alignment: center;
+                    wrap: word-wrap;
+                }
             }
             Caption {
                 text: root.detail.store + " · " + root.detail.path;
@@ -406,7 +493,7 @@ component GameDetailPanel inherits Card {
                     font-size: Theme.body-size;
                     color: Theme.text;
                 }
-                ComboBox {
+                Dropdown {
                     model: ["Enable while running", "Do not change", "Game controls HDR"];
                     current-index: root.detail.setting-index;
                     selected(value) => {
@@ -424,7 +511,7 @@ component GameDetailPanel inherits Card {
                         color: Theme.text;
                         wrap: word-wrap;
                     }
-                    SpinBox {
+                    NumberBox {
                         minimum: 0;
                         maximum: 120;
                         value: root.detail.delay;
@@ -441,7 +528,7 @@ component GameDetailPanel inherits Card {
                         color: Theme.text;
                         wrap: word-wrap;
                     }
-                    SpinBox {
+                    NumberBox {
                         minimum: 0;
                         maximum: 600;
                         value: root.detail.hold;
@@ -453,7 +540,7 @@ component GameDetailPanel inherits Card {
             }
             if root.detail.custom-timing: HorizontalLayout {
                 alignment: start;
-                Button {
+                ActionButton {
                     text: "Use the default times";
                     clicked => {
                         root.reset-timing(root.detail.id);
@@ -481,7 +568,7 @@ component GameDetailPanel inherits Card {
             }
             if root.detail.suggestion != "" && root.detail.suggestion-index != root.detail.setting-index: HorizontalLayout {
                 alignment: start;
-                Button {
+                ActionButton {
                     text: "Use the suggested setting: " + root.detail.suggestion;
                     clicked => {
                         root.apply-suggestion(root.detail.id);
@@ -490,7 +577,7 @@ component GameDetailPanel inherits Card {
             }
             if root.detail.wiki-url != "": HorizontalLayout {
                 alignment: start;
-                Button {
+                ActionButton {
                     text: "Open the PCGamingWiki page";
                     clicked => {
                         root.open-wiki(root.detail.wiki-url);
@@ -502,7 +589,7 @@ component GameDetailPanel inherits Card {
             }
             if root.detail.manual: HorizontalLayout {
                 alignment: start;
-                Button {
+                ActionButton {
                     text: "Remove this game";
                     clicked => {
                         root.remove-game(root.detail.id);
@@ -520,7 +607,8 @@ export component GamesPage inherits Rectangle {
     in property <string> filter;
     in property <int> total;
     // The selected game, as a list of zero or one entries: a new list makes a
-    // fresh detail panel, so its controls always show that game's values.
+    // fresh detail panel (another game, or values changed from outside the
+    // controls); the same game is updated in place and keeps the focus.
     in property <[GameDetail]> details;
     in property <string> selected-id;
     in property <string> scan-note;
@@ -540,6 +628,15 @@ export component GamesPage inherits Rectangle {
 
     property <bool> has-selection: root.details.length > 0;
     property <bool> list-visible: root.wide || !root.has-selection;
+    property <length> row-height: 56px;
+    // The row the keyboard is on, and whether the keyboard put it there.
+    property <int> cursor: 0;
+    property <bool> keyboard;
+
+    function move-cursor(index: int) {
+        root.cursor = max(0, min(index, root.games.length - 1));
+        root.keyboard = true;
+    }
 
     VerticalLayout {
         padding: 28px;
@@ -550,20 +647,20 @@ export component GamesPage inherits Rectangle {
         }
         HorizontalLayout {
             spacing: 8px;
-            LineEdit {
+            SearchBox {
                 horizontal-stretch: 1;
-                placeholder-text: "Search " + root.total + " games";
+                placeholder: "Search " + root.total + " games";
                 edited(text) => {
                     root.search-changed(text);
                 }
             }
-            Button {
+            ActionButton {
                 text: "Add game";
                 clicked => {
                     root.add-game();
                 }
             }
-            Button {
+            ActionButton {
                 text: "Scan again";
                 clicked => {
                     root.rescan();
@@ -582,6 +679,10 @@ export component GamesPage inherits Rectangle {
                 animate background { duration: Theme.hover-time; }
                 accessible-role: button;
                 accessible-label: chip.label;
+                accessible-item-selected: selected;
+                accessible-action-default => {
+                    root.filter-changed(chip.key);
+                }
                 chip-text := Text {
                     text: chip.label + " " + chip.count;
                     font-size: Theme.caption-size;
@@ -594,6 +695,24 @@ export component GamesPage inherits Rectangle {
                         root.filter-changed(chip.key);
                     }
                 }
+                chip-focus := FocusScope {
+                    x: 0;
+                    width: 0px;
+                    key-pressed(event) => {
+                        if event.text == Key.Space || event.text == Key.Return {
+                            root.filter-changed(chip.key);
+                            return accept;
+                        }
+                        reject
+                    }
+                }
+                if chip-focus.has-focus: FocusRing {
+                    x: -3px;
+                    y: -3px;
+                    width: parent.width + 6px;
+                    height: parent.height + 6px;
+                    border-radius: parent.border-radius + 3px;
+                }
             }
         }
         if root.scan-note != "": Caption {
@@ -604,14 +723,65 @@ export component GamesPage inherits Rectangle {
             spacing: Theme.gap;
             if root.list-visible: Card {
                 horizontal-stretch: 3;
+                // Up, Down, Home and End move through the list; Enter or Space
+                // opens the game. Clicking a row also gives the list the keyboard.
+                list-keys := FocusScope {
+                    x: 0;
+                    width: 0px;
+                    focus-gained(reason) => {
+                        root.cursor = min(max(root.cursor, 0), root.games.length - 1);
+                        root.keyboard = reason == FocusReason.tab-navigation;
+                    }
+                    key-pressed(event) => {
+                        if root.games.length == 0 {
+                            return reject;
+                        }
+                        if event.text == Key.DownArrow {
+                            root.move-cursor(root.cursor + 1);
+                            return accept;
+                        }
+                        if event.text == Key.UpArrow {
+                            root.move-cursor(root.cursor - 1);
+                            return accept;
+                        }
+                        if event.text == Key.Home {
+                            root.move-cursor(0);
+                            return accept;
+                        }
+                        if event.text == Key.End {
+                            root.move-cursor(root.games.length - 1);
+                            return accept;
+                        }
+                        if (event.text == Key.Space || event.text == Key.Return) && root.cursor >= 0 && root.cursor < root.games.length {
+                            root.keyboard = true;
+                            root.select-game(root.games[root.cursor].id);
+                            return accept;
+                        }
+                        reject
+                    }
+                }
                 ListView {
-                    for game in root.games: Rectangle {
+                    // Scrolls just enough to keep the keyboard row in view.
+                    property <int> cursor: root.cursor;
+                    changed cursor => {
+                        let top = self.cursor * root.row-height;
+                        if top < -self.content-y {
+                            self.content-y = -top;
+                        } else if top + root.row-height > self.visible-height - self.content-y {
+                            self.content-y = self.visible-height - top - root.row-height;
+                        }
+                    }
+                    for game[i] in root.games: Rectangle {
                         property <bool> selected: root.has-selection && root.selected-id == game.id;
-                        height: 56px;
+                        height: root.row-height;
                         background: selected ? Theme.surface-raised : row-touch.has-hover ? Theme.hover : transparent;
                         animate background { duration: Theme.hover-time; }
                         accessible-role: list-item;
                         accessible-label: game.name;
+                        accessible-item-selected: selected;
+                        accessible-action-default => {
+                            root.select-game(game.id);
+                        }
                         Rectangle {
                             x: 0;
                             width: 3px;
@@ -624,6 +794,12 @@ export component GamesPage inherits Rectangle {
                             padding-left: 14px;
                             padding-right: 14px;
                             spacing: 12px;
+                            Centered {
+                                GameIcon {
+                                    icon: game.icon;
+                                    initial: game.initial;
+                                }
+                            }
                             VerticalLayout {
                                 horizontal-stretch: 1;
                                 alignment: center;
@@ -642,14 +818,16 @@ export component GamesPage inherits Rectangle {
                                     overflow: elide;
                                 }
                             }
-                            if root.wide: Text {
+                            // The store and setting columns give way to the
+                            // name while the detail panel, which shows both, is open.
+                            if root.wide && !root.has-selection: Text {
                                 text: game.store;
                                 font-size: Theme.caption-size;
                                 color: Theme.text-muted;
                                 vertical-alignment: center;
                                 width: 70px;
                             }
-                            Text {
+                            if !root.has-selection: Text {
                                 text: game.setting;
                                 font-size: Theme.caption-size;
                                 color: Theme.text;
@@ -661,8 +839,16 @@ export component GamesPage inherits Rectangle {
                         }
                         row-touch := TouchArea {
                             clicked => {
+                                root.cursor = i;
+                                list-keys.focus();
+                                root.keyboard = false;
                                 root.select-game(game.id);
                             }
+                        }
+                        if list-keys.has-focus && root.keyboard && root.cursor == i: FocusRing {
+                            width: parent.width;
+                            height: parent.height;
+                            border-radius: Theme.radius-control;
                         }
                     }
                 }
@@ -710,7 +896,13 @@ export component DisplaysPage inherits Rectangle {
     callback set-retries(int);
 
     ScrollView {
-        VerticalLayout {
+        // At least the preferred height, so rows keep their wrapped text
+        // when the page is taller than the window (the default is the
+        // minimum height, which squeezes them). Setting one size drops the
+        // default for the other, so the width is set as well.
+        content-width: self.visible-width;
+        content-height: max(self.visible-height, body.preferred-height);
+        body := VerticalLayout {
             padding: 28px;
             spacing: Theme.gap;
             alignment: start;
@@ -724,26 +916,27 @@ export component DisplaysPage inherits Rectangle {
                 HorizontalLayout {
                     padding: 16px;
                     spacing: 14px;
-                    Rectangle {
-                        width: 36px;
-                        height: 36px;
-                        y: (parent.height - self.height) / 2;
-                        border-radius: Theme.radius-control;
-                        clip: true;
-                        background: Theme.surface-raised;
-                        if d.hdr-on: Image {
-                            source: Theme.spectrum-image;
-                            image-fit: fill;
-                            width: parent.width;
-                            height: parent.height;
-                        }
-                        Text {
-                            text: d.number;
-                            font-size: 16px;
-                            font-weight: 600;
-                            color: d.hdr-on ? #FFFFFF : Theme.text;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
+                    Centered {
+                        Rectangle {
+                            width: 36px;
+                            height: 36px;
+                            border-radius: Theme.radius-control;
+                            clip: true;
+                            background: Theme.surface-raised;
+                            if d.hdr-on: Image {
+                                source: Theme.spectrum-image;
+                                image-fit: fill;
+                                width: parent.width;
+                                height: parent.height;
+                            }
+                            Text {
+                                text: d.number;
+                                font-size: 16px;
+                                font-weight: 600;
+                                color: d.hdr-on ? #FFFFFF : Theme.text;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
                         }
                     }
                     VerticalLayout {
@@ -761,12 +954,14 @@ export component DisplaysPage inherits Rectangle {
                             text: d.detail;
                         }
                     }
-                    Switch {
-                        text: d.capable ? (self.checked ? "Managed" : "Not managed") : "Not managed";
-                        checked: d.managed;
-                        enabled: d.capable;
-                        toggled => {
-                            root.set-managed(d.id, self.checked);
+                    Centered {
+                        Toggle {
+                            text: d.capable ? (self.checked ? "Managed" : "Not managed") : "Not managed";
+                            checked: d.managed;
+                            enabled: d.capable;
+                            toggled => {
+                                root.set-managed(d.id, self.checked);
+                            }
                         }
                     }
                 }
@@ -774,7 +969,7 @@ export component DisplaysPage inherits Rectangle {
             SettingRow {
                 title: "Retry attempts";
                 description: "Some displays reject the first request while the graphics card changes mode.";
-                SpinBox {
+                NumberBox {
                     minimum: 0;
                     maximum: 5;
                     value: root.retries;
@@ -809,7 +1004,13 @@ export component GeneralPage inherits Rectangle {
     callback set-log-titles(bool);
 
     ScrollView {
-        VerticalLayout {
+        // At least the preferred height, so rows keep their wrapped text
+        // when the page is taller than the window (the default is the
+        // minimum height, which squeezes them). Setting one size drops the
+        // default for the other, so the width is set as well.
+        content-width: self.visible-width;
+        content-height: max(self.visible-height, body.preferred-height);
+        body := VerticalLayout {
             padding: 28px;
             spacing: Theme.gap;
             alignment: start;
@@ -819,7 +1020,7 @@ export component GeneralPage inherits Rectangle {
             SettingRow {
                 title: "Start with Windows";
                 description: "Starts in the notification area without opening a window.";
-                Switch {
+                Toggle {
                     checked: root.start-with-windows;
                     toggled => {
                         root.set-start-with-windows(self.checked);
@@ -829,7 +1030,7 @@ export component GeneralPage inherits Rectangle {
             SettingRow {
                 title: "Updates";
                 description: "Checks once a day and installs signed releases while no game or video is running. The previous version is kept. Release hosting is not set up yet, so no checks are made.";
-                ComboBox {
+                Dropdown {
                     model: ["Install automatically", "Ask before installing", "Off"];
                     current-index: root.updates;
                     selected(value) => {
@@ -838,9 +1039,9 @@ export component GeneralPage inherits Rectangle {
                 }
             }
             SettingRow {
-                title: "Game information from PCGamingWiki";
-                description: "Sends the Steam ID or the name of each game to pcgamingwiki.com. Results are stored for 30 days.";
-                Switch {
+                title: "Game information and icons";
+                description: "Looks up HDR support on pcgamingwiki.com, which receives the Steam ID or the name of each game, and icons in Discord's public list of games. Results are stored for 30 days. When off, icons come from the games' own programs.";
+                Toggle {
                     checked: root.game-info;
                     toggled => {
                         root.set-game-info(self.checked);
@@ -850,7 +1051,7 @@ export component GeneralPage inherits Rectangle {
             SettingRow {
                 title: "Default hold time (seconds)";
                 description: "Used for games without their own setting.";
-                SpinBox {
+                NumberBox {
                     minimum: 0;
                     maximum: 600;
                     value: root.hold;
@@ -862,7 +1063,7 @@ export component GeneralPage inherits Rectangle {
             SettingRow {
                 title: "Default delay before enabling HDR (seconds)";
                 description: "Used for games without their own setting.";
-                SpinBox {
+                NumberBox {
                     minimum: 0;
                     maximum: 120;
                     value: root.delay;
@@ -874,7 +1075,7 @@ export component GeneralPage inherits Rectangle {
             SettingRow {
                 title: "Keyboard shortcuts";
                 description: "Win+Alt+H turns HDR on or off. Win+Alt+O changes the mode. Win+Alt+P pauses or resumes." + (root.hotkey-note != "" ? " " + root.hotkey-note : "");
-                Switch {
+                Toggle {
                     checked: root.hotkeys;
                     toggled => {
                         root.set-hotkeys(self.checked);
@@ -884,7 +1085,7 @@ export component GeneralPage inherits Rectangle {
             SettingRow {
                 title: "Record window titles in the log";
                 description: "When off, browser tab names and file names are not written to the log.";
-                Switch {
+                Toggle {
                     checked: root.log-titles;
                     toggled => {
                         root.set-log-titles(self.checked);

@@ -55,7 +55,7 @@ Settings are kept in `%APPDATA%\Huedra\config.toml`; the log, the recovery recor
 
 Huedra reads the names and paths of programs that come to the front, and nothing else from them: no process memory is read and no code is placed in other programs, so anti-cheat software is unaffected. Window titles are not written to the log.
 
-The settings window looks up installed games on [PCGamingWiki](https://www.pcgamingwiki.com) to show whether they support HDR. It sends each game's Steam ID, or its name for other stores, at most once per second, and keeps the results for 30 days. This can be turned off under General.
+The settings window looks up installed games on [PCGamingWiki](https://www.pcgamingwiki.com) to show whether they support HDR, sending each game's Steam ID, or its name for other stores, at most once per second. For icons it downloads Discord's public list of games, which reveals nothing about your games, and then each matched game's icon from Discord's image server. Results are kept for 30 days. This can be turned off under General; icons then come from Steam's cache and the games' own files.
 
 ## Building from source
 

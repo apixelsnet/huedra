@@ -26,4 +26,10 @@ Not verified: a power cut during a write.
 - `huedra_core::locations::Locations` replaces the executable's own path code, so the tray, the settings window and `huedra games` share one list: `config.toml` (roaming), `owned.toml`, `huedra.log`, `gameinfo.toml`, `window.toml` (local).
 - The settings window saves every change at once and asks the tray process to reload.
 
+
+## Result (2026-10-31) — end-to-end pass
+- Both writers of `config.toml`, the tray and the settings window, now read the file again just before changing it and write only their change back (`edit_config` in `crates/huedra/src/app.rs`, `edit` in `crates/huedra-ui/src/app.rs`). A copy loaded earlier used to overwrite the other process's newer change; the end-to-end test caught the settings window restoring an old mode.
+
+Verified on this PC: mode changed from the command line while the settings window was open, then a setting changed in the window: both changes kept.
+
 Status: done.

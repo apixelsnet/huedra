@@ -32,4 +32,10 @@ RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps $locked
 
 step "build (windows release)"
 cargo xwin build --release --target "$target" $locked
-ls -l "${CARGO_TARGET_DIR:-target}/$target/release/huedra.exe"
+exe="${CARGO_TARGET_DIR:-target}/$target/release/huedra.exe"
+ls -l "$exe"
+
+step "size (at most 10 MB)"
+size=$(stat -c %s "$exe")
+echo "$size of 10000000 bytes"
+[ "$size" -le 10000000 ] || { echo "huedra.exe is larger than 10 MB" >&2; exit 1; }

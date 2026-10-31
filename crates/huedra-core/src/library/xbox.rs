@@ -43,6 +43,29 @@ pub fn game(folder_name: &str, folder: &str, config: &str) -> Option<Game> {
     })
 }
 
+/// Image files a game's `MicrosoftGame.config` names as its logos, relative
+/// to its `Content` folder, best for a small square icon first: the 44 px
+/// logo at double scale, the 44 px logo, then the larger tiles. Names that
+/// would leave the folder are left out.
+pub fn logo_files(config: &str) -> Vec<String> {
+    let mut files = Vec::new();
+    for name in ["Square44x44Logo", "Square150x150Logo", "StoreLogo"] {
+        let Some(file) = element_attribute(config, "<ShellVisuals", name) else {
+            continue;
+        };
+        if file.contains("..") || file.contains(':') || file.starts_with(['\\', '/']) {
+            continue;
+        }
+        if name == "Square44x44Logo"
+            && let Some((stem, extension)) = file.rsplit_once('.')
+        {
+            files.push(format!("{stem}.scale-200.{extension}"));
+        }
+        files.push(file);
+    }
+    files
+}
+
 /// The value of the first `name="..."` attribute in the text.
 fn attribute(xml: &str, name: &str) -> Option<String> {
     let start = xml.find(&format!("{name}=\""))? + name.len() + 2;
@@ -69,6 +92,23 @@ fn unescape(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn logo_files_in_order_and_inside_the_folder() {
+        let config = r#"<Game><ShellVisuals DefaultDisplayName="Minecraft"
+            Square150x150Logo="Logo.png" Square44x44Logo="Images\Small.png"
+            StoreLogo="..\..\Windows\x.png"/></Game>"#;
+        assert_eq!(
+            logo_files(config),
+            [
+                r"Images\Small.scale-200.png",
+                r"Images\Small.png",
+                "Logo.png"
+            ],
+            "small first, a path leaving the folder left out"
+        );
+        assert!(logo_files("<Game/>").is_empty(), "no visuals");
+    }
 
     #[test]
     fn reads_gaming_root() {

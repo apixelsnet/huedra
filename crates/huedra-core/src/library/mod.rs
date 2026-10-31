@@ -129,6 +129,12 @@ const NOT_GAMES: &[&str] = &[
     "unitycrashhandler",
 ];
 
+/// Whether a program's file name (lower case) is an installer, uninstaller
+/// or crash reporter rather than a game.
+pub fn is_helper_program(file_name: &str) -> bool {
+    NOT_GAMES.iter().any(|n| file_name.starts_with(n))
+}
+
 /// A set of games prepared for fast matching.
 #[derive(Debug, Default, Clone)]
 pub struct Library {
@@ -175,7 +181,7 @@ impl Library {
     pub fn find(&self, exe_path: &str) -> Option<&Game> {
         let exe = NormPath::new(exe_path);
         let name = exe.file_name();
-        if NOT_GAMES.iter().any(|n| name.starts_with(n)) {
+        if is_helper_program(name) {
             return None;
         }
         if let Some(i) = self.exes.iter().position(|e| e.as_ref() == Some(&exe)) {

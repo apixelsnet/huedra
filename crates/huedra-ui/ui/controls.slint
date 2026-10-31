@@ -1,0 +1,559 @@
+// The controls drawn for Huedra instead of the Fluent ones, so every control
+// takes the ultramarine accent rather than the Windows accent colour (which
+// may be pink, the colour of HDR labels here). Keyboard focus shows as an
+// outline only when it was reached with the keyboard.
+// Feature doc: docs/features/08-settings-window.md
+
+import { Theme } from "theme.slint";
+
+// The keyboard focus outline. Shown only for focus reached with the
+// keyboard: the focus scopes below have no width, so a click never focuses
+// them.
+export component FocusRing inherits Rectangle {
+    border-width: 2px;
+    border-color: Theme.focus;
+}
+
+// An on/off switch in the Huedra accent; Space or Enter flips it.
+export component Toggle {
+    in property <bool> enabled: true;
+    in property <string> text;
+    in-out property <bool> checked;
+    callback toggled();
+
+    function flip() {
+        if !root.enabled {
+            return;
+        }
+        root.checked = !root.checked;
+        root.toggled();
+    }
+
+    min-width: max(40px, layout.min-width);
+    min-height: max(20px, layout.min-height);
+    horizontal-stretch: 0;
+    vertical-stretch: 0;
+    forward-focus: focus;
+    accessible-role: switch;
+    accessible-label: root.text;
+    accessible-enabled: root.enabled;
+    accessible-checkable: true;
+    accessible-checked: root.checked;
+    accessible-action-default => {
+        root.flip();
+    }
+
+    layout := HorizontalLayout {
+        spacing: 12px;
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 40px;
+                height: 20px;
+                border-radius: 10px;
+                border-width: root.checked ? 0px : 1px;
+                border-color: root.enabled ? Theme.text-muted : Theme.border;
+                background: !root.enabled ? (root.checked ? Theme.border : transparent)
+                    : root.checked ? (touch.has-hover ? Theme.accent.brighter(0.1) : Theme.accent)
+                    : touch.has-hover ? Theme.hover : transparent;
+                animate background { duration: Theme.control; }
+                Rectangle {
+                    width: touch.pressed ? 17px : touch.has-hover ? 14px : 12px;
+                    height: touch.has-hover || touch.pressed ? 14px : 12px;
+                    x: root.checked ? parent.width - self.width - 3px : 3px;
+                    y: (parent.height - self.height) / 2;
+                    border-radius: self.height / 2;
+                    background: root.checked ? Theme.on-accent : root.enabled ? Theme.text-muted : Theme.border;
+                    animate x, width, height { duration: Theme.control; easing: ease-out; }
+                }
+                if focus.has-focus: FocusRing {
+                    x: -3px;
+                    y: -3px;
+                    width: parent.width + 6px;
+                    height: parent.height + 6px;
+                    border-radius: 13px;
+                }
+            }
+        }
+        if root.text != "": Text {
+            text: root.text;
+            color: root.enabled ? Theme.text : Theme.text-muted;
+            vertical-alignment: center;
+            accessible-role: none;
+        }
+    }
+    touch := TouchArea {
+        enabled: root.enabled;
+        clicked => {
+            root.flip();
+        }
+    }
+    focus := FocusScope {
+        x: 0;
+        width: 0px;
+        enabled: root.enabled;
+        key-pressed(event) => {
+            if event.text == Key.Space || event.text == Key.Return {
+                root.flip();
+                return accept;
+            }
+            reject
+        }
+    }
+}
+
+// A button: plain, or `primary` in the accent for the one main action.
+export component ActionButton inherits Rectangle {
+    in property <string> text;
+    in property <bool> primary;
+    in property <bool> enabled: true;
+    callback clicked();
+    height: Theme.button-height;
+    min-width: label.preferred-width + 24px;
+    horizontal-stretch: 0;
+    border-radius: Theme.radius-control;
+    border-width: root.primary ? 0px : 1px;
+    border-color: Theme.border;
+    background: !root.enabled ? (root.primary ? Theme.border : Theme.surface)
+        : root.primary ? (touch.pressed ? Theme.accent.darker(0.15) : touch.has-hover ? Theme.accent.brighter(0.1) : Theme.accent)
+        : touch.pressed ? Theme.border : touch.has-hover ? Theme.hover : Theme.surface-raised;
+    animate background { duration: Theme.hover-time; }
+    forward-focus: focus;
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-enabled: root.enabled;
+    accessible-action-default => {
+        if root.enabled {
+            root.clicked();
+        }
+    }
+    label := Text {
+        text: root.text;
+        font-size: Theme.body-size;
+        font-weight: root.primary ? 600 : 400;
+        color: !root.enabled ? Theme.text-muted : root.primary ? Theme.on-accent : Theme.text;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        accessible-role: none;
+    }
+    touch := TouchArea {
+        enabled: root.enabled;
+        clicked => {
+            root.clicked();
+        }
+    }
+    focus := FocusScope {
+        x: 0;
+        width: 0px;
+        enabled: root.enabled;
+        key-pressed(event) => {
+            if event.text == Key.Space || event.text == Key.Return {
+                root.clicked();
+                return accept;
+            }
+            reject
+        }
+    }
+    if focus.has-focus: FocusRing {
+        x: -3px;
+        y: -3px;
+        width: parent.width + 6px;
+        height: parent.height + 6px;
+        border-radius: Theme.radius-control + 3px;
+    }
+}
+
+// The line under a text field: thin and muted, ultramarine while it has
+// the keyboard.
+component FieldLine inherits Rectangle {
+    in property <bool> active;
+    height: root.active ? 2px : 1px;
+    background: root.active ? Theme.accent : Theme.border;
+}
+
+// A one-line search field with a placeholder.
+export component SearchBox inherits Rectangle {
+    in property <string> placeholder;
+    in-out property <string> text <=> input.text;
+    callback edited(string);
+    height: Theme.button-height;
+    min-width: 160px;
+    border-radius: Theme.radius-control;
+    border-width: 1px;
+    border-color: Theme.border;
+    background: input.has-focus ? Theme.surface : touch.has-hover ? Theme.hover : Theme.surface-raised;
+    clip: true;
+    forward-focus: input;
+    accessible-role: text-input;
+    accessible-label: root.placeholder;
+    accessible-value: input.text;
+    touch := TouchArea {
+        mouse-cursor: MouseCursor.text;
+        clicked => {
+            input.focus();
+        }
+    }
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 8px;
+        Text {
+            text: "\u{E721}";
+            font-family: Theme.icons;
+            font-size: 14px;
+            color: Theme.text-muted;
+            vertical-alignment: center;
+            accessible-role: none;
+        }
+        Rectangle {
+            horizontal-stretch: 1;
+            if input.text == "": Text {
+                width: parent.width;
+                height: parent.height;
+                text: root.placeholder;
+                font-size: Theme.body-size;
+                color: Theme.text-muted;
+                vertical-alignment: center;
+                overflow: elide;
+                accessible-role: none;
+            }
+            input := TextInput {
+                width: parent.width;
+                height: parent.height;
+                font-size: Theme.body-size;
+                color: Theme.text;
+                vertical-alignment: center;
+                single-line: true;
+                selection-background-color: Theme.accent.with-alpha(0.45);
+                selection-foreground-color: Theme.text;
+                edited => {
+                    root.edited(self.text);
+                }
+            }
+        }
+    }
+    FieldLine {
+        x: 0;
+        y: parent.height - self.height;
+        width: parent.width;
+        active: input.has-focus;
+    }
+}
+
+// A small button inside a field.
+component FieldButton inherits Rectangle {
+    in property <string> glyph;
+    callback clicked();
+    width: 28px;
+    border-radius: Theme.radius-control;
+    background: touch.pressed ? Theme.border : touch.has-hover ? Theme.hover : transparent;
+    accessible-role: none;
+    Text {
+        text: root.glyph;
+        font-family: Theme.icons;
+        font-size: 10px;
+        color: Theme.text-muted;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    touch := TouchArea {
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+// A whole number between `minimum` and `maximum`: typed, or stepped with the
+// arrow buttons, the Up and Down keys or the mouse wheel. Typed values are
+// applied with Enter or when the field loses the keyboard.
+export component NumberBox inherits Rectangle {
+    in property <int> minimum: 0;
+    in property <int> maximum: 100;
+    in-out property <int> value;
+    callback edited(int);
+
+    function apply(wanted: int) {
+        let clamped = max(root.minimum, min(root.maximum, wanted));
+        input.text = clamped;
+        if clamped != root.value {
+            root.value = clamped;
+            root.edited(clamped);
+        }
+    }
+
+    function commit() {
+        if input.text.is-float() {
+            root.apply(round(input.text.to-float()));
+        } else {
+            input.text = root.value;
+        }
+    }
+
+    // A value changed elsewhere shows at once, except while being typed.
+    changed value => {
+        if !input.has-focus {
+            input.text = root.value;
+        }
+    }
+
+    height: Theme.button-height;
+    min-width: 112px;
+    preferred-width: 128px;
+    border-radius: Theme.radius-control;
+    border-width: 1px;
+    border-color: Theme.border;
+    background: input.has-focus ? Theme.surface : touch.has-hover ? Theme.hover : Theme.surface-raised;
+    clip: true;
+    forward-focus: input;
+    accessible-role: spinbox;
+    accessible-value: root.value;
+    accessible-value-minimum: root.minimum;
+    accessible-value-maximum: root.maximum;
+    accessible-value-step: 1;
+    accessible-action-increment => {
+        root.apply(root.value + 1);
+    }
+    accessible-action-decrement => {
+        root.apply(root.value - 1);
+    }
+    touch := TouchArea {
+        mouse-cursor: MouseCursor.text;
+        clicked => {
+            input.focus();
+        }
+        scroll-event(event) => {
+            if event.delta-y > 0 {
+                root.apply(root.value + 1);
+                return accept;
+            }
+            if event.delta-y < 0 {
+                root.apply(root.value - 1);
+                return accept;
+            }
+            reject
+        }
+    }
+    FocusScope {
+        focus-on-click: false;
+        focus-on-tab-navigation: false;
+        // Sees Up and Down before the text field does.
+        capture-key-pressed(event) => {
+            if event.text == Key.UpArrow {
+                root.commit();
+                root.apply(root.value + 1);
+                return accept;
+            }
+            if event.text == Key.DownArrow {
+                root.commit();
+                root.apply(root.value - 1);
+                return accept;
+            }
+            reject
+        }
+        HorizontalLayout {
+            padding-left: 10px;
+            padding-right: 2px;
+            padding-top: 2px;
+            padding-bottom: 3px;
+            spacing: 2px;
+            input := TextInput {
+                horizontal-stretch: 1;
+                text: root.value;
+                input-type: number;
+                single-line: true;
+                font-size: Theme.body-size;
+                color: Theme.text;
+                vertical-alignment: center;
+                selection-background-color: Theme.accent.with-alpha(0.45);
+                selection-foreground-color: Theme.text;
+                accessible-role: none;
+                accepted => {
+                    root.commit();
+                }
+                changed has-focus => {
+                    if !self.has-focus {
+                        root.commit();
+                    }
+                }
+            }
+            FieldButton {
+                glyph: "\u{E70E}";
+                clicked => {
+                    root.commit();
+                    root.apply(root.value + 1);
+                }
+            }
+            FieldButton {
+                glyph: "\u{E70D}";
+                clicked => {
+                    root.commit();
+                    root.apply(root.value - 1);
+                }
+            }
+        }
+    }
+    FieldLine {
+        x: 0;
+        y: parent.height - self.height;
+        width: parent.width;
+        active: input.has-focus;
+    }
+}
+
+// A choice from a short list. Up and Down change it directly; Space or
+// Enter opens the list, where Up, Down, Enter and Escape work as well.
+export component Dropdown inherits Rectangle {
+    in property <[string]> model;
+    in-out property <int> current-index;
+    callback selected(string);
+
+    function choose(index: int) {
+        if index >= 0 && index < root.model.length && index != root.current-index {
+            root.current-index = index;
+            root.selected(root.model[index]);
+        }
+    }
+
+    height: Theme.button-height;
+    min-width: 176px;
+    border-radius: Theme.radius-control;
+    border-width: 1px;
+    border-color: Theme.border;
+    background: touch.pressed ? Theme.border : touch.has-hover ? Theme.hover : Theme.surface-raised;
+    animate background { duration: Theme.hover-time; }
+    forward-focus: keys;
+    accessible-role: combobox;
+    accessible-value: root.model[root.current-index];
+    accessible-action-default => {
+        list.show();
+    }
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 8px;
+        Text {
+            horizontal-stretch: 1;
+            text: root.model[root.current-index];
+            font-size: Theme.body-size;
+            color: Theme.text;
+            vertical-alignment: center;
+            overflow: elide;
+            accessible-role: none;
+        }
+        Text {
+            text: "\u{E70D}";
+            font-family: Theme.icons;
+            font-size: 10px;
+            color: Theme.text-muted;
+            vertical-alignment: center;
+            accessible-role: none;
+        }
+    }
+    touch := TouchArea {
+        clicked => {
+            list.show();
+        }
+    }
+    keys := FocusScope {
+        x: 0;
+        width: 0px;
+        key-pressed(event) => {
+            if event.text == Key.UpArrow {
+                root.choose(root.current-index - 1);
+                return accept;
+            }
+            if event.text == Key.DownArrow {
+                root.choose(root.current-index + 1);
+                return accept;
+            }
+            if event.text == Key.Space || event.text == Key.Return {
+                list.show();
+                return accept;
+            }
+            reject
+        }
+    }
+    if keys.has-focus: FocusRing {
+        x: -3px;
+        y: -3px;
+        width: parent.width + 6px;
+        height: parent.height + 6px;
+        border-radius: Theme.radius-control + 3px;
+    }
+    list := PopupWindow {
+        x: 0;
+        y: root.height + 4px;
+        width: root.width;
+        Rectangle {
+            background: Theme.surface;
+            border-radius: Theme.radius-card;
+            border-width: 1px;
+            border-color: Theme.border;
+            drop-shadow-blur: 16px;
+            drop-shadow-offset-y: 6px;
+            drop-shadow-color: #00000059;
+            list-keys := FocusScope {
+                property <int> highlight: root.current-index;
+                init => {
+                    self.focus();
+                }
+                key-pressed(event) => {
+                    if event.text == Key.UpArrow {
+                        self.highlight = max(0, self.highlight - 1);
+                        return accept;
+                    }
+                    if event.text == Key.DownArrow {
+                        self.highlight = min(root.model.length - 1, self.highlight + 1);
+                        return accept;
+                    }
+                    if event.text == Key.Space || event.text == Key.Return {
+                        root.choose(self.highlight);
+                        list.close();
+                        return accept;
+                    }
+                    if event.text == Key.Escape {
+                        list.close();
+                        return accept;
+                    }
+                    reject
+                }
+                VerticalLayout {
+                    padding: 4px;
+                    spacing: 2px;
+                    for item[i] in root.model: Rectangle {
+                        height: Theme.button-height;
+                        border-radius: Theme.radius-control;
+                        background: i == list-keys.highlight || option.has-hover ? Theme.hover : transparent;
+                        accessible-role: list-item;
+                        accessible-label: item;
+                        accessible-item-selected: i == root.current-index;
+                        Rectangle {
+                            x: 0;
+                            width: 3px;
+                            height: i == root.current-index ? 16px : 0px;
+                            y: (parent.height - self.height) / 2;
+                            border-radius: 2px;
+                            background: Theme.accent;
+                        }
+                        Text {
+                            x: 12px;
+                            width: parent.width - 24px;
+                            text: item;
+                            font-size: Theme.body-size;
+                            font-weight: i == root.current-index ? 600 : 400;
+                            color: Theme.text;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+                        option := TouchArea {
+                            clicked => {
+                                root.choose(i);
+                                list.close();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

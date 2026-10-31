@@ -439,3 +439,65 @@ unsafe impl Packet for DISPLAYCONFIG_SOURCE_DEVICE_NAME {
         &mut self.header
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Turns HDR off again however the test ends.
+    struct RestoreOff(Device);
+
+    impl Drop for RestoreOff {
+        fn drop(&mut self) {
+            if send(self.0, ColorApi::V2, HdrState::Off) != 0 {
+                send(self.0, ColorApi::V1, HdrState::Off);
+            }
+        }
+    }
+
+    fn state_v1(target: Device) -> Option<HdrState> {
+        get_info::<ColorInfo1>(target, DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO)
+            .ok()
+            .map(|info| color_flags::decode_v1(info.value).1)
+    }
+
+    fn state_v2(target: Device) -> Option<HdrState> {
+        get_info::<ColorInfo2>(target, GET_ADVANCED_COLOR_INFO_2)
+            .ok()
+            .map(|info| color_flags::decode_v2(info.value).1)
+    }
+
+    /// Drives the interface used before Windows 11 24H2 on a real HDR display
+    /// that is in SDR: on, then off again. It changes the screen, so it runs
+    /// only when asked for, with `--ignored`.
+    #[test]
+    #[ignore = "switches HDR on a real display"]
+    fn v1_interface_switches_hdr() -> Result<(), DisplayError> {
+        let found = enumerate()?;
+        let Some(display) = found
+            .iter()
+            .find(|f| f.display.support.is_capable() && f.display.state == HdrState::Off)
+        else {
+            return Ok(());
+        };
+        let target = display.target;
+        let _restore = RestoreOff(target);
+        assert_eq!(state_v1(target), Some(HdrState::Off), "v1 reads SDR first");
+        for wanted in [HdrState::On, HdrState::Off] {
+            let started = Instant::now();
+            assert_eq!(send(target, ColorApi::V1, wanted), 0, "v1 request accepted");
+            while state_v1(target) != Some(wanted) && started.elapsed() < APPLY_TIMEOUT {
+                thread::sleep(APPLY_POLL);
+            }
+            assert_eq!(state_v1(target), Some(wanted), "v1 reads HDR {wanted}");
+            if let Some(v2) = state_v2(target) {
+                assert_eq!(v2, wanted, "v2 agrees with v1");
+            }
+            println!(
+                "HDR {wanted} through v1 in {} ms",
+                started.elapsed().as_millis()
+            );
+        }
+        Ok(())
+    }
+}

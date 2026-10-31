@@ -38,4 +38,17 @@ Verified on this PC: every command against a running tray; a second tray process
 - The status report also carries the reason line and the ids of the running games, which the Status and Games pages show.
 - The tray process opens the window with `CREATE_NO_WINDOW`, so no console appears on any Windows version.
 
+## Result (2026-10-31) — open items
+- The tray and settings roles install a panic hook that writes the panic to `huedra.log` before the process ends; release builds abort on panic and neither role has a console, so a closed window or a vanished tray icon used to leave no trace. The tray's recovery record still restores SDR on the next start.
+
+Verified on this PC: a forced panic in the settings window (a window resized by a program to 850 x 65 000 pixels) wrote "Huedra stopped after an internal error: panicked at ... euclid ... size.rs" to the log.
+
+
+## Result (2026-10-31) — end-to-end pass
+- `huedra exit` replies only after the displays are back in SDR, so "Huedra has closed." is true when printed and a script can rely on it; before, the reply came first and the switch about a second later.
+- The log names a game when it ends ("Character Map ended.") as it does when it starts; it used to print the internal id. `Engine::label` gives the name; unit test `label_names_a_running_trigger_only`.
+- The tray saves its own changes (the mode, "never for this game") as a read-modify-write of `config.toml`, so a change saved by the settings window and not yet reloaded is kept.
+
+Verified on this PC, 24 end-to-end checks against the release build: version, help and usage errors; `games`; status with and without the tray; a second start opening the settings window; Always HDR, Automatic with its hold, a real program set up as a game (on in about 2 s, held 3 s after it closed, then SDR), pause and resume, toggle on and off, SDR at the moment `exit` returns, the saved mode applied at the next start.
+
 Status: done except `launch` and `uninstall` (phases 4 and 5).

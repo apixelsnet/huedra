@@ -43,8 +43,12 @@ fn run(command: Command) -> anyhow::Result<()> {
         Command::Hdr(hdr) => hdr::run(hdr)?,
         Command::Remote(request) => client::run(&request)?,
         Command::Games => games::run()?,
-        Command::Tray => app::run()?,
+        Command::Tray => {
+            log_panics();
+            app::run()?;
+        }
         Command::Settings(page) => {
+            log_panics();
             let page = match page.as_deref() {
                 None => huedra_ui::Page::default(),
                 Some(name) => huedra_ui::Page::from_name(name).ok_or_else(|| {
@@ -56,6 +60,28 @@ fn run(command: Command) -> anyhow::Result<()> {
         }
     }
     Ok(())
+}
+
+/// Writes a panic to the log before the process ends. Release builds abort
+/// on panic and the tray and the settings window have no console, so this
+/// is the only trace. The tray's recovery record still restores SDR on the
+/// next start.
+#[cfg(windows)]
+fn log_panics() {
+    use huedra_core::logfile::{self, LogFile};
+
+    let Ok(locations) = huedra_core::locations::Locations::resolve() else {
+        return;
+    };
+    let log = LogFile::new(locations.log, logfile::MAX_BYTES);
+    let previous = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        let now = huedra_win::clock::now();
+        let _ = log.append(&format!(
+            "{now} Huedra stopped after an internal error: {info}"
+        ));
+        previous(info);
+    }));
 }
 
 #[cfg(not(windows))]

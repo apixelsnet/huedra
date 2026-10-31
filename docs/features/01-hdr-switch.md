@@ -37,4 +37,11 @@ Code: `crates/huedra-core/src/files.rs` (`load_owned`, `save_owned`), `crates/hu
 Verified on this PC: after a game ran, `owned.toml` listed both displays; `huedra exit` turned both back to SDR and emptied the record.
 Not verified: recovery after a real crash (covered by the engine test `recovery_turns_off_owned_hdr_after_hold`).
 
+## Result (2026-10-31) — open items
+Code: `crates/huedra-win/src/display.rs` (test `v1_interface_switches_hdr`).
+- A Windows-only test drives the interface used before 24H2 (`GET_ADVANCED_COLOR_INFO` and `SET_ADVANCED_COLOR_STATE`) on a real HDR display that is in SDR: on, then off, checking the v1 state and that the v2 state agrees. It changes the screen, so it is `#[ignore]`d and runs only with `--ignored`; a drop guard turns HDR off however it ends.
+
+Verified on this PC: the test passed on display 1 (HDR on through v1 in 230 ms, off in 479 ms; v2 agreed both times; both displays in SDR afterwards).
+Not verified: the choice of v1 on a system that refuses `GET_ADVANCED_COLOR_INFO_2` (Windows 10 or 11 before 24H2); only the v1 calls themselves were exercised here. It is on the pre-release checklist (12).
+
 Status: done.

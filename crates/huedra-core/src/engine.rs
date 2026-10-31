@@ -406,6 +406,11 @@ impl Engine {
         phases.chain(self.paused_until).min()
     }
 
+    /// The label of a running trigger, also one set never to switch HDR.
+    pub fn label(&self, id: &TriggerId) -> Option<&str> {
+        self.active.get(id).map(|a| a.trigger.label.as_str())
+    }
+
     /// Running triggers that still want HDR, oldest first, as (id, label).
     pub fn active_triggers(&self) -> Vec<(TriggerId, String)> {
         let mut live: Vec<(&TriggerId, &Active)> =
@@ -665,6 +670,17 @@ mod tests {
             "reason"
         );
         assert_eq!(e.next_deadline(), None, "idle");
+    }
+
+    #[test]
+    fn label_names_a_running_trigger_only() {
+        let (mut e, t0) = engine(HdrState::Off, false);
+        let id = TriggerId::new("steam:1");
+        assert_eq!(e.label(&id), None, "not started");
+        e.trigger_started(t0, id.clone(), game(0));
+        assert_eq!(e.label(&id), Some("Cyberpunk 2077"), "running");
+        e.trigger_ended(t0 + secs(1), &id);
+        assert_eq!(e.label(&id), None, "ended");
     }
 
     #[test]

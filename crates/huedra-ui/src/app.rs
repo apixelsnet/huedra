@@ -4,6 +4,7 @@
 //! `docs/features/08-settings-window.md`.
 
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::thread;
 use std::time::Duration;
 
@@ -19,10 +20,11 @@ use huedra_core::locations::Locations;
 use huedra_core::paths::{NormPath, display_name};
 use huedra_win::{display, instance, pipe, registry, shell, stores};
 use slint::{
-    CloseRequestResponse, ComponentHandle, Image, ModelRc, PhysicalPosition, PhysicalSize,
+    CloseRequestResponse, ComponentHandle, Image, Model, ModelRc, PhysicalPosition, PhysicalSize,
     Rgba8Pixel, SharedPixelBuffer, VecModel,
 };
 
+use crate::icons;
 use crate::lookups::{self, Lookup};
 use crate::ui::{DisplayRow, GameDetail, GameRow, HistoryRow, SettingsWindow, StoreChip, Theme};
 
@@ -74,6 +76,7 @@ struct State {
     info: Cache,
     displays: Vec<Display>,
     running: Vec<String>,
+    icons: HashMap<GameId, Image>,
     search: String,
     filter: String,
     selected: Option<GameId>,
@@ -115,6 +118,11 @@ pub fn run(locations: Locations, page: Page) -> Result<(), slint::PlatformError>
         DOT_SIZE,
         DOT_SIZE,
     ));
+    ui.set_light_theme(registry::apps_use_light_theme());
+    let weak = ui.as_weak();
+    registry::watch_light_theme(move |light| {
+        let _ = weak.upgrade_in_event_loop(move |ui| ui.set_light_theme(light));
+    });
     ui.set_page(page as i32);
     ui.set_app_icon(app_icon());
     ui.set_version(huedra_core::VERSION.into());
@@ -137,6 +145,7 @@ pub fn run(locations: Locations, page: Page) -> Result<(), slint::PlatformError>
         config,
         locations,
         running: Vec::new(),
+        icons: HashMap::new(),
         search: String::new(),
         filter: "all".into(),
         selected: None,
@@ -156,6 +165,7 @@ pub fn run(locations: Locations, page: Page) -> Result<(), slint::PlatformError>
     restore_geometry(&ui);
     start_status_polling(&ui);
     start_lookups(&ui);
+    start_icons(&ui);
 
     let weak = ui.as_weak();
     ui.window().on_close_requested(move || {
@@ -164,7 +174,21 @@ pub fn run(locations: Locations, page: Page) -> Result<(), slint::PlatformError>
         }
         CloseRequestResponse::HideWindow
     });
+    limit_size_once_shown(0);
     ui.run()
+}
+
+/// Slint's software renderer works in 16-bit pixel coordinates and stops
+/// at a larger window; this stays well below that.
+const MAX_WINDOW_PIXELS: u16 = 16_384;
+
+/// Limits the window's size once the event loop has created it.
+fn limit_size_once_shown(attempt: u32) {
+    slint::Timer::single_shot(Duration::from_millis(50), move || {
+        if instance::limit_window_size(MAX_WINDOW_PIXELS) == 0 && attempt < 40 {
+            limit_size_once_shown(attempt + 1);
+        }
+    });
 }
 
 fn app_icon() -> Image {
@@ -183,8 +207,15 @@ fn rgba_image(rgba: &[u8], width: u32, height: u32) -> Image {
 
 // ---- Saving ---------------------------------------------------------
 
-/// Saves the settings and asks the tray process to read them again.
-fn save(state: &State) {
+/// Makes one change to the settings, saves them and asks the tray process to
+/// read them again. The file is read first: the tray process writes it too
+/// (the mode, for one), and saving the copy loaded when the window opened
+/// would undo those changes.
+fn edit(state: &mut State, change: impl FnOnce(&mut Config)) {
+    if let Ok(config) = Config::load(&state.locations.config) {
+        state.config = config;
+    }
+    change(&mut state.config);
     if state.config.save(&state.locations.config).is_ok() {
         thread::spawn(|| {
             let _ = pipe::call(&Request::Reload);
@@ -195,12 +226,18 @@ fn save(state: &State) {
 // ---- Status -----------------------------------------------------------
 
 fn wire_status(ui: &SettingsWindow) {
-    ui.on_set_mode(|index| {
+    let weak = ui.as_weak();
+    ui.on_set_mode(move |index| {
         let mode = match index {
             1 => Mode::AlwaysHdr,
             2 => Mode::AlwaysSdr,
             _ => Mode::Automatic,
         };
+        // Shown at once, so arrow keys pressed in quick succession move on
+        // from the new mode; the next status poll confirms it.
+        if let Some(ui) = weak.upgrade() {
+            ui.set_mode(index);
+        }
         send(Request::SetMode { mode });
     });
     let weak = ui.as_weak();
@@ -379,6 +416,8 @@ fn show_games(ui: &SettingsWindow, state: &State) {
             GameRow {
                 id: g.id.as_str().into(),
                 name: g.name.as_str().into(),
+                icon: state.icons.get(&g.id).cloned().unwrap_or_default(),
+                initial: initial(&g.name).into(),
                 store: (if g.store == Store::Manual {
                     "Added"
                 } else {
@@ -428,10 +467,21 @@ fn show_games(ui: &SettingsWindow, state: &State) {
             });
         }
     }
-    ui.set_chips(ModelRc::new(VecModel::from(chips)));
+    // Replaced only when the counts change, so a chip keeps the keyboard focus.
+    if !ui.get_chips().iter().eq(chips.iter().cloned()) {
+        ui.set_chips(ModelRc::new(VecModel::from(chips)));
+    }
     ui.set_filter(state.filter.as_str().into());
     ui.set_game_total(count(state.games.len()));
     show_detail(ui, state);
+}
+
+/// The first letter or digit of a name, shown where the game has no icon.
+fn initial(name: &str) -> String {
+    name.chars()
+        .find(|c| c.is_alphanumeric())
+        .map(|c| c.to_uppercase().collect())
+        .unwrap_or_default()
 }
 
 fn count(n: usize) -> i32 {
@@ -452,9 +502,24 @@ fn show_detail(ui: &SettingsWindow, state: &State) {
             .unwrap_or_default()
             .into(),
     );
-    ui.set_details(ModelRc::new(VecModel::from(
-        detail.into_iter().collect::<Vec<_>>(),
-    )));
+    // The same game is updated in place, so the control being used keeps the
+    // keyboard focus; another game gets a fresh panel. See `renew_detail`.
+    let shown = ui.get_details();
+    match (shown.row_data(0), detail) {
+        (Some(old), Some(new)) if old.id == new.id => shown.set_row_data(0, new),
+        (_, detail) => ui.set_details(ModelRc::new(VecModel::from(
+            detail.into_iter().collect::<Vec<_>>(),
+        ))),
+    }
+}
+
+/// Makes the next `show_detail` build a fresh panel. Needed when a value
+/// changes from outside its control (a reset, a suggestion): a control the
+/// user has changed no longer follows its binding.
+fn renew_detail(ui: &slint::Weak<SettingsWindow>) {
+    if let Some(ui) = ui.upgrade() {
+        ui.set_details(ModelRc::default());
+    }
 }
 
 fn detail_of(state: &State, game: &Game) -> GameDetail {
@@ -472,6 +537,8 @@ fn detail_of(state: &State, game: &Game) -> GameDetail {
     GameDetail {
         id: game.id.as_str().into(),
         name: game.name.as_str().into(),
+        icon: state.icons.get(&game.id).cloned().unwrap_or_default(),
+        initial: initial(&game.name).into(),
         store: game.store.label().into(),
         path: game.exe.as_deref().unwrap_or(&game.install_dir).into(),
         setting_index: index(setting),
@@ -490,7 +557,7 @@ fn detail_of(state: &State, game: &Game) -> GameDetail {
             .unwrap_or_default()
             .into(),
         ray_tracing: info
-            .map(|i| i.ray_tracing.as_str())
+            .and_then(GameInfo::ray_tracing_label)
             .unwrap_or_default()
             .into(),
         wiki_url: info.and_then(GameInfo::page_url).unwrap_or_default().into(),
@@ -533,43 +600,47 @@ fn wire_games(ui: &SettingsWindow) {
             .copied()
             .unwrap_or_default();
         r(&|s| {
-            s.config.game_mut(&GameId::from_raw(id.as_str())).hdr = hdr;
-            save(s);
+            edit(s, |c| c.game_mut(&GameId::from_raw(id.as_str())).hdr = hdr);
         });
     });
     let r = refresh.clone();
     ui.on_set_game_delay(move |id, value| {
         r(&|s| {
-            s.config
-                .game_mut(&GameId::from_raw(id.as_str()))
-                .start_delay = Some(seconds(value, huedra_core::config::MAX_DELAY));
-            save(s);
+            edit(s, |c| {
+                c.game_mut(&GameId::from_raw(id.as_str())).start_delay =
+                    Some(seconds(value, huedra_core::config::MAX_DELAY));
+            });
         });
     });
     let r = refresh.clone();
     ui.on_set_game_hold(move |id, value| {
         r(&|s| {
-            s.config.game_mut(&GameId::from_raw(id.as_str())).hold =
-                Some(seconds(value, huedra_core::config::MAX_HOLD));
-            save(s);
+            edit(s, |c| {
+                c.game_mut(&GameId::from_raw(id.as_str())).hold =
+                    Some(seconds(value, huedra_core::config::MAX_HOLD));
+            });
         });
     });
     let r = refresh.clone();
+    let weak = ui.as_weak();
     ui.on_reset_game_timing(move |id| {
+        renew_detail(&weak);
         r(&|s| {
-            let settings = s.config.game_mut(&GameId::from_raw(id.as_str()));
-            settings.start_delay = None;
-            settings.hold = None;
-            save(s);
+            edit(s, |c| {
+                let settings = c.game_mut(&GameId::from_raw(id.as_str()));
+                settings.start_delay = None;
+                settings.hold = None;
+            });
         });
     });
     let r = refresh.clone();
+    let weak = ui.as_weak();
     ui.on_apply_suggestion(move |id| {
+        renew_detail(&weak);
         r(&|s| {
             let id = GameId::from_raw(id.as_str());
             if let Some(hdr) = s.info.get(&id).and_then(|i| i.hdr.suggestion()) {
-                s.config.game_mut(&id).hdr = hdr;
-                save(s);
+                edit(s, |c| c.game_mut(&id).hdr = hdr);
             }
         });
     });
@@ -577,6 +648,7 @@ fn wire_games(ui: &SettingsWindow) {
         shell::open_web_page(url.as_str());
     });
     let r = refresh.clone();
+    let weak = ui.as_weak();
     ui.on_add_game(move || {
         let Some(path) = shell::pick_program("Choose the game's program") else {
             return;
@@ -587,23 +659,26 @@ fn wire_games(ui: &SettingsWindow) {
                 .trim_end_matches(".exe")
                 .trim_end_matches(".EXE")
                 .to_owned();
-            if s.config.game(&id).is_none() {
-                s.config.games.push(GameSettings {
-                    name,
-                    exe: Some(path.clone()),
-                    ..GameSettings::new(id.clone())
-                });
-                save(s);
-            }
+            edit(s, |c| {
+                if c.game(&id).is_none() {
+                    c.games.push(GameSettings {
+                        name,
+                        exe: Some(path.clone()),
+                        ..GameSettings::new(id.clone())
+                    });
+                }
+            });
             reload_games(s);
             s.selected = Some(id.clone());
         });
+        if let Some(ui) = weak.upgrade() {
+            start_icons(&ui);
+        }
     });
     let r = refresh.clone();
     ui.on_remove_game(move |id| {
         r(&|s| {
-            s.config.games.retain(|g| g.id.as_str() != id.as_str());
-            save(s);
+            edit(s, |c| c.games.retain(|g| g.id.as_str() != id.as_str()));
             reload_games(s);
             s.selected = None;
         });
@@ -616,6 +691,7 @@ fn wire_games(ui: &SettingsWindow) {
                 ui.set_scan_note(format!("{} games found.", s.games.len()).into());
                 show_games(&ui, s);
             });
+            start_icons(&ui);
             let _ = pipe::call(&Request::Reload);
         }
     });
@@ -625,6 +701,35 @@ fn reload_games(state: &mut State) {
     let mut games = state.config.manual_games();
     games.extend(stores::scan());
     state.games = games;
+}
+
+/// Finds icons for the games that have none yet; icons kept from earlier
+/// runs arrive first. Discord's list is used only while online lookups are on.
+fn start_icons(ui: &SettingsWindow) {
+    let Some((games, folder, online)) = with_state(|s| {
+        let games: Vec<Game> = s
+            .games
+            .iter()
+            .filter(|g| !s.icons.contains_key(&g.id))
+            .cloned()
+            .collect();
+        (games, s.locations.icons.clone(), s.config.general.game_info)
+    }) else {
+        return;
+    };
+    if games.is_empty() {
+        return;
+    }
+    let weak = ui.as_weak();
+    icons::spawn(games, folder, online, move |icon| {
+        let _ = weak.upgrade_in_event_loop(move |ui| {
+            with_state(|s| {
+                let image = rgba_image(&icon.rgba, icon.width, icon.height);
+                s.icons.insert(icon.id, image);
+                show_games(&ui, s);
+            });
+        });
+    });
 }
 
 fn start_lookups(ui: &SettingsWindow) {
@@ -699,22 +804,23 @@ fn wire_displays(ui: &SettingsWindow) {
     ui.on_set_managed(|id, managed| {
         with_state(|s| {
             let id = id.to_string();
-            s.config
-                .displays
-                .unmanaged
-                .retain(|d| !d.eq_ignore_ascii_case(&id));
-            if !managed {
-                s.config.displays.unmanaged.push(id);
-            }
-            save(s);
+            edit(s, |c| {
+                c.displays
+                    .unmanaged
+                    .retain(|d| !d.eq_ignore_ascii_case(&id));
+                if !managed {
+                    c.displays.unmanaged.push(id);
+                }
+            });
         });
     });
     ui.on_set_retries(|n| {
         with_state(|s| {
-            s.config.general.retry_attempts = u32::try_from(n)
-                .unwrap_or(0)
-                .min(huedra_core::config::MAX_RETRIES);
-            save(s);
+            edit(s, |c| {
+                c.general.retry_attempts = u32::try_from(n)
+                    .unwrap_or(0)
+                    .min(huedra_core::config::MAX_RETRIES);
+            });
         });
     });
 }
@@ -744,8 +850,7 @@ fn wire_general(ui: &SettingsWindow) {
             .map(|exe| format!("\"{}\"", exe.display()));
         let result = registry::set_startup(if on { command.as_deref() } else { None });
         with_state(|s| {
-            s.config.general.start_with_windows = on && result.is_ok();
-            save(s);
+            edit(s, |c| c.general.start_with_windows = on && result.is_ok());
         });
         if let Some(ui) = weak.upgrade() {
             ui.set_start_with_windows(registry::startup_command().is_some());
@@ -753,49 +858,50 @@ fn wire_general(ui: &SettingsWindow) {
     });
     ui.on_set_updates(|index| {
         with_state(|s| {
-            s.config.general.updates = match index {
-                1 => UpdatePolicy::Ask,
-                2 => UpdatePolicy::Off,
-                _ => UpdatePolicy::Install,
-            };
-            save(s);
+            edit(s, |c| {
+                c.general.updates = match index {
+                    1 => UpdatePolicy::Ask,
+                    2 => UpdatePolicy::Off,
+                    _ => UpdatePolicy::Install,
+                };
+            });
         });
     });
     let weak = ui.as_weak();
     ui.on_set_game_info(move |on| {
         with_state(|s| {
-            s.config.general.game_info = on;
-            save(s);
+            edit(s, |c| c.general.game_info = on);
         });
         if let Some(ui) = weak.upgrade() {
             with_state(|s| show_games(&ui, s));
             if on {
                 start_lookups(&ui);
+                start_icons(&ui);
             }
         }
     });
     ui.on_set_hold(|v| {
         with_state(|s| {
-            s.config.general.hold = seconds(v, huedra_core::config::MAX_HOLD);
-            save(s);
+            edit(s, |c| {
+                c.general.hold = seconds(v, huedra_core::config::MAX_HOLD)
+            });
         });
     });
     ui.on_set_delay(|v| {
         with_state(|s| {
-            s.config.general.start_delay = seconds(v, huedra_core::config::MAX_DELAY);
-            save(s);
+            edit(s, |c| {
+                c.general.start_delay = seconds(v, huedra_core::config::MAX_DELAY)
+            });
         });
     });
     ui.on_set_hotkeys(|on| {
         with_state(|s| {
-            s.config.general.hotkeys = on;
-            save(s);
+            edit(s, |c| c.general.hotkeys = on);
         });
     });
     ui.on_set_log_titles(|on| {
         with_state(|s| {
-            s.config.general.log_window_titles = on;
-            save(s);
+            edit(s, |c| c.general.log_window_titles = on);
         });
     });
 }

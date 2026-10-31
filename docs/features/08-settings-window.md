@@ -24,4 +24,30 @@ Code: `crates/huedra-ui/ui/{theme,pages,app}.slint`, `crates/huedra-ui/src/{app,
 Verified on this PC: all four pages render as designed in the dark theme at 100 % scaling in the wide layout; the Status page follows the tray within one second (a real game, Dispatch, showed "HDR is on" with both displays); 8.8 MB private memory per window; the window handle exists about 30 to 45 ms after the process starts.
 Not verified: the light theme; the medium and compact layouts (an attempt was stopped because a game was in use on this PC); keyboard-only use; 150 % and 200 % scaling; the Add game dialog and the Start with Windows switch. The controls take the Windows accent colour (Fluent style) rather than ultramarine.
 
-Status: built; the checks above remain for the owner's next session.
+## Result (2026-10-31) — open items
+Code: `crates/huedra-ui/ui/{theme,pages,app}.slint`, `crates/huedra-ui/src/app.rs`.
+- Keyboard: Tab reaches every control, hidden pages are skipped, and a white (dark) or ink (light) outline shows keyboard focus only. Up and Down change the page in the navigation pane; Left and Right change the mode; Space or Enter picks a store filter; in the game list Up, Down, Home and End move and Enter or Space opens the game, scrolling the row into view. The mode is shown at once instead of after the next status poll, so quick arrow presses step through.
+- The detail panel of the open game is updated in place, so a control keeps the focus after each change; it is rebuilt only for another game, a reset of the times or an applied suggestion. The store filters are replaced only when their counts change. Before, each change rebuilt both and the focus was lost.
+- Switches and the "Start Huedra" button are drawn in the ultramarine accent (`Toggle`, `ActionButton`) instead of the Windows accent colour.
+- Fixed rows that cut off wrapped text: a page taller than the window was laid out at its minimum height (the scroll views now take the preferred height), and a row is never taller than the smallest maximum of its parts, so fixed-height controls are centred between stretchable spacers (`Centered`).
+- With a game open in the wide layout the list hid the game names; the store and setting columns now give way while the detail panel is open.
+- `compact` and `wide` are set when the width changes instead of bound to it, which removes the binding-loop warnings Slint gave for the layout; the unused `Glyph` component is gone.
+
+Verified on this PC: the light theme on all four pages (Windows switched to light for the test and back); the medium (850 px) and compact (600 px) layouts on all pages, with and without an open game; keyboard-only use of the navigation, mode, pause, search, filters, list, detail panel and switches; 150 % and 200 % scaling with `SLINT_SCALE_FACTOR` (sharp text, layouts switch at the scaled widths); Add game (file dialog, game added and opened, counts updated) and Remove this game; Start with Windows writes `HKCU\...\Run\Huedra` with the quoted program path and removes it again.
+Not verified: real 150 % and 200 % Windows display scaling (simulated with `SLINT_SCALE_FACTOR`); a screen reader. Both are on the pre-release checklist (12). The remaining Windows-accent widgets and the oversized-window panic are resolved in the next section.
+
+
+## Result (2026-10-31) — consistency and end-to-end pass
+Code: `crates/huedra-ui/ui/controls.slint` (new), `crates/huedra-ui/ui/{pages,app}.slint`, `crates/huedra-ui/src/app.rs`, `crates/huedra-win/src/{instance,registry}.rs`.
+- Every control is now Huedra's own: `ActionButton` (plain, or primary in the accent), `Toggle`, `SearchBox`, `NumberBox` (typed, arrow buttons, Up and Down, mouse wheel; clamped; applied on Enter or leaving the field) and `Dropdown` (Up and Down change it directly; Space or Enter opens the list, which takes Up, Down, Enter and Escape). The Fluent button, text box, spin box and combo box are no longer used, so no control takes the Windows accent colour, which can be pink, the colour of HDR labels here. One focus outline, one field underline (ultramarine while typing), one hover and pressed tint throughout. The executable is 9.29 MB, slightly smaller than with the Fluent widgets.
+- The window follows the Windows light or dark setting through its own registry watch (`registry::watch_light_theme`, `RegNotifyChangeKeyValue`, no polling) and sets the colour scheme itself. Slint's own tracking applied a change late and missed the next one while the window was open.
+- The window's size is limited to 16 384 physical pixels in `WM_WINDOWPOSCHANGING` (`instance::limit_window_size`, a subclass of the window), which also catches resizes made by other programs; Slint's `max-width` did not.
+- Every change made in the window is a read-modify-write of `config.toml` (`edit`), so it no longer undoes a mode set from the tray menu, a shortcut or the command line while the window was open. Before, saving any setting wrote back the mode the window had loaded, and the tray then switched to it.
+- PCGamingWiki's ray tracing field is shown in words ("Supported", "Limited support", "Not supported", "Through a modification") and left out when unknown, instead of the raw "true" or "false".
+
+Verified on this PC: all pages in dark and light, wide and compact; light to dark and back while the window is open (each within a second); the number box by arrow button, typing, Enter, Tab, the Down key and clamping to its maximum; the drop-down by mouse, by Up and Down, and through its list with Enter and Escape; search, list, detail panel, applied suggestion, reset of the times; keyboard only from the search field to an opened game; a window resized by a program to 850 x 65 000 and 40 000 x 900 pixels stayed open at 16 384 pixels; with the window open, `huedra mode sdr` followed by a change in the window kept Always SDR.
+
+## Result (2026-10-31) — game icons
+- The game list shows each game's icon at 32 px on the left and the detail panel at 40 px beside the title (`GameIcon`); until an icon arrives, or when there is none, the game's first letter on a tinted square. Icons arrive one by one while the list is already usable. Sources and caching: see 13.
+
+Status: done.

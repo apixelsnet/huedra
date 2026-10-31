@@ -158,11 +158,14 @@ impl App {
             Event::Wake => {
                 while let Some(call) = self.pipe.next_call() {
                     let (response, flow) = self.on_request(host, now, &call.request);
-                    call.reply(response);
+                    // On exit the displays are back in SDR before the reply,
+                    // so "Huedra has closed." is true when it is printed.
                     if flow == Flow::Exit {
                         self.shutdown();
+                        call.reply(response);
                         return Flow::Exit;
                     }
+                    call.reply(response);
                 }
             }
         }
@@ -217,7 +220,8 @@ impl App {
         self.watches.remove(&pid);
         match self.tracker.exited(pid, now) {
             Exit::Ended(id) => {
-                self.log_line(&format!("{} ended.", id.as_str()));
+                let label = self.engine.label(&id).unwrap_or(id.as_str()).to_owned();
+                self.log_line(&format!("{label} ended."));
                 let outcome = self.engine.trigger_ended(now, &id);
                 self.apply(host, now, outcome);
             }
@@ -301,9 +305,9 @@ impl App {
 
     /// Modes stay in effect until changed, including across restarts.
     fn remember_mode(&mut self) {
-        if self.config.mode != self.engine.mode() {
-            self.config.mode = self.engine.mode();
-            self.save_config();
+        let mode = self.engine.mode();
+        if self.config.mode != mode {
+            self.edit_config(|c| c.mode = mode);
         }
     }
 
@@ -331,8 +335,7 @@ impl App {
     }
 
     fn never_for(&mut self, host: &EventLoop, now: Instant, id: &TriggerId, label: &str) {
-        self.config.game_mut(&GameId::from_raw(id.as_str())).hdr = GameHdr::DoNotChange;
-        self.save_config();
+        self.edit_config(|c| c.game_mut(&GameId::from_raw(id.as_str())).hdr = GameHdr::DoNotChange);
         self.log_line(&format!(
             "{label}: HDR will no longer be changed for this game."
         ));
@@ -564,7 +567,14 @@ impl App {
         }
     }
 
-    fn save_config(&mut self) {
+    /// Makes one change to the settings and saves them. The file is read
+    /// first, so a change saved by the settings window and not yet reloaded
+    /// is kept.
+    fn edit_config(&mut self, change: impl FnOnce(&mut Config)) {
+        if let Ok(config) = Config::load(&self.paths.config) {
+            self.config = config;
+        }
+        change(&mut self.config);
         if let Err(error) = self.config.save(&self.paths.config) {
             self.log_line(&format!("Could not save the settings: {error}"));
         }

@@ -1,17 +1,21 @@
-//! Registry access: reading store keys, and the start-up entry.
-//! Feature docs: `04-game-library.md`, `12-packaging.md`.
+//! Registry access: reading store keys, the start-up entry, and the Windows
+//! light or dark app setting.
+//! Feature docs: `04-game-library.md`, `08-settings-window.md`, `12-packaging.md`.
 
 use huedra_core::library::registry::RegistryEntry;
 use windows::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_SUCCESS};
 use windows::Win32::System::Registry::{
-    HKEY, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ, KEY_WOW64_32KEY, REG_SZ,
-    RRF_RT_REG_EXPAND_SZ, RRF_RT_REG_SZ, RegCloseKey, RegDeleteKeyValueW, RegEnumKeyExW,
-    RegGetValueW, RegOpenKeyExW, RegSetKeyValueW,
+    HKEY, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_NOTIFY, KEY_READ, KEY_WOW64_32KEY,
+    REG_NOTIFY_CHANGE_LAST_SET, REG_SZ, RRF_RT_REG_DWORD, RRF_RT_REG_EXPAND_SZ, RRF_RT_REG_SZ,
+    RegCloseKey, RegDeleteKeyValueW, RegEnumKeyExW, RegGetValueW, RegNotifyChangeKeyValue,
+    RegOpenKeyExW, RegSetKeyValueW,
 };
 use windows::core::{HSTRING, PWSTR};
 
 const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
 const RUN_VALUE: &str = "Huedra";
+const THEME_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
+const THEME_VALUE: &str = "AppsUseLightTheme";
 const MAX_SUBKEYS: u32 = 4096;
 const MAX_STRING_BYTES: u32 = 64 * 1024;
 
@@ -154,4 +158,84 @@ pub fn set_startup(command: Option<&str>) -> windows::core::Result<()> {
         },
     };
     status.ok()
+}
+
+/// Whether Windows asks apps for their light appearance (Settings >
+/// Personalisation > Colours). Light when the value is missing, as Windows
+/// itself assumes.
+pub fn apps_use_light_theme() -> bool {
+    let Some(key) = open(Hive::CurrentUser, THEME_KEY) else {
+        return true;
+    };
+    read_dword(&key, THEME_VALUE).is_none_or(|value| value != 0)
+}
+
+/// Calls `changed` with [`apps_use_light_theme`] each time the Windows
+/// setting changes, on a thread of its own that lives as long as the
+/// process. Returns `false` when the setting cannot be watched.
+pub fn watch_light_theme(changed: impl Fn(bool) + Send + 'static) -> bool {
+    let mut key = HKEY::default();
+    // SAFETY: opens a key for change notifications; `key` receives the handle.
+    let status = unsafe {
+        RegOpenKeyExW(
+            HKEY_CURRENT_USER,
+            &HSTRING::from(THEME_KEY),
+            None,
+            KEY_NOTIFY,
+            &mut key,
+        )
+    };
+    if status != ERROR_SUCCESS {
+        return false;
+    }
+    let key = Watched(Key(key));
+    std::thread::Builder::new()
+        .name("huedra-theme".into())
+        .spawn(move || {
+            // Moves the whole key in (a closure would otherwise take only
+            // the handle field, which is not `Send`).
+            let key = key;
+            let mut light = apps_use_light_theme();
+            loop {
+                // SAFETY: waits on our own open key until a value under it
+                // changes; no event handle, so the call blocks.
+                let status = unsafe {
+                    RegNotifyChangeKeyValue(key.0.0, false, REG_NOTIFY_CHANGE_LAST_SET, None, false)
+                };
+                if status != ERROR_SUCCESS {
+                    return;
+                }
+                let now = apps_use_light_theme();
+                if now != light {
+                    light = now;
+                    changed(light);
+                }
+            }
+        })
+        .is_ok()
+}
+
+/// The key watched by [`watch_light_theme`], moved to its thread.
+struct Watched(Key);
+
+// SAFETY: a registry key handle is not tied to the thread that opened it,
+// and only the watching thread uses it after the move.
+unsafe impl Send for Watched {}
+
+fn read_dword(key: &Key, name: &str) -> Option<u32> {
+    let mut value = 0_u32;
+    let mut bytes = 4_u32;
+    // SAFETY: `value` holds the four bytes a DWORD needs.
+    let status = unsafe {
+        RegGetValueW(
+            key.0,
+            None,
+            &HSTRING::from(name),
+            RRF_RT_REG_DWORD,
+            None,
+            Some((&raw mut value).cast()),
+            Some(&mut bytes),
+        )
+    };
+    (status == ERROR_SUCCESS).then_some(value)
 }
