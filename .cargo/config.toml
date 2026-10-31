@@ -1,0 +1,4 @@
+# Link the C runtime statically so huedra.exe needs no Visual C++ redistributable.
+# /IGNORE:4099 silences "no PDB for libcmt.lib": Microsoft does not ship those symbols.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static", "-C", "link-arg=/IGNORE:4099"]

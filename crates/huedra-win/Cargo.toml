@@ -1,0 +1,10 @@
+[package]
+name = "huedra-win"
+description = "Every Windows call made by Huedra, and all of its unsafe code."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true

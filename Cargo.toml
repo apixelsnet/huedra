@@ -1,0 +1,38 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+publish = false
+
+[workspace.dependencies]
+huedra-core = { path = "crates/huedra-core" }
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "warn"
+undocumented_unsafe_blocks = "deny"
+allow_attributes_without_reason = "deny"
+fn_params_excessive_bools = "deny"
+cast_possible_truncation = "warn"
+cast_sign_loss = "warn"
+missing_errors_doc = "warn"
+missing_panics_doc = "warn"
+missing_assert_message = "warn"
+exhaustive_enums = "warn"
+dbg_macro = "deny"
+todo = "deny"
+
+[profile.release]
+opt-level = "s"
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true
