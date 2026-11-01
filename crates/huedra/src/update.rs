@@ -15,7 +15,7 @@ use std::time::{Duration, SystemTime};
 
 use anyhow::{Context as _, bail};
 use huedra_core::APP_NAME;
-use huedra_core::command::UpdateCommand;
+use huedra_core::command::{BACKGROUND, UpdateCommand};
 use huedra_core::config::{Config, UpdatePolicy};
 use huedra_core::files;
 use huedra_core::ipc::{Request, Response};
@@ -243,7 +243,7 @@ impl Updater {
                 })
             });
         if tray_running {
-            process::spawn_detached(&files.current, &[]);
+            process::spawn_detached(&files.current, &[BACKGROUND]);
         }
         swapped
     }
@@ -277,7 +277,7 @@ impl Updater {
                 fs::rename(&files.new, &files.previous).context("could not keep this version")
             });
         if tray == Tray::Running {
-            process::spawn_detached(&files.current, &[]);
+            process::spawn_detached(&files.current, &[BACKGROUND]);
         }
         swapped?;
         let mut state = UpdateState::load(&self.locations.update);

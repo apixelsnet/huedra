@@ -1308,6 +1308,7 @@ export component GeneralPage inherits Rectangle {
     in property <bool> start-with-windows;
     in property <bool> context-menu;
     in property <int> updates;
+    in property <int> close-action;
     in property <bool> game-info;
     in property <int> hold;
     in property <int> delay;
@@ -1329,6 +1330,7 @@ export component GeneralPage inherits Rectangle {
     callback set-start-with-windows(bool);
     callback set-context-menu(bool);
     callback set-updates(int);
+    callback set-close-action(int);
     callback set-game-info(bool);
     callback set-hold(int);
     callback set-delay(int);
@@ -1357,6 +1359,18 @@ export component GeneralPage inherits Rectangle {
                     checked: root.start-with-windows;
                     toggled => {
                         root.set-start-with-windows(self.checked);
+                    }
+                }
+            }
+            SettingRow {
+                title: "Closing this window";
+                description: "Keep Huedra running: the window closes and Huedra goes on switching HDR from the notification area; start Huedra or click its icon to open the window again. Quit Huedra: closing the window also closes Huedra, and displays it turned to HDR go back to SDR. Exit in the tray menu always quits.";
+                Dropdown {
+                    accessible-label: "Closing this window";
+                    model: ["Keep Huedra running", "Quit Huedra"];
+                    current-index: root.close-action;
+                    selected(value) => {
+                        root.set-close-action(self.current-index);
                     }
                 }
             }

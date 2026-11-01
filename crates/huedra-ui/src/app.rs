@@ -8,7 +8,10 @@ use std::collections::HashMap;
 use std::thread;
 use std::time::Duration;
 
-use huedra_core::config::{Config, GameHdr, GameSettings, ManualDisplays, Seconds, UpdatePolicy};
+use huedra_core::command;
+use huedra_core::config::{
+    CloseAction, Config, GameHdr, GameSettings, ManualDisplays, Seconds, UpdatePolicy,
+};
 use huedra_core::display::{Display, HdrState, HdrSupport};
 use huedra_core::engine::{Mode, TriggerId};
 use huedra_core::gameinfo::{Cache, GameInfo};
@@ -192,6 +195,11 @@ pub fn run(locations: Locations, page: Page) -> Result<(), slint::PlatformError>
     ui.window().on_close_requested(move || {
         if let Some(ui) = weak.upgrade() {
             save_geometry(&ui);
+        }
+        // "Closing this window: Quit Huedra" closes the tray as well, which
+        // returns the displays it turned to HDR to SDR.
+        if with_state(|s| s.config.general.on_close) == Some(CloseAction::Quit) {
+            let _ = pipe::call(&Request::Exit);
         }
         CloseRequestResponse::HideWindow
     });
@@ -1091,6 +1099,10 @@ fn show_general(ui: &SettingsWindow, state: &State) {
         UpdatePolicy::Ask => 1,
         UpdatePolicy::Off => 2,
     });
+    ui.set_close_action(match g.on_close {
+        CloseAction::KeepRunning => 0,
+        CloseAction::Quit => 1,
+    });
     ui.set_game_info(g.game_info);
     ui.set_hold(secs(g.hold));
     ui.set_delay(secs(g.start_delay));
@@ -1103,7 +1115,7 @@ fn wire_general(ui: &SettingsWindow) {
     ui.on_set_start_with_windows(move |on| {
         let command = std::env::current_exe()
             .ok()
-            .map(|exe| format!("\"{}\"", exe.display()));
+            .map(|exe| command::startup_command(&exe));
         let result = registry::set_startup(if on { command.as_deref() } else { None });
         with_state(|s| {
             edit(s, |c| c.general.start_with_windows = on && result.is_ok());
@@ -1128,6 +1140,16 @@ fn wire_general(ui: &SettingsWindow) {
         if let Some(ui) = weak.upgrade() {
             ui.set_context_menu(registry::context_menu_command().is_some());
         }
+    });
+    ui.on_set_close_action(|index| {
+        with_state(|s| {
+            edit(s, |c| {
+                c.general.on_close = match index {
+                    1 => CloseAction::Quit,
+                    _ => CloseAction::KeepRunning,
+                };
+            });
+        });
     });
     ui.on_set_updates(|index| {
         with_state(|s| {
@@ -1348,13 +1370,14 @@ fn wire_about(ui: &SettingsWindow) {
             && registry::startup_command().is_none()
             && let Ok(exe) = std::env::current_exe()
         {
-            let _ = registry::set_startup(Some(&format!("\"{}\"", exe.display())));
+            let _ = registry::set_startup(Some(&command::startup_command(&exe)));
             ui.set_start_with_windows(registry::startup_command().is_some());
         }
         if !matches!(pipe::call(&Request::Status), Ok(Response::Status(_)))
             && let Ok(exe) = std::env::current_exe()
         {
-            huedra_win::process::spawn_detached(&exe, &[]);
+            // The window is open already; the tray only joins it.
+            huedra_win::process::spawn_detached(&exe, &[command::BACKGROUND]);
         }
     });
     ui.on_decline_disclaimer(|| {

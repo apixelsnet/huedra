@@ -48,7 +48,7 @@ minisign -Vm huedra-0.1.0-windows-x64.zip -P <public key from the release notes>
 
 The first time Huedra starts, its window shows a disclaimer. Huedra changes a Windows display setting, so please read it.
 
-- **Accept and continue** starts Huedra in the notification area.
+- **Accept and continue** starts Huedra; the window stays open.
 - **Exit** closes Huedra without changing anything.
 
 Until the disclaimer is accepted, Huedra does not run and never changes HDR. You can read it again at any time under **General › About › Disclaimer**.
@@ -60,6 +60,8 @@ After that, Huedra:
 - starts in **Automatic** mode.
 
 Nothing else needs to be set up.
+
+Whenever you start `huedra.exe` yourself, the window opens. When Huedra is running already, starting it again brings its window to the front. When Windows starts Huedra at sign-in, it stays in the notification area without opening the window.
 
 ## 4. The tray icon and its menu
 
@@ -176,7 +178,8 @@ With NVIDIA RTX Video HDR turned on in the NVIDIA app, ordinary SDR video in a b
 
 | Setting | Meaning |
 | --- | --- |
-| **Start with Windows** | Starts Huedra in the notification area when you sign in. |
+| **Start with Windows** | Starts Huedra in the notification area when you sign in, without opening the window. |
+| **Closing this window** | **Keep Huedra running** (the default): closing the window leaves Huedra switching HDR from the notification area. **Quit Huedra**: closing the window closes Huedra too, and displays it turned to HDR go back to SDR. **Exit** in the tray menu always quits. |
 | **"Start with HDR" in the menu of programs** | Adds Start with HDR to File Explorer's menu (see [Games](#start-a-game-with-hdr-already-on)). |
 | **Updates** | Ask before installing (the default), Install automatically, or Off (see [Updates](#10-updates)). |
 | **Game information and icons** | Looks up games on PCGamingWiki and icons in Discord's public game list. |
@@ -211,7 +214,8 @@ If another program already uses one of these, the **Keyboard shortcuts** setting
 Open a terminal in Huedra's folder (in File Explorer, right-click the folder background and choose **Open in Terminal**):
 
 ```text
-huedra                       Start Huedra in the notification area.
+huedra                       Start Huedra and open its window (or bring it to the front).
+huedra --background          Start Huedra in the notification area only, as at sign-in.
 huedra settings [page]       Open the window on a page: status, games, video, displays or general.
 huedra status                Show what the running Huedra is doing.
 huedra games                 List the games found in every store.

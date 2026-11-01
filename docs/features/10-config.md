@@ -45,3 +45,8 @@ Status: done.
 
 ## Result (2026-11-01) — disclaimer flag
 - `[general] disclaimer_accepted` (default `false`): set by the settings window's Accept and continue. Until it is `true` the tray does not run. Existing settings files without it show the disclaimer once.
+
+## Result (2026-11-01) — on_close
+- `[general] on_close = "keep-running" | "quit"` (`CloseAction`), default `keep-running`; older files without it load with the default.
+
+Verified: unit tests (default, reading and writing `quit`).

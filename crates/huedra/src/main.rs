@@ -1,6 +1,7 @@
 //! Huedra: one executable with three roles. Without arguments it runs in the
-//! notification area; `settings` opens the settings window; everything else
-//! is a one-shot command. Feature doc: `docs/features/09-cli-ipc.md`.
+//! notification area and opens the settings window (`--background` skips
+//! the window); `settings` opens the settings window; everything else is a
+//! one-shot command. Feature doc: `docs/features/09-cli-ipc.md`.
 
 #![forbid(unsafe_code)]
 
@@ -51,9 +52,9 @@ fn run(command: Command) -> anyhow::Result<ExitCode> {
         Command::Hdr(hdr) => hdr::run(hdr)?,
         Command::Remote(request) => client::run(&request)?,
         Command::Games => games::run()?,
-        Command::Tray => {
+        Command::Tray(start) => {
             record_crashes("tray");
-            app::run()?;
+            app::run(start)?;
         }
         Command::Settings(page) => {
             record_crashes("settings window");
@@ -108,12 +109,14 @@ fn run(command: Command) -> anyhow::Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
-/// Opens the settings window as its own process.
+/// Opens the settings window as its own process, or brings the open one to
+/// the front.
 #[cfg(windows)]
 pub fn open_settings() {
     use std::os::windows::process::CommandExt as _;
     /// `CREATE_NO_WINDOW`: no console window for the child process.
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    huedra_win::instance::pass_on_foreground();
     if let Ok(exe) = std::env::current_exe() {
         let _ = std::process::Command::new(exe)
             .arg("settings")

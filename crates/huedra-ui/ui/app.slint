@@ -181,6 +181,7 @@ export component SettingsWindow inherits Window {
     in property <bool> start-with-windows;
     in property <bool> context-menu;
     in property <int> updates;
+    in property <int> close-action;
     in property <bool> game-info;
     in property <int> hold;
     in property <int> delay;
@@ -217,6 +218,7 @@ export component SettingsWindow inherits Window {
     callback set-start-with-windows(bool);
     callback set-context-menu(bool);
     callback set-updates(int);
+    callback set-close-action(int);
     callback set-game-info(bool);
     callback set-hold(int);
     callback set-delay(int);
@@ -474,6 +476,7 @@ export component SettingsWindow inherits Window {
                 start-with-windows: root.start-with-windows;
                 context-menu: root.context-menu;
                 updates: root.updates;
+                close-action: root.close-action;
                 game-info: root.game-info;
                 hold: root.hold;
                 delay: root.delay;
@@ -510,6 +513,9 @@ export component SettingsWindow inherits Window {
                 }
                 set-updates(i) => {
                     root.set-updates(i);
+                }
+                set-close-action(i) => {
+                    root.set-close-action(i);
                 }
                 set-game-info(on) => {
                     root.set-game-info(on);
