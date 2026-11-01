@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Only the latest release receives fixes. Huedra updates itself by default, so a fix reaches users within a day of its release.
+Only the latest release receives fixes. Huedra checks for updates once a day and, by default, asks before installing one, so please install updates when they are offered. Install automatically, under General › Updates, applies them without asking.
 
 ## Reporting a problem
 
