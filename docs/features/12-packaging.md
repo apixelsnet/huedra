@@ -99,3 +99,9 @@ Not verified: `release.yml` (no tag pushed yet); signing in Actions (no secret s
 - Licence: MIT OR Apache-2.0 (`LICENSE-MIT`, `LICENSE-APACHE`, `license` in the Cargo metadata); both files and `PRIVACY.md` go into the release zip.
 - Release signing key made with minisign 0.12 on the owner's PC (password-protected, kept outside the repository). The repository variables `HUEDRA_UPDATE_KEY` (its public key) and `HUEDRA_UPDATE_URL` (the GitHub releases address) are set, so Actions builds check for updates. The secrets `MINISIGN_SECRET_KEY` and `MINISIGN_PASSWORD` are set by the owner.
 - minisign on Windows reads the password from a pipe (checked with a throwaway key), as the release job does on Linux.
+
+## Result (2026-11-01) — first release, 0.1.0
+- Started with Release > Run workflow (version 0.1.0): the workflow tagged `v0.1.0` on `main`, ran every CI check with that version, signed and published "Huedra 0.1.0" with the zip (5,358,375 bytes), `huedra.exe` (9,944,576 bytes, update key built in), `release.toml`, both signatures, the extension zip (0.3.0) and `SHA256SUMS`. Notes: the 0.1.0 section of `CHANGELOG.md`, then GitHub's list.
+- Verified on this PC from the downloaded files: both signatures verify with the release public key (trusted comment "huedra 0.1.0"); every SHA-256 in `SHA256SUMS` matches; `release.toml` names the exe's size and digest; `huedra.exe --version` prints 0.1.0; a portable copy of the release ran `huedra update --check --from` on the release files and answered "Huedra 0.1.0 is up to date", so the program's own signature check accepts the signature made in Actions.
+- Not verified: a download through the release address (the repository is private, so the address answers "not found" to the program); an update from 0.1.0 to a later release.
+
