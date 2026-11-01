@@ -18,6 +18,8 @@ export component FocusRing inherits Rectangle {
 export component Toggle {
     in property <bool> enabled: true;
     in property <string> text;
+    // Read by screen readers instead of `text` when set.
+    in property <string> spoken-text;
     in-out property <bool> checked;
     callback toggled();
 
@@ -35,7 +37,7 @@ export component Toggle {
     vertical-stretch: 0;
     forward-focus: focus;
     accessible-role: switch;
-    accessible-label: root.text;
+    accessible-label: root.spoken-text != "" ? root.spoken-text : root.text;
     accessible-enabled: root.enabled;
     accessible-checkable: true;
     accessible-checked: root.checked;
@@ -184,9 +186,6 @@ export component SearchBox inherits Rectangle {
     background: input.has-focus ? Theme.surface : touch.has-hover ? Theme.hover : Theme.surface-raised;
     clip: true;
     forward-focus: input;
-    accessible-role: text-input;
-    accessible-label: root.placeholder;
-    accessible-value: input.text;
     touch := TouchArea {
         mouse-cursor: MouseCursor.text;
         clicked => {
@@ -226,6 +225,7 @@ export component SearchBox inherits Rectangle {
                 single-line: true;
                 selection-background-color: Theme.accent.with-alpha(0.45);
                 selection-foreground-color: Theme.text;
+                accessible-label: root.placeholder;
                 edited => {
                     root.edited(self.text);
                 }

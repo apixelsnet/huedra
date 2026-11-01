@@ -212,6 +212,7 @@ component ModeSelector inherits Rectangle {
     background: Theme.surface-raised;
     forward-focus: focus;
     accessible-role: tab-list;
+    accessible-label: "Mode";
     HorizontalLayout {
         padding: 2px;
         spacing: 2px;
@@ -819,6 +820,7 @@ export component GamesPage inherits Rectangle {
                     }
                 }
                 ListView {
+                    accessible-label: "Games";
                     // Scrolls just enough to keep the keyboard row in view.
                     property <int> cursor: root.cursor;
                     changed cursor => {
@@ -1236,6 +1238,7 @@ export component DisplaysPage inherits Rectangle {
                     Centered {
                         Toggle {
                             text: d.capable ? (self.checked ? "Managed" : "Not managed") : "Not managed";
+                            spoken-text: "Manage " + d.title;
                             checked: d.managed;
                             enabled: d.capable;
                             toggled => {
