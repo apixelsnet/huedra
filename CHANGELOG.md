@@ -4,6 +4,10 @@ Changes that matter to people using Huedra (not the project's own build and work
 
 ## Unreleased
 
+### Fixed
+- Check for updates says that it is checking, and then what it found, under the buttons in General › About.
+- Exit in the tray menu closes the Huedra window too.
+
 ## 0.1.1 — 2026-11-01
 
 ### Added

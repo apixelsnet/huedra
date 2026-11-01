@@ -60,3 +60,9 @@ Code: `TrayStart`, `BACKGROUND`, `startup_command`, `startup_program` in `crates
 Verified on this PC with the build of this change (portable copy): a plain start ran the tray and opened the window; a second start with the window minimised restored it, with one tray and one window process; closing the window kept the tray; a `--background` start while it ran opened nothing. Unit tests for the arguments and the start-up command.
 Verified by the owner on this PC (2026-11-01): with the window minimised, starting `huedra.exe` again from File Explorer brought it to the front.
 Not verified: the start-up entry and its rewrite (the copy here is portable and writes no entry); sign-in with the entry.
+
+## Result (2026-11-01) — Exit closes the window
+Code: `MENU_EXIT` in `crates/huedra/src/app.rs`; `close_window` in `crates/huedra-win/src/instance.rs`.
+- Exit in the tray menu closes the settings window as well (`WM_CLOSE` to the window titled `APP_NAME`, as its close button does), then the tray. `huedra exit` and the updater's restart leave the window open, so the window that started an update can show its result.
+
+Verified: build green. Verified by the owner on this PC (2026-11-02, test build): with the window open, Exit in the tray menu closed the window and the tray.
