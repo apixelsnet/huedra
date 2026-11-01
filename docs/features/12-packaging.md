@@ -154,3 +154,6 @@ Code: `build/licences.sh`, `build/about.toml`, `build/about.hbs`, `build/Dockerf
 
 Verified: on the build server, `licences.sh` writes the file (MIT 189 crates, Unicode-3.0 26, Apache-2.0 7, BSD-3-Clause 2, BSL-1.0 2, Zlib 2, BSD-2-Clause 1, and 9 Slint crates).
 Not verified: the CI run on GitHub; the zip from `pack-release.ps1` with the file in it.
+
+## Result (2026-11-01) — size limit 12 MB
+- Raised by the owner from 10 MB to 12 MB (12,000,000 bytes) in `build/ci.sh`: the Closing this window setting brought the exe to 9,990,144 bytes, 9,856 under the old limit, because Slint expands each Dropdown into its own code.
