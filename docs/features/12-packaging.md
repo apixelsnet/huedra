@@ -167,3 +167,8 @@ Not verified: the CI run on GitHub; the zip from `pack-release.ps1` with the fil
 ## Result (2026-11-01) — 0.1.1, the first public release
 - Started with Release > Run workflow (version 0.1.1) after the repository went public: every job green (version, build, Windows run and pack, publish). "Huedra 0.1.1 beta" (pre-release): `huedra-0.1.1-windows-x64.zip` (5,521,108 bytes, with `THIRD-PARTY-LICENSES.md`), its signature and `huedra-browser-extension-0.3.1.zip`. The update channel carries `huedra.exe` (10,048,512 bytes with the update key, so above the old 10 MB limit), `release.toml`, `release-notes.md` and their signatures.
 - Verified on this PC from the downloads: the zip, `release.toml` and `release-notes.md` signatures verify with the release key (trusted comment "huedra 0.1.1"); the exe's size and SHA-256 match `release.toml`; the extension zip's manifest says 0.3.1; Defender finds nothing in the zip, the exe or the extension zip.
+
+## Result (2026-11-02) — 0.1.2
+- Release > Run workflow (version 0.1.2): every job green. "Huedra 0.1.2 beta" with `huedra-0.1.2-windows-x64.zip` (5,522,621 bytes), its signature and the extension 0.3.1 zip; the update channel's `huedra.exe` is 10,055,680 bytes.
+- Verified on this PC from the downloads: the zip, `release.toml` and `release-notes.md` signatures verify (trusted comment "huedra 0.1.2"); the exe's SHA-256 matches `release.toml`; the signed notes list the two fixes; Defender finds nothing in the zip or the exe.
+- The owner's installed copy updated itself from 0.1.1 to 0.1.2 through the Update available dialog (log: "Huedra was updated from 0.1.1 to 0.1.2."), with its settings kept.
