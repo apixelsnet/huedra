@@ -2,8 +2,10 @@
 # Locks the GitHub repository down so only its admins change what ships:
 # - main: no deletion or force push; changes come through a pull request
 #   with one approval and both CI checks green. Admins may push directly.
-# - Tags v* and update-channel: only admins and the Release workflow
-#   (GitHub Actions) may create, move or delete them.
+# - Tags v* and update-channel: only admins may move or delete them. Creating
+#   one stays open to anyone with write access, because the Release workflow
+#   tags each version itself and GitHub does not accept GitHub Actions as a
+#   bypass actor (HTTP 422).
 # - Workflows get a read-only token unless a job asks for more, and runs
 #   for pull requests from outside contributors wait for an admin.
 # Repository rules need a public repository (or a paid plan). Run once, as an
@@ -13,7 +15,6 @@ set -euo pipefail
 
 repo=$(gh repo view --json nameWithOwner --jq .nameWithOwner)
 admin='{ "actor_id": 5, "actor_type": "RepositoryRole", "bypass_mode": "always" }'
-actions='{ "actor_id": 15368, "actor_type": "Integration", "bypass_mode": "always" }'
 
 ruleset() {
   local name=$1 body=$2 id
@@ -55,8 +56,8 @@ ruleset "Protect release tags" '{
   "target": "tag",
   "enforcement": "active",
   "conditions": { "ref_name": { "include": ["refs/tags/v*", "refs/tags/update-channel"], "exclude": [] } },
-  "bypass_actors": ['"$admin"', '"$actions"'],
-  "rules": [ { "type": "creation" }, { "type": "update" }, { "type": "deletion" } ]
+  "bypass_actors": ['"$admin"'],
+  "rules": [ { "type": "update" }, { "type": "deletion" } ]
 }'
 
 gh api -X PUT "repos/$repo/actions/permissions/workflow" \
