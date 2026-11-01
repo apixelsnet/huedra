@@ -4,6 +4,8 @@ Changes that matter to people using Huedra (not the project's own build and work
 
 ## Unreleased
 
+## 0.1.4 — 2026-11-02
+
 ### Fixed
 - Check for updates and Download and install work when Huedra was started from Explorer. Before, both stopped at once with "The check did not succeed" and wrote nothing to the log. To get this version on 0.1.1 to 0.1.3, choose Install automatically under General › Updates, or run `huedra update` in a terminal.
 
