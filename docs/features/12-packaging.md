@@ -132,3 +132,8 @@ Code: `.github/ISSUE_TEMPLATE/`, `.github/labels.yml`, `.github/release.yml`, `.
 
 ## Result (2026-11-01) — artifact retention
 - Every artifact the CI workflow uploads (`huedra-exe`, `huedra-release`, `huedra-extension`, `extension-icons`) is kept for 1 day instead of 7, and so is the Docker build record that `docker/build-push-action` uploads (`DOCKER_BUILD_RECORD_RETENTION_DAYS`; it had 90 days). The Release workflow reads them within the same run, so it is unaffected. Logs keep the repository default.
+
+## Result (2026-11-01) — supporters
+- `SUPPORTERS.md` lists Ko-fi supporters who ask to be named; the README's Supporters section says what supporters get: their name there, thanks in release notes, preview builds through Ko-fi about a week before each public release, and the `sponsor` label on their issues. No votes or priority, and no feature is locked.
+- The Release workflow ends the GitHub release notes with a Thank you section linking `SUPPORTERS.md`; the signed notes for the update dialog are unchanged.
+- `.github/labels.yml`: `sponsor` label (pink). `.github/FUNDING.yml` already shows the Ko-fi button; no GitHub Sponsors entry yet.

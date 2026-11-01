@@ -7,7 +7,7 @@ Changes that matter to people using Huedra (not the project's own build and work
 ### Added
 - A disclaimer on first start. Huedra does not run, and never changes HDR, until it is accepted; it can be read again under General › About.
 - Check for updates and Install buttons under General › About.
-- Links to star the project on GitHub and to support it on Ko-fi, under General › About.
+- Links to star the project on GitHub and to support it on Ko-fi, under General › About. The tray menu has **Support Huedra on Ko-fi...** too.
 - A user guide: `docs/USER-GUIDE.md`.
 - The Status page shows a colour chart of the BT.2020 and sRGB gamuts that fades into colour when HDR turns on and back to grey when it turns off. The navigation pane shows the current state and its reason.
 - An **Update available** dialog: when a new version is found it shows what is new, with a link to the full changelog, and installs it with **Download and install**. It never opens while a game or video is using HDR. The list of changes is signed like the update itself.

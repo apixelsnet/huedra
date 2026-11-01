@@ -77,7 +77,17 @@ If Huedra is useful to you:
 - **Support development** on [Ko-fi](https://ko-fi.com/pixelsthecoder).
 - **Report problems and test** on hardware the project has not seen yet.
 
-Both links are also in the app, under **General › About**.
+Both links are also in the app, under **General › About**, and Ko-fi is in the tray menu.
+
+### Supporters
+
+Every feature of Huedra is free for everyone; nothing is locked behind support. As a thank-you, supporters on Ko-fi:
+
+- are named in [SUPPORTERS.md](SUPPORTERS.md), if they wish, and thanked in every release's notes;
+- get preview builds through Ko-fi about a week before each public release (signed release builds, like every download);
+- have their issues marked with the `sponsor` label.
+
+Thank you to everyone in [SUPPORTERS.md](SUPPORTERS.md).
 
 ## Contributing
 

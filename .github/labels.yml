@@ -47,6 +47,9 @@
 - name: good first issue
   color: "7057ff"
   description: Good for newcomers
+- name: sponsor
+  color: "ff2d6f"
+  description: Opened by someone who supports the project on Ko-fi
 - name: help wanted
   color: "008672"
   description: Extra attention is needed
