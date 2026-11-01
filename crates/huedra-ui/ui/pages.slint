@@ -75,6 +75,12 @@ export struct HistoryRow {
     kind: string,
 }
 
+// One line of the update dialog's list of changes.
+export struct UpdateNote {
+    heading: bool,
+    text: string,
+}
+
 export struct StoreChip {
     key: string,
     label: string,
@@ -564,7 +570,7 @@ component GameDetailPanel inherits Card {
                 VerticalLayout {
                     spacing: 4px;
                     Text {
-                        text: "Hold time after exit (seconds)";
+                        text: "Keep HDR on after the game closes (seconds)";
                         font-size: Theme.body-size;
                         color: Theme.text;
                         wrap: word-wrap;
@@ -1060,7 +1066,7 @@ export component VideoPage inherits Rectangle {
                 text: "Video players";
             }
             Caption {
-                text: "HDR turns on while a player shows a file whose name contains one of the words below, and turns off after the hold time once it no longer does.";
+                text: "HDR turns on while a player shows a file whose name contains one of the words below, and turns off a few seconds after it no longer does.";
             }
             // The field takes the card's width: the words do not fit beside
             // the description in narrow layouts.
@@ -1113,8 +1119,8 @@ export component VideoPage inherits Rectangle {
                 }
             }
             SettingRow {
-                title: "Hold time for video (seconds)";
-                description: root.hold-custom ? "Used instead of the default hold time (" + root.default-hold + " s)." : "The default hold time from General.";
+                title: "Keep HDR on after the video ends (seconds)";
+                description: "So the next episode or a skip to another file does not switch the display off and on again. " + (root.hold-custom ? "Used instead of the " + root.default-hold + " s set under General." : "The time set under General.");
                 if root.hold-custom: ActionButton {
                     text: "Use the default";
                     clicked => {
@@ -1122,7 +1128,7 @@ export component VideoPage inherits Rectangle {
                     }
                 }
                 NumberBox {
-                    accessible-label: "Hold time for video";
+                    accessible-label: "Keep HDR on after the video ends (seconds)";
                     minimum: 0;
                     maximum: 600;
                     value: root.hold;
@@ -1367,7 +1373,7 @@ export component GeneralPage inherits Rectangle {
             }
             SettingRow {
                 title: "Updates";
-                description: "Checks once a day and installs signed releases while no game or video is running. The previous version is kept; huedra update --rollback restores it. To check now, use Check for updates under About." + (root.update-note != "" ? " " + root.update-note : "");
+                description: "Checks once a day for a new signed release. Ask before installing shows what is new and installs when you choose Download and install; Install automatically installs while no game or video is running. The previous version is kept; huedra update --rollback restores it." + (root.update-note != "" ? " " + root.update-note : "");
                 Dropdown {
                     accessible-label: "Updates";
                     model: ["Install automatically", "Ask before installing", "Off"];
@@ -1389,10 +1395,10 @@ export component GeneralPage inherits Rectangle {
                 }
             }
             SettingRow {
-                title: "Default hold time (seconds)";
-                description: "Used for games without their own setting, and for video unless set on the Video players page.";
+                title: "Keep HDR on after a game or video ends (seconds)";
+                description: "HDR stays on this long after a game closes or a video ends, so restarting the game or playing the next video does not switch the display off and on again. Games and the Video players page can set their own time.";
                 NumberBox {
-                    accessible-label: "Default hold time (seconds)";
+                    accessible-label: "Keep HDR on after a game or video ends (seconds)";
                     minimum: 0;
                     maximum: 600;
                     value: root.hold;

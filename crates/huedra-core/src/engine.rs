@@ -706,13 +706,17 @@ fn closed_reason(
 ) -> String {
     let secs = hold.as_secs();
     let unit = if secs == 1 { "second" } else { "seconds" };
+    let kept = if secs == 0 {
+        String::new()
+    } else {
+        format!("; HDR stayed on for {secs} more {unit}")
+    };
     match holder {
-        None => format!("No trigger is active; hold time of {secs} {unit} elapsed"),
-        Some(h) if active.contains_key(&h.trigger) => format!(
-            "{} moved to another display; hold time of {secs} {unit} elapsed",
-            h.label
-        ),
-        Some(h) => format!("{} closed; hold time of {secs} {unit} elapsed", h.label),
+        None => format!("Nothing needs HDR any more{kept}"),
+        Some(h) if active.contains_key(&h.trigger) => {
+            format!("{} moved to another display{kept}", h.label)
+        }
+        Some(h) => format!("{} closed{kept}", h.label),
     }
 }
 
@@ -791,7 +795,7 @@ mod tests {
         let out = e.tick(t0 + secs(70));
         assert_eq!(out.actions, off(), "off after hold");
         assert_eq!(
-            out.notes[0].reason, "Cyberpunk 2077 closed; hold time of 10 seconds elapsed",
+            out.notes[0].reason, "Cyberpunk 2077 closed; HDR stayed on for 10 more seconds",
             "reason"
         );
         assert_eq!(e.next_deadline(), None, "idle");
@@ -901,7 +905,7 @@ mod tests {
         let out = e.tick(t0 + HOLD);
         assert_eq!(out.actions, off(), "restored");
         assert_eq!(
-            out.notes[0].reason, "No trigger is active; hold time of 10 seconds elapsed",
+            out.notes[0].reason, "Nothing needs HDR any more; HDR stayed on for 10 more seconds",
             "reason"
         );
     }
@@ -1093,7 +1097,7 @@ mod tests {
         assert_eq!(out.actions[0].display, two, "old display");
         assert_eq!(
             out.notes[0].reason,
-            "Cyberpunk 2077 moved to another display; hold time of 10 seconds elapsed",
+            "Cyberpunk 2077 moved to another display; HDR stayed on for 10 more seconds",
             "reason"
         );
 

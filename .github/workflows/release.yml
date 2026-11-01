@@ -15,7 +15,7 @@ name: Release
 # browser extension's zip; releases before 1.0.0 are pre-releases titled "beta".
 # The notes start with a table of the downloads, then the version's section of
 # CHANGELOG.md (or its Unreleased section), then the list GitHub writes. The files
-# the updater reads (huedra.exe, release.toml and its signature) go to the fixed
+# the updater reads (huedra.exe, release.toml, release-notes.md and their signatures) go to the fixed
 # release "update-channel". Signing needs the MINISIGN_SECRET_KEY and
 # MINISIGN_PASSWORD secrets. Feature docs: 11-updates.md, 12-packaging.md.
 
@@ -209,6 +209,13 @@ jobs:
             cat changes.md
           } > notes.md
           cat notes.md
+          # The same changes for the update dialog in the program, signed with the
+          # manifest. The first line names the version the notes belong to.
+          {
+            echo "# Huedra $VERSION"
+            echo
+            cat changes.md
+          } > channel/release-notes.md
 
       - name: Sign
         env:
@@ -226,7 +233,7 @@ jobs:
           umask 077
           printf '%s\n' "$MINISIGN_SECRET_KEY" > "$key"
           printf '%s\n' "$MINISIGN_PASSWORD" | minisign -S -s "$key" -t "huedra $VERSION" \
-            -m channel/release.toml "download/huedra-$VERSION-windows-x64.zip"
+            -m channel/release.toml channel/release-notes.md "download/huedra-$VERSION-windows-x64.zip"
           rm -f "$key"
 
       - name: Publish the release
@@ -268,5 +275,6 @@ jobs:
             exit 0
           fi
           gh release upload "$channel" channel/huedra.exe --clobber --repo "$GITHUB_REPOSITORY"
+          gh release upload "$channel" channel/release-notes.md channel/release-notes.md.minisig --clobber --repo "$GITHUB_REPOSITORY"
           gh release upload "$channel" channel/release.toml.minisig --clobber --repo "$GITHUB_REPOSITORY"
           gh release upload "$channel" channel/release.toml --clobber --repo "$GITHUB_REPOSITORY"

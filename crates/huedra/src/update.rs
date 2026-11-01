@@ -17,10 +17,11 @@ use anyhow::{Context as _, bail};
 use huedra_core::APP_NAME;
 use huedra_core::command::UpdateCommand;
 use huedra_core::config::{Config, UpdatePolicy};
+use huedra_core::files;
 use huedra_core::ipc::{Request, Response};
 use huedra_core::locations::Locations;
 use huedra_core::logfile::{self, LogFile};
-use huedra_core::update::{self, Release, ReleaseUrl, UpdateState, Verdict, Version};
+use huedra_core::update::{self, Release, ReleaseNotes, ReleaseUrl, UpdateState, Verdict, Version};
 use huedra_win::pipe::{self, PipeError};
 use huedra_win::{clock, hash, http, process};
 
@@ -78,6 +79,7 @@ impl Updater {
             state.last_check = update::unix_secs(SystemTime::now());
         }
         let Verdict::Newer(version) = update::verdict(release.version(), running, None) else {
+            state.available = None;
             self.save(&state);
             println!("Huedra {running} is up to date.");
             return Ok(());
@@ -85,6 +87,7 @@ impl Updater {
         if check_only {
             state.available = Some(version);
             self.save(&state);
+            self.keep_notes(&source, key, version);
             println!(
                 "Huedra {version} is available (this is {running}). Install it with: huedra update"
             );
@@ -146,8 +149,9 @@ impl Updater {
         if policy == UpdatePolicy::Ask {
             state.available = Some(version);
             self.save(&state);
+            self.keep_notes(&source, key, version);
             self.log(&format!(
-                "Huedra {version} is available; it waits for your consent in the tray menu."
+                "Huedra {version} is available; it waits for your consent."
             ));
             let _ = pipe::call(&Request::UpdateAvailable {
                 version: version.to_string(),
@@ -171,6 +175,32 @@ impl Updater {
             "Huedra was updated automatically from {running} to {version}."
         ));
         Ok(())
+    }
+
+    /// Downloads the release notes of `version`, checks their signature and
+    /// keeps them for the update dialog. Without them the dialog links to
+    /// the changelog instead.
+    fn keep_notes(&self, source: &Source, key: &str, version: Version) {
+        let path = update::notes_path(&self.locations.update);
+        let notes = source
+            .fetch(update::NOTES_NAME, update::MAX_NOTES_BYTES)
+            .and_then(|notes| {
+                let signature =
+                    source.fetch(update::NOTES_SIGNATURE_NAME, update::MAX_SIGNATURE_BYTES)?;
+                let signature =
+                    String::from_utf8(signature).context("the notes' signature is not text")?;
+                Ok(ReleaseNotes::verify(&notes, &signature, key, version)?)
+            })
+            .and_then(|text| {
+                files::write_atomic(&path, text.as_bytes())
+                    .with_context(|| format!("could not write {}", path.display()))
+            });
+        if let Err(error) = notes {
+            let _ = fs::remove_file(&path);
+            self.log(&format!(
+                "The release notes of Huedra {version} were not read: {error:#}."
+            ));
+        }
     }
 
     /// Writes the new program, checks it starts and reports its version,

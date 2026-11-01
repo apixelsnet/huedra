@@ -122,6 +122,8 @@ struct App {
     /// A newer release waiting for consent (Updates: Ask before
     /// installing), offered in the menu.
     update_available: Option<Version>,
+    /// The update dialog is due as soon as no game or video uses HDR.
+    offer_update: bool,
     saved_owned: Vec<DisplayId>,
     history: VecDeque<HistoryEntry>,
     log: LogFile,
@@ -172,6 +174,7 @@ impl App {
             launches: HashMap::new(),
             update_due: false,
             update_available,
+            offer_update: false,
             saved_owned: owned,
             history: VecDeque::new(),
             waker: host.waker(),
@@ -258,6 +261,7 @@ impl App {
         }
         self.update_video_poll(host);
         self.run_due_update();
+        self.offer_waiting_update();
         self.refresh_tray(now);
         Flow::Continue
     }
@@ -797,7 +801,10 @@ impl App {
         ));
         entries.push(MenuEntry::Separator);
         if let Some(version) = self.update_available {
-            entries.push(item(MENU_UPDATE, &format!("Install Huedra {version}")));
+            entries.push(item(
+                MENU_UPDATE,
+                &format!("Huedra {version} is available..."),
+            ));
         }
         entries.push(item(MENU_OPEN, "Open Huedra"));
         entries.push(item(MENU_EXIT, "Exit"));
@@ -814,13 +821,9 @@ impl App {
             }
             Some(MENU_PAUSE) => self.toggle_pause(host, now),
             Some(MENU_OPEN) => crate::open_settings(),
-            Some(MENU_UPDATE) => {
-                // The updater closes this process, installs and starts
-                // the new version; its result goes to the log.
-                if let Ok(exe) = std::env::current_exe() {
-                    process::spawn_detached(&exe, &["update"]);
-                }
-            }
+            // The settings window shows the update dialog: what is new,
+            // and Download and install.
+            Some(MENU_UPDATE) => crate::open_settings(),
             Some(MENU_EXIT) => return Flow::Exit,
             _ => {}
         }
@@ -866,7 +869,10 @@ impl App {
             Request::UpdateAvailable { version } => match version.parse::<Version>() {
                 Ok(version) if version > Version::current() => {
                     self.update_available = Some(version);
-                    done(&format!("Huedra {version} is offered in the menu."))
+                    self.offer_update = true;
+                    done(&format!(
+                        "Huedra {version} is offered once no game or video uses HDR."
+                    ))
                 }
                 _ => Response::Failed {
                     message: "That is not a newer version.".to_owned(),
@@ -963,6 +969,17 @@ impl App {
         }
         let due = UpdateState::load(&self.paths.update).due_in(SystemTime::now());
         host.set_timer(UPDATE_TIMER, due.max(UPDATE_FIRST_DELAY));
+    }
+
+    /// Opens the settings window, which shows the update dialog, once a
+    /// newer release was found and no game or video uses HDR, so it never
+    /// appears over a game.
+    fn offer_waiting_update(&mut self) {
+        if !self.offer_update || self.busy() {
+            return;
+        }
+        self.offer_update = false;
+        crate::open_settings();
     }
 
     /// Starts `huedra update --auto` once the check is due and nothing uses

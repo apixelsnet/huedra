@@ -78,7 +78,7 @@ Huedra lives in the notification area next to the clock. If you do not see it, o
 | Automatic / Always HDR / Always SDR | Choose the mode (see [Modes](#5-modes)). |
 | Pause for 1 hour / Resume automatic switching | Stop automatic switching for an hour, or start it again. |
 | Never for *game* | Shown while a game or player is active: Huedra stops changing HDR for it. |
-| Install Huedra *version* | Shown when an update is waiting and Updates is set to Ask before installing. |
+| Huedra *version* is available... | Shown when an update is waiting. Opens the update dialog. |
 | Open Huedra | Open the window. |
 | Exit | Close Huedra. Displays that Huedra switched to HDR return to SDR. |
 
@@ -112,7 +112,7 @@ Select a game to open its settings:
 | **Do not change** | Huedra leaves HDR alone for this game. |
 | **Game controls HDR** | For games with their own HDR switch: Huedra does not interfere. |
 | **Delay before enabling HDR** | Waits this many seconds after the game starts. Useful for games that show a launcher first. |
-| **Hold time** | Keeps HDR on for this many seconds after the game closes, so a quick restart does not switch twice. |
+| **Keep HDR on after the game closes** | Seconds HDR stays on after the game closes, so restarting it, or a launcher starting the game again, does not switch the display off and on twice. |
 
 When **Game information and icons** is on, the page also shows what PCGamingWiki reports about the game's HDR support and may suggest a setting. Suggestions are never applied without your choice.
 
@@ -143,7 +143,7 @@ Huedra watches VLC, mpv, mpv.net, MPC-HC, MPC-BE and PotPlayer. On the **Video p
 
 - **Words that mark HDR video** lists the words looked for in the window title, by default `HDR`, `HDR10`, `Dolby Vision`, `DoVi` and `BT.2020`.
 - **Only in full screen** turns HDR on only while the player fills the screen.
-- **Hold time for video** keeps HDR on for a few seconds after the video ends.
+- **Keep HDR on after the video ends** keeps HDR on for a few seconds after the video ends, so the next episode does not switch the display off and on again.
 
 ### Browsers and the Huedra browser extension
 
@@ -176,9 +176,9 @@ With NVIDIA RTX Video HDR turned on in the NVIDIA app, ordinary SDR video in a b
 | --- | --- |
 | **Start with Windows** | Starts Huedra in the notification area when you sign in. |
 | **"Start with HDR" in the menu of programs** | Adds Start with HDR to File Explorer's menu (see [Games](#start-a-game-with-hdr-already-on)). |
-| **Updates** | Install automatically, Ask before installing, or Off (see [Updates](#10-updates)). |
+| **Updates** | Ask before installing (the default), Install automatically, or Off (see [Updates](#10-updates)). |
 | **Game information and icons** | Looks up games on PCGamingWiki and icons in Discord's public game list. |
-| **Default hold time** | Seconds HDR stays on after a game or video ends, unless set per game. |
+| **Keep HDR on after a game or video ends** | Seconds HDR stays on after a game closes or a video ends, so restarting the game or playing the next video does not switch the display off and on again. Games and the Video players page can set their own time. |
 | **Default delay before enabling HDR** | Seconds to wait after a game starts, unless set per game. |
 | **Keyboard shortcuts** | Turns the shortcuts in [Keyboard shortcuts](#11-keyboard-shortcuts) on or off. |
 | **Record window titles in the log** | Off by default, so tab names and file names stay out of the log. |
@@ -187,9 +187,11 @@ The **About** section shows the version, **Check for updates**, the disclaimer, 
 
 ## 10. Updates
 
-- Huedra checks once a day. It installs a new version only while no game or video is using HDR.
-- Every update must carry a valid signature from the project's key, and must match the size and SHA-256 digest that the signature covers. Anything else is refused.
-- **Check for updates** under **General › About** checks immediately. If a newer version is found, **Install Huedra *version*** installs it.
+- Huedra checks once a day. When a new version is found, the **Update available** dialog opens, but never while a game or video is using HDR: it waits until they end. It lists what is new; when there are many changes, **See the full changelog** opens the complete list on GitHub.
+- **Download and install** installs the update. Huedra restarts in the notification area and the settings window opens again on the new version. **Later** closes the dialog; it opens again the next day, and the tray menu offers the update meanwhile.
+- With **Updates** set to **Install automatically**, there is no dialog: Huedra installs new versions on its own while no game or video is using HDR.
+- Every update must carry a valid signature from the project's key, and must match the size and SHA-256 digest that the signature covers. Anything else is refused. The list of changes is signed too.
+- **Check for updates** under **General › About** checks immediately and opens the dialog when a newer version is found.
 - The previous version is kept beside the program as `huedra.previous.exe`. To go back, run `huedra update --rollback` in a terminal opened in Huedra's folder. A version you rolled back from is not installed automatically again.
 
 ## 11. Keyboard shortcuts

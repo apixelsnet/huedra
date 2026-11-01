@@ -51,9 +51,9 @@ impl Seconds {
 #[serde(rename_all = "kebab-case")]
 pub enum UpdatePolicy {
     /// Install signed releases automatically.
-    #[default]
     Install,
-    /// Ask before installing.
+    /// Show what is new and install when the user chooses to.
+    #[default]
     Ask,
     /// Do not check.
     Off,
@@ -133,7 +133,7 @@ impl Default for General {
     fn default() -> Self {
         Self {
             start_with_windows: true,
-            updates: UpdatePolicy::Install,
+            updates: UpdatePolicy::Ask,
             game_info: true,
             start_delay: Seconds(0),
             hold: Seconds(10),
@@ -528,7 +528,7 @@ mod tests {
         assert_eq!(Config::parse("").expect("empty"), config, "empty file");
         assert_eq!(config.general.hold, Seconds(10), "default hold");
         assert!(config.general.game_info, "game info on by default");
-        assert_eq!(config.general.updates, UpdatePolicy::Install, "updates");
+        assert_eq!(config.general.updates, UpdatePolicy::Ask, "updates");
         assert_eq!(config.attempts(), 3, "one try plus two retries");
     }
 

@@ -9,10 +9,14 @@
 //! `release.toml.minisig` (its minisign signature) and the program itself.
 //! Only the small manifest is signed; the program is trusted through the
 //! size and digest the signed manifest gives.
+//!
+//! Next to them, `release-notes.md` and its signature hold the version's
+//! changes, shown before installing. They are a separate file because
+//! older versions refuse a manifest with fields they do not know.
 
 use std::cmp::Ordering;
 use std::fmt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -37,6 +41,12 @@ pub const SIGNATURE_NAME: &str = "release.toml.minisig";
 pub const MAX_MANIFEST_BYTES: usize = 4 * 1024;
 /// Largest signature file accepted.
 pub const MAX_SIGNATURE_BYTES: usize = 2 * 1024;
+/// Name of the signed release notes at the release address.
+pub const NOTES_NAME: &str = "release-notes.md";
+/// Name of the release notes' signature.
+pub const NOTES_SIGNATURE_NAME: &str = "release-notes.md.minisig";
+/// Largest release notes accepted.
+pub const MAX_NOTES_BYTES: usize = 16 * 1024;
 /// Largest program accepted.
 pub const MAX_PROGRAM_BYTES: u64 = 32 * 1024 * 1024;
 /// How often the tray checks.
@@ -52,6 +62,17 @@ pub fn public_key() -> Option<&'static str> {
 /// The release address built into this program, when there is a valid one.
 pub fn release_url() -> Option<ReleaseUrl> {
     RELEASE_URL.and_then(|u| ReleaseUrl::parse(u.trim()).ok())
+}
+
+/// The project's changelog on GitHub, linked from the update dialog.
+pub fn changelog_page() -> Option<String> {
+    project_page().map(|page| format!("{page}/blob/main/CHANGELOG.md"))
+}
+
+/// Where a check keeps the verified notes of the version it found: next
+/// to `update.toml`.
+pub fn notes_path(state: &Path) -> PathBuf {
+    state.with_file_name("update-notes.md")
 }
 
 /// The project's page, for "Star on GitHub": the repository the release
@@ -296,6 +317,149 @@ impl Release {
     }
 }
 
+/// One line of release notes, as the update dialog shows it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NoteLine {
+    /// A group, such as "Added" or "Fixed".
+    Heading(String),
+    /// One change.
+    Item(String),
+}
+
+/// A release's changes: `release-notes.md`, whose first line is
+/// `# Huedra <version>`, followed by the version's section of the changelog.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReleaseNotes {
+    lines: Vec<NoteLine>,
+}
+
+impl ReleaseNotes {
+    /// Checks the notes' signature against `public_key` and that they
+    /// belong to `version`, and returns their text.
+    ///
+    /// # Errors
+    /// [`UpdateError::Signature`] when the signature does not match;
+    /// [`UpdateError::Manifest`] when the notes are too large, not text or
+    /// for another version.
+    pub fn verify(
+        notes: &[u8],
+        signature: &str,
+        public_key: &str,
+        version: Version,
+    ) -> Result<String, UpdateError> {
+        if notes.len() > MAX_NOTES_BYTES || signature.len() > MAX_SIGNATURE_BYTES {
+            return Err(UpdateError::Manifest(
+                "the release notes are too large".to_owned(),
+            ));
+        }
+        let key = minisign_verify::PublicKey::from_base64(public_key.trim())
+            .map_err(|e| UpdateError::Signature(e.to_string()))?;
+        let signature = minisign_verify::Signature::decode(signature)
+            .map_err(|e| UpdateError::Signature(e.to_string()))?;
+        key.verify(notes, &signature, false)
+            .map_err(|e| UpdateError::Signature(e.to_string()))?;
+        let text = std::str::from_utf8(notes).map_err(|e| UpdateError::Manifest(e.to_string()))?;
+        if Self::parse(text, version).is_none() {
+            return Err(UpdateError::Manifest(format!(
+                "the release notes are not those of Huedra {version}"
+            )));
+        }
+        Ok(text.to_owned())
+    }
+
+    /// Reads notes kept by a check. `None` when they are for another
+    /// version.
+    pub fn parse(text: &str, version: Version) -> Option<Self> {
+        let mut rows = text
+            .lines()
+            .map(str::trim_end)
+            .skip_while(|l| l.trim().is_empty());
+        if rows.next()?.trim() != format!("# Huedra {version}") {
+            return None;
+        }
+        let mut lines: Vec<NoteLine> = Vec::new();
+        for row in rows {
+            let trimmed = row.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            if let Some(heading) = trimmed.strip_prefix('#') {
+                let heading = plain(heading.trim_start_matches('#'));
+                if !heading.is_empty() {
+                    lines.push(NoteLine::Heading(heading));
+                }
+            } else if let Some(item) = trimmed
+                .strip_prefix("- ")
+                .or_else(|| trimmed.strip_prefix("* "))
+            {
+                lines.push(NoteLine::Item(plain(item)));
+            } else if row.starts_with(' ')
+                && let Some(NoteLine::Item(previous)) = lines.last_mut()
+            {
+                previous.push(' ');
+                previous.push_str(&plain(trimmed));
+            } else {
+                lines.push(NoteLine::Item(plain(trimmed)));
+            }
+        }
+        Some(Self { lines })
+    }
+
+    /// Every line.
+    pub fn lines(&self) -> &[NoteLine] {
+        &self.lines
+    }
+
+    /// The first `max_items` changes with their headings, and how many
+    /// changes are left out.
+    pub fn summary(&self, max_items: usize) -> (Vec<NoteLine>, usize) {
+        let mut shown = Vec::new();
+        let mut items = 0;
+        let mut left_out = 0;
+        let mut heading: Option<&NoteLine> = None;
+        for line in &self.lines {
+            match line {
+                NoteLine::Heading(_) => heading = Some(line),
+                NoteLine::Item(_) if items < max_items => {
+                    if let Some(h) = heading.take() {
+                        shown.push(h.clone());
+                    }
+                    shown.push(line.clone());
+                    items += 1;
+                }
+                NoteLine::Item(_) => left_out += 1,
+            }
+        }
+        (shown, left_out)
+    }
+}
+
+/// Markdown as plain text: links keep their text; emphasis and code marks
+/// are dropped.
+fn plain(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text.trim();
+    while let Some(start) = rest.find('[') {
+        out.push_str(&rest[..start]);
+        let after = &rest[start + 1..];
+        match after
+            .find("](")
+            .and_then(|mid| after[mid + 2..].find(')').map(|end| (mid, mid + 2 + end)))
+        {
+            Some((mid, end)) => {
+                out.push_str(&after[..mid]);
+                rest = &after[end + 1..];
+            }
+            None => {
+                out.push('[');
+                rest = after;
+            }
+        }
+    }
+    out.push_str(rest);
+    out.replace("**", "").replace('`', "").trim().to_owned()
+}
+
 fn parse_hex(text: &str) -> Option<[u8; 32]> {
     let text = text.trim();
     if text.len() != 64 || !text.is_ascii() {
@@ -431,6 +595,68 @@ mod tests {
     const OTHER_KEY: &str = include_str!("../tests/data/update/other.pub");
     const MANIFEST: &[u8] = include_bytes!("../tests/data/update/release.toml");
     const SIGNATURE: &str = include_str!("../tests/data/update/release.toml.minisig");
+    // Signed with a third key made for this test only.
+    const NOTES_KEY: &str = include_str!("../tests/data/update/notes.pub");
+    const NOTES: &[u8] = include_bytes!("../tests/data/update/release-notes.md");
+    const NOTES_SIGNATURE: &str = include_str!("../tests/data/update/release-notes.md.minisig");
+
+    #[test]
+    fn signed_notes_are_read() {
+        let v = |s: &str| s.parse::<Version>().expect("version");
+        let text = ReleaseNotes::verify(NOTES, NOTES_SIGNATURE, key(NOTES_KEY), v("0.9.0"));
+        let text = text.expect("valid notes");
+        let notes = ReleaseNotes::parse(&text, v("0.9.0")).expect("parsed");
+        assert_eq!(
+            notes.lines(),
+            [
+                NoteLine::Heading("Added".into()),
+                NoteLine::Item("First thing with bold and code.".into()),
+                NoteLine::Item("Second link thing, continued on a second line.".into()),
+                NoteLine::Heading("Fixed".into()),
+                NoteLine::Item("Third.".into()),
+            ],
+            "lines"
+        );
+        assert!(
+            ReleaseNotes::verify(NOTES, NOTES_SIGNATURE, key(NOTES_KEY), v("0.9.1")).is_err(),
+            "notes of another version"
+        );
+        assert!(
+            ReleaseNotes::verify(NOTES, NOTES_SIGNATURE, key(TEST_KEY), v("0.9.0")).is_err(),
+            "another key"
+        );
+        let mut changed = NOTES.to_vec();
+        changed.push(b'x');
+        assert!(
+            ReleaseNotes::verify(&changed, NOTES_SIGNATURE, key(NOTES_KEY), v("0.9.0")).is_err(),
+            "changed notes"
+        );
+    }
+
+    #[test]
+    fn notes_summary_keeps_headings_of_shown_items() {
+        let v = "1.0.0".parse::<Version>().expect("version");
+        let text = "# Huedra 1.0.0\n### Added\n- a\n- b\n### Fixed\n- c\n- d\n";
+        let notes = ReleaseNotes::parse(text, v).expect("parsed");
+        let (shown, left_out) = notes.summary(3);
+        assert_eq!(
+            shown,
+            [
+                NoteLine::Heading("Added".into()),
+                NoteLine::Item("a".into()),
+                NoteLine::Item("b".into()),
+                NoteLine::Heading("Fixed".into()),
+                NoteLine::Item("c".into()),
+            ],
+            "first three"
+        );
+        assert_eq!(left_out, 1, "one left out");
+        assert!(
+            ReleaseNotes::parse("# Huedra 0.9.0\n- a", v).is_none(),
+            "other version"
+        );
+        assert_eq!(plain("[x](y) and [z]"), "x and [z]", "links");
+    }
 
     /// The key line of a minisign `.pub` file.
     fn key(file: &str) -> &str {

@@ -10,9 +10,12 @@ Changes that matter to people using Huedra (not the project's own build and work
 - Links to star the project on GitHub and to support it on Ko-fi, under General › About.
 - A user guide: `docs/USER-GUIDE.md`.
 - The Status page shows a colour chart of the BT.2020 and sRGB gamuts that fades into colour when HDR turns on and back to grey when it turns off. The navigation pane shows the current state and its reason.
+- An **Update available** dialog: when a new version is found it shows what is new, with a link to the full changelog, and installs it with **Download and install**. It never opens while a game or video is using HDR. The list of changes is signed like the update itself.
 - Displays › Always HDR on the main display only, on by default: Always HDR mode and the Win+Alt+H shortcut turn HDR on only for the main display (the Windows primary display), so a second monitor stays in SDR. Turn it off to switch every managed display.
 
 ### Changed
+- Updates now ask before installing by default, with the update dialog; Install automatically is still available under General › Updates.
+- "Hold time" is now called "Keep HDR on after it ends", with a description of what it does, and the history says how long HDR stayed on.
 - New icon: the visible colour gamut with the BT.2020 triangle, in colour while HDR is on and as a grey outline in SDR. Used for the program, the tray, the settings window and the browser extension. The settings window draws it as a vector image, sharp at any display scale, and shows it in the title bar.
 
 ## 0.1.0 — 2026-11-01

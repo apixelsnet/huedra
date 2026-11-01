@@ -7,10 +7,10 @@ import { Theme } from "theme.slint";
 import { FocusRing, ActionButton } from "controls.slint";
 import {
     StatusPage, GamesPage, VideoPage, DisplaysPage, GeneralPage,
-    GameRow, GameDetail, DisplayRow, HistoryRow, StoreChip, VideoAppRow, SiteRow
+    GameRow, GameDetail, DisplayRow, HistoryRow, StoreChip, VideoAppRow, SiteRow, UpdateNote
 } from "pages.slint";
 
-export { Theme, GameRow, GameDetail, DisplayRow, HistoryRow, StoreChip, VideoAppRow, SiteRow }
+export { Theme, GameRow, GameDetail, DisplayRow, HistoryRow, StoreChip, VideoAppRow, SiteRow, UpdateNote }
 
 component NavItem inherits Rectangle {
     in property <string> glyph;
@@ -197,6 +197,16 @@ export component SettingsWindow inherits Window {
     callback check-updates();
     callback install-update();
     callback open-project();
+    // The update dialog: what is new in the version waiting, and Download
+    // and install.
+    in-out property <bool> show-update;
+    in property <string> update-version;
+    in property <[UpdateNote]> update-notes;
+    in property <int> update-more;
+    in property <bool> has-changelog;
+    in property <bool> installing-update;
+    in property <string> update-status;
+    callback open-changelog();
     callback open-support();
 
     // Disclaimer: shown until accepted; the tray does not run before that.
@@ -481,7 +491,7 @@ export component SettingsWindow inherits Window {
                     root.check-updates();
                 }
                 install-update => {
-                    root.install-update();
+                    root.show-update = true;
                 }
                 open-project => {
                     root.open-project();
@@ -586,6 +596,133 @@ export component SettingsWindow inherits Window {
             }
             init => {
                 accept.focus();
+            }
+        }
+    }
+    // The update dialog, over everything but the disclaimer.
+    if root.show-update && !root.show-disclaimer: Rectangle {
+        background: #000000a0;
+        TouchArea {
+            // Takes the clicks meant for the window behind.
+        }
+        Rectangle {
+            width: min(parent.width - 48px, 560px);
+            height: min(parent.height - 48px, update-card.preferred-height);
+            border-radius: Theme.radius-card;
+            background: Theme.surface;
+            border-width: 1px;
+            border-color: Theme.border;
+            drop-shadow-blur: 24px;
+            drop-shadow-color: #00000060;
+            clip: true;
+            update-card := VerticalLayout {
+                padding: 28px;
+                spacing: 10px;
+                HorizontalLayout {
+                    spacing: 12px;
+                    Image {
+                        width: 28px;
+                        height: 28px;
+                        source: Theme.logo-hdr;
+                        accessible-role: none;
+                    }
+                    Text {
+                        text: "Update available";
+                        font-size: Theme.heading-size;
+                        font-weight: 600;
+                        color: Theme.text;
+                        vertical-alignment: center;
+                    }
+                }
+                Text {
+                    text: "Huedra " + root.update-version + " is ready to install. You have version " + root.version + ".";
+                    wrap: word-wrap;
+                    color: Theme.text;
+                }
+                if root.update-notes.length > 0: Text {
+                    text: "What's new";
+                    font-weight: 600;
+                    color: Theme.text;
+                }
+                // The list scrolls when the window is too low for it, so
+                // the buttons below always stay in view.
+                // (A Flickable rather than a ScrollView: the Fluent scroll
+                // bars would add some 20 KB to the program.)
+                if root.update-notes.length > 0: Flickable {
+                    vertical-stretch: 1;
+                    min-height: 72px;
+                    preferred-height: notes-list.preferred-height;
+                    viewport-width: self.width;
+                    viewport-height: max(self.height, notes-list.preferred-height);
+                    notes-list := VerticalLayout {
+                        width: parent.width;
+                        spacing: 6px;
+                        alignment: start;
+                        for note in root.update-notes: HorizontalLayout {
+                            spacing: note.heading ? 0px : 8px;
+                            padding-top: note.heading ? 4px : 0px;
+                            padding-right: 12px;
+                            Text {
+                                text: note.heading ? "" : "\u{2022}";
+                                width: note.heading ? 0px : 10px;
+                                color: Theme.text-muted;
+                                accessible-role: none;
+                            }
+                            Text {
+                                horizontal-stretch: 1;
+                                text: note.text;
+                                wrap: word-wrap;
+                                font-size: note.heading ? Theme.caption-size : Theme.body-size;
+                                font-weight: note.heading ? 600 : 400;
+                                color: note.heading ? Theme.text-muted : Theme.text;
+                            }
+                        }
+                    }
+                }
+                if root.update-notes.length == 0 || root.update-more > 0: Text {
+                    text: root.update-notes.length == 0
+                        ? "The list of changes is in the changelog."
+                        : "And " + root.update-more + (root.update-more == 1 ? " more change." : " more changes.");
+                    wrap: word-wrap;
+                    color: Theme.text-muted;
+                }
+                if root.update-status != "": Text {
+                    text: root.update-status;
+                    wrap: word-wrap;
+                    color: Theme.text-muted;
+                    font-size: Theme.caption-size;
+                }
+                HorizontalLayout {
+                    spacing: 8px;
+                    padding-top: 8px;
+                    if root.has-changelog: ActionButton {
+                        text: "See the full changelog";
+                        clicked => {
+                            root.open-changelog();
+                        }
+                    }
+                    Rectangle {
+                        horizontal-stretch: 1;
+                    }
+                    ActionButton {
+                        text: "Later";
+                        enabled: !root.installing-update;
+                        clicked => {
+                            root.show-update = false;
+                        }
+                    }
+                    install-button := ActionButton {
+                        text: root.installing-update ? "Installing..." : "Download and install";
+                        primary: true;
+                        enabled: !root.installing-update;
+                        clicked => {
+                            root.install-update();
+                        }
+                    }
+                }
+            }
+            init => {
+                install-button.focus();
             }
         }
     }

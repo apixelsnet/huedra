@@ -3,7 +3,7 @@
 //! (then asks the tray process to reload). Feature doc:
 //! `docs/features/08-settings-window.md`.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::thread;
 use std::time::Duration;
@@ -30,7 +30,7 @@ use crate::icons;
 use crate::lookups::{self, Lookup};
 use crate::ui::{
     DisplayRow, GameDetail, GameRow, HistoryRow, SettingsWindow, SiteRow, StoreChip, Theme,
-    VideoAppRow,
+    UpdateNote, VideoAppRow,
 };
 
 /// The window's title; also used to find an open window.
@@ -88,11 +88,19 @@ struct State {
     selected: Option<GameId>,
     /// Result of the last desktop shortcut made, for the game it was made for.
     launch_note: Option<(GameId, String)>,
+    /// The version the update dialog was last shown for in this window.
+    update_shown: Option<huedra_core::update::Version>,
 }
 
 thread_local! {
     static STATE: RefCell<Option<State>> = const { RefCell::new(None) };
+    /// Set once an update is installed: the window opens again on the new
+    /// version after it closes.
+    static REOPEN: Cell<bool> = const { Cell::new(false) };
 }
+
+/// How many changes the update dialog lists; the rest are in the changelog.
+const UPDATE_DIALOG_ITEMS: usize = 6;
 
 fn with_state<R>(f: impl FnOnce(&mut State) -> R) -> Option<R> {
     STATE.with_borrow_mut(|state| state.as_mut().map(f))
@@ -158,6 +166,7 @@ pub fn run(locations: Locations, page: Page) -> Result<(), slint::PlatformError>
         filter: "all".into(),
         selected: None,
         launch_note: None,
+        update_shown: None,
     };
     STATE.set(Some(state));
 
@@ -188,7 +197,17 @@ pub fn run(locations: Locations, page: Page) -> Result<(), slint::PlatformError>
     });
     limit_size_once_shown(0);
     log_start_time();
-    ui.run()
+    offer_update(&ui, false);
+    ui.run()?;
+    drop(ui);
+    // After an update the old window is gone, so the new version opens its
+    // own instead of bringing this one to the front.
+    if REOPEN.get()
+        && let Ok(exe) = std::env::current_exe()
+    {
+        huedra_win::process::spawn_detached(&exe, &["settings"]);
+    }
+    Ok(())
 }
 
 /// Logs how long the window took to open, measured from the process's
@@ -301,6 +320,7 @@ fn start_status_polling(ui: &SettingsWindow) {
                 };
                 let delivered = weak.upgrade_in_event_loop(move |ui| {
                     with_state(|s| show_status(&ui, s, report.as_ref()));
+                    offer_update(&ui, false);
                 });
                 if delivered.is_err() {
                     return;
@@ -1202,6 +1222,22 @@ fn install_version(path: &std::path::Path) -> String {
         .unwrap_or_default()
 }
 
+/// The version of the program file now in place, from `huedra --version`
+/// ("Huedra 1.2.3"); after an update it is newer than this process.
+fn program_version() -> Option<huedra_core::update::Version> {
+    use std::os::windows::process::CommandExt as _;
+    /// `CREATE_NO_WINDOW`: no console window for the child process.
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    let exe = std::env::current_exe().ok()?;
+    let output = std::process::Command::new(exe)
+        .arg("--version")
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+        .ok()?;
+    let text = String::from_utf8(output.stdout).ok()?;
+    text.split_whitespace().nth(1)?.parse().ok()
+}
+
 /// Runs this program with `args` and no console window, then calls `done`
 /// on the window's thread with whether it succeeded.
 fn run_program(
@@ -1244,6 +1280,7 @@ fn wire_about(ui: &SettingsWindow) {
             }
             ui.set_update_note(note.into());
             ui.set_install_version(install_version(&path).into());
+            offer_update(ui, true);
         });
     });
     let weak = ui.as_weak();
@@ -1251,15 +1288,36 @@ fn wire_about(ui: &SettingsWindow) {
         let Some(ui) = weak.upgrade() else {
             return;
         };
-        ui.set_update_note(
-            "Installing. Huedra starts again in the notification area when it is done.".into(),
+        ui.set_installing_update(true);
+        ui.set_update_status(
+            "Downloading and installing. Huedra starts again in the notification area when it is done."
+                .into(),
         );
-        ui.set_install_version("".into());
         run_program(&ui, &["update"], |ui, ok| {
-            if !ok {
-                ui.set_update_note("The update was not installed; the log has the reason.".into());
+            use huedra_core::update::Version;
+            ui.set_installing_update(false);
+            ui.set_install_version("".into());
+            // `huedra update` also succeeds when there was nothing newer to
+            // install; the program now in place tells which it was.
+            let installed = program_version().is_some_and(|v| v > Version::current());
+            if ok && installed {
+                ui.set_update_status("Installed. This window opens again with the new version.".into());
+                REOPEN.set(true);
+                let _ = slint::quit_event_loop();
+            } else if ok {
+                ui.set_update_status("Huedra is up to date; there was nothing to install.".into());
+            } else {
+                ui.set_update_status(
+                    "The update was not installed. If a game or video is using HDR, try again after it ends; otherwise the log has the reason."
+                        .into(),
+                );
             }
         });
+    });
+    ui.on_open_changelog(|| {
+        if let Some(url) = huedra_core::update::changelog_page() {
+            shell::open_web_page(&url);
+        }
     });
     ui.on_open_project(|| {
         if let Some(url) = huedra_core::update::project_page() {
@@ -1302,6 +1360,54 @@ fn wire_about(ui: &SettingsWindow) {
     ui.on_decline_disclaimer(|| {
         let _ = slint::quit_event_loop();
     });
+}
+
+/// Shows the update dialog for the version waiting, with its notes when a
+/// check kept them: once per version in this window, or again when `force`
+/// (after Check for updates). Not while the disclaimer is open.
+fn offer_update(ui: &SettingsWindow, force: bool) {
+    use huedra_core::update::{self, NoteLine, ReleaseNotes, UpdateState, Version};
+
+    if ui.get_show_disclaimer() {
+        return;
+    }
+    let Some(path) = with_state(|s| s.locations.update.clone()) else {
+        return;
+    };
+    let Some(version) = UpdateState::load(&path).waiting(Version::current()) else {
+        return;
+    };
+    if !force && with_state(|s| s.update_shown).flatten() == Some(version) {
+        return;
+    }
+    with_state(|s| s.update_shown = Some(version));
+    let max = u64::try_from(update::MAX_NOTES_BYTES).unwrap_or(u64::MAX);
+    let notes = huedra_core::files::read_limited(&update::notes_path(&path), max)
+        .ok()
+        .flatten()
+        .and_then(|text| ReleaseNotes::parse(&text, version));
+    let (lines, more) = notes
+        .map(|n| n.summary(UPDATE_DIALOG_ITEMS))
+        .unwrap_or_default();
+    let rows: Vec<UpdateNote> = lines
+        .into_iter()
+        .map(|line| match line {
+            NoteLine::Heading(text) => UpdateNote {
+                heading: true,
+                text: text.into(),
+            },
+            NoteLine::Item(text) => UpdateNote {
+                heading: false,
+                text: text.into(),
+            },
+        })
+        .collect();
+    ui.set_update_version(version.to_string().into());
+    ui.set_update_notes(ModelRc::new(VecModel::from(rows)));
+    ui.set_update_more(i32::try_from(more).unwrap_or(i32::MAX));
+    ui.set_has_changelog(update::changelog_page().is_some());
+    ui.set_update_status("".into());
+    ui.set_show_update(true);
 }
 
 /// The Updates row's extra sentence: whether this build checks, when it
