@@ -8,7 +8,7 @@
 
 ## Notes
 - Hosting is deferred. The release address and the public key are set when the program is built (`HUEDRA_UPDATE_URL`, `HUEDRA_UPDATE_KEY`, passed through by `build/remote-build.sh` from `build/local.env`). Without both, the build never checks and the General page says so. Once hosting is chosen, both values are public and can be committed (for example in a `build/release.env`).
-- A release is three files at the address: `release.toml` (version, file name, size, SHA-256 of the program), `release.toml.minisig`, and `huedra.exe`. Only the small manifest is signed; the program is trusted through the signed size and digest. A GitHub release fits: `https://github.com/<owner>/<repo>/releases/latest/download/`.
+- A release is three files at the address: `release.toml` (version, file name, size, SHA-256 of the program), `release.toml.minisig`, and `huedra.exe`. Only the small manifest is signed; the program is trusted through the signed size and digest. On GitHub the address is the fixed release `update-channel` (`https://github.com/<owner>/<repo>/releases/download/update-channel/`), which every release refreshes; GitHub's `releases/latest/download/` would skip the beta pre-releases.
 - Signing key: made once with `minisign -G` (password-protected), kept on the owner's PC outside the repository. `build/pack-release.ps1 -SecretKey <path>` signs. minisign for Windows: `winget install jedisct1.minisign`. Losing the key means a new key in a new build, and users must update by hand once.
 
 ## Done when

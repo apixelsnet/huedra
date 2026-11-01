@@ -58,7 +58,7 @@ Pre-release checklist (testers on other machines, before the first public releas
 
 ## Result (2026-11-01) — phase 5
 Code: `build/pack-release.ps1`, `startup_entry` in `crates/huedra/src/app.rs`, `uninstall` in `crates/huedra/src/launch.rs`, `minisign` in `build/Dockerfile`, update variables in `build/remote-build.sh`; `README.md`, `SECURITY.md`, `CHANGELOG.md`.
-- `pack-release.ps1` reads the version from `huedra.exe --version` and writes `dist\release\<version>\`: `huedra.exe`, `release.toml` (LF, no byte-order mark) and `huedra-<version>-windows-x64.zip` (program, README, SECURITY, CHANGELOG, PRIVACY, LICENSE-MIT and LICENSE-APACHE). With `-SecretKey` it signs the manifest and the zip with minisign.
+- `pack-release.ps1` reads the version from `huedra.exe --version` and writes `dist\release\<version>\`: `huedra.exe`, `release.toml` (LF, no byte-order mark) and `huedra-<version>-windows-x64.zip` (program, README, SECURITY, CHANGELOG, PRIVACY and LICENSE). With `-SecretKey` it signs the manifest and the zip with minisign.
 - Start-up entry: written on the first start (no settings file yet) of a non-portable copy, because Start with Windows is on by default; rewritten when the entry names a program that no longer exists. Portable copies never touch it.
 - `uninstall` now names both data folders (roaming and local).
 - README follows Best-README-Template, with the questions from the plan (anti-cheat, what leaves the PC, SmartScreen, the black flash, removal, tested hardware).
@@ -104,4 +104,11 @@ Not verified: `release.yml` (no tag pushed yet); signing in Actions (no secret s
 - Started with Release > Run workflow (version 0.1.0): the workflow tagged `v0.1.0` on `main`, ran every CI check with that version, signed and published "Huedra 0.1.0" with the zip (5,358,375 bytes), `huedra.exe` (9,944,576 bytes, update key built in), `release.toml`, both signatures, the extension zip (0.3.0) and `SHA256SUMS`. Notes: the 0.1.0 section of `CHANGELOG.md`, then GitHub's list.
 - Verified on this PC from the downloaded files: both signatures verify with the release public key (trusted comment "huedra 0.1.0"); every SHA-256 in `SHA256SUMS` matches; `release.toml` names the exe's size and digest; `huedra.exe --version` prints 0.1.0; a portable copy of the release ran `huedra update --check --from` on the release files and answered "Huedra 0.1.0 is up to date", so the program's own signature check accepts the signature made in Actions.
 - Not verified: a download through the release address (the repository is private, so the address answers "not found" to the program); an update from 0.1.0 to a later release.
+
+## Result (2026-11-01) — one licence, betas, fewer downloads
+- Licence: Apache-2.0 only, chosen by the owner over the MIT/Apache pair (`LICENSE`; `license = "Apache-2.0"`). README: licence, contribution terms (section 5) and a Disclaimer section (beta, no warranty, display settings, anti-cheat, no affiliation, game information).
+- Releases before 1.0.0 are GitHub pre-releases titled "Huedra x.y.z beta"; 1.0.0 and later are normal releases.
+- A version's release holds only what people download: the program zip, its signature and `huedra-browser-extension-<version>.zip`. The notes start with a Downloads table (which file to take) and the minisign command with the public key, then the changelog section. `SHA256SUMS` is gone: GitHub shows each file's SHA-256.
+- The updater's files (`huedra.exe`, `release.toml`, `release.toml.minisig`) go to the fixed pre-release `update-channel`, program first and manifest last. `HUEDRA_UPDATE_URL` points there, because `releases/latest/download/` skips pre-releases.
+- 0.1.0, first published as a normal release with the `latest` address built in, was withdrawn and published again as a beta.
 

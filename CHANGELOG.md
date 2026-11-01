@@ -31,6 +31,7 @@ First release.
 - Timing lines in the log: start-up, game library scan, settings window and switch requests.
 
 ### Project
-- Licensed under MIT or Apache-2.0.
+- Licensed under the Apache License 2.0.
+- Releases before 1.0.0 are betas, published as pre-releases.
 - README, SECURITY.md and changelogs for the program and the extension.
 - GitHub Actions: every push and pull request is built and tested; a `v<version>` tag publishes a release.

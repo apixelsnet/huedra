@@ -11,11 +11,13 @@ name: Release
 # edited first. Versions are MAJOR.MINOR.PATCH only; the updater and the Windows
 # version resource have no pre-release part.
 #
-# Out comes a GitHub release with the program zip, huedra.exe, release.toml (the
-# updater's manifest), their minisign signatures when the MINISIGN_SECRET_KEY and
-# MINISIGN_PASSWORD secrets are set, the browser extension's zip and SHA256SUMS.
-# The notes are the version's section of CHANGELOG.md, or its Unreleased section,
-# followed by the list GitHub writes. Feature docs: 11-updates.md, 12-packaging.md.
+# Out comes a GitHub release with the program zip, its minisign signature and the
+# browser extension's zip; releases before 1.0.0 are pre-releases titled "beta".
+# The notes start with a table of the downloads, then the version's section of
+# CHANGELOG.md (or its Unreleased section), then the list GitHub writes. The files
+# the updater reads (huedra.exe, release.toml and its signature) go to the fixed
+# release "update-channel". Signing needs the MINISIGN_SECRET_KEY and
+# MINISIGN_PASSWORD secrets. Feature docs: 11-updates.md, 12-packaging.md.
 
 on:
   push:
@@ -150,7 +152,21 @@ jobs:
       - name: The program is the tag's version
         run: grep -x "version = \"$VERSION\"" dist/release.toml
 
-      - name: Release notes from CHANGELOG.md
+      - name: Sort the files
+        run: |
+          set -euo pipefail
+          # What people download goes on the version's release; what the
+          # updater reads goes on the update channel.
+          mkdir download channel
+          mv "dist/huedra-$VERSION-windows-x64.zip" download/
+          extension=$(ls dist/huedra-extension-*.zip)
+          mv "$extension" "download/huedra-browser-extension-$(basename "$extension" .zip | sed 's/^huedra-extension-//').zip"
+          mv dist/huedra.exe dist/release.toml channel/
+          ls -l download channel
+
+      - name: Release notes
+        env:
+          PUBLIC_KEY: ${{ vars.HUEDRA_UPDATE_KEY }}
         run: |
           set -euo pipefail
           section() {
@@ -159,12 +175,39 @@ jobs:
               found { print }
             ' CHANGELOG.md | sed '/./,$!d'
           }
-          section "$VERSION" > notes.md
-          if ! grep -q . notes.md; then section Unreleased > notes.md; fi
-          if ! grep -q . notes.md; then
+          section "$VERSION" > changes.md
+          if ! grep -q . changes.md; then section Unreleased > changes.md; fi
+          if ! grep -q . changes.md; then
             echo "::error::CHANGELOG.md has neither a section '## $VERSION' nor anything under '## Unreleased'."
             exit 1
           fi
+          extension=$(basename download/huedra-browser-extension-*.zip)
+          {
+            if [ "${VERSION%%.*}" = 0 ]; then
+              echo "> **Beta.** A pre-release for testing; read the [disclaimer](https://github.com/$GITHUB_REPOSITORY#disclaimer) first."
+              echo
+            fi
+            echo "## Downloads"
+            echo
+            echo "| File | What it is |"
+            echo "| --- | --- |"
+            echo "| **huedra-$VERSION-windows-x64.zip** | **The program. Download this one**, unpack it into a folder of your own and start \`huedra.exe\`. Windows 10 (1903 or later) or 11, x64. |"
+            echo "| huedra-$VERSION-windows-x64.zip.minisig | Signature of the zip, to check it with [minisign](https://jedisct1.github.io/minisign/) (optional). |"
+            echo "| $extension | The browser extension, for HDR video on YouTube and streaming sites. Optional; until it is in the browser stores, load it unpacked in developer mode. |"
+            echo "| Source code | Added by GitHub. Not needed to run Huedra. |"
+            echo
+            if [ -n "$PUBLIC_KEY" ]; then
+              echo "Check the download (optional):"
+              echo
+              echo '```'
+              echo "minisign -Vm huedra-$VERSION-windows-x64.zip -P $PUBLIC_KEY"
+              echo '```'
+              echo
+            fi
+            echo "## Changes"
+            echo
+            cat changes.md
+          } > notes.md
           cat notes.md
 
       - name: Sign
@@ -183,19 +226,47 @@ jobs:
           umask 077
           printf '%s\n' "$MINISIGN_SECRET_KEY" > "$key"
           printf '%s\n' "$MINISIGN_PASSWORD" | minisign -S -s "$key" -t "huedra $VERSION" \
-            -m dist/release.toml "dist/huedra-$VERSION-windows-x64.zip"
+            -m channel/release.toml "download/huedra-$VERSION-windows-x64.zip"
           rm -f "$key"
 
       - name: Publish the release
-        working-directory: dist
         run: |
           set -euo pipefail
-          sha256sum -- * > SHA256SUMS
-          cat SHA256SUMS
+          # Releases before 1.0.0 are betas.
+          title="Huedra $VERSION"
+          flags=()
+          if [ "${VERSION%%.*}" = 0 ]; then
+            title="$title beta"
+            flags+=(--prerelease)
+          fi
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
             # Run again for a release that is there already: put the new files in its place.
-            gh release upload "$TAG" ./* --clobber --repo "$GITHUB_REPOSITORY"
+            gh release upload "$TAG" download/* --clobber --repo "$GITHUB_REPOSITORY"
+            gh release edit "$TAG" --title "$title" --notes-file notes.md "${flags[@]}" --repo "$GITHUB_REPOSITORY"
           else
-            gh release create "$TAG" ./* --title "Huedra $VERSION" --notes-file ../notes.md \
-              --generate-notes --verify-tag --repo "$GITHUB_REPOSITORY"
+            gh release create "$TAG" download/* --title "$title" --notes-file notes.md \
+              --generate-notes --verify-tag "${flags[@]}" --repo "$GITHUB_REPOSITORY"
           fi
+
+      # The updater reads https://github.com/<repository>/releases/download/update-channel/
+      # (repository variable HUEDRA_UPDATE_URL): one fixed place, because GitHub's
+      # "latest" address skips pre-releases. Every release replaces its files.
+      - name: Update the update channel
+        run: |
+          set -euo pipefail
+          channel=update-channel
+          if ! gh release view "$channel" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release create "$channel" --target "$(git rev-parse HEAD)" --prerelease --latest=false \
+              --title "Update channel" \
+              --notes "Files Huedra's automatic updates read. To install Huedra, download the program zip from a numbered release instead." \
+              --repo "$GITHUB_REPOSITORY"
+          fi
+          # The program first and the manifest last, so the signed manifest never
+          # names a program that is not there yet.
+          if [ ! -f channel/release.toml.minisig ]; then
+            echo "::warning::Not signed, so the update channel is left as it was."
+            exit 0
+          fi
+          gh release upload "$channel" channel/huedra.exe --clobber --repo "$GITHUB_REPOSITORY"
+          gh release upload "$channel" channel/release.toml.minisig --clobber --repo "$GITHUB_REPOSITORY"
+          gh release upload "$channel" channel/release.toml --clobber --repo "$GITHUB_REPOSITORY"

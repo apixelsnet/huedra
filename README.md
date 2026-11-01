@@ -8,7 +8,7 @@
   </p>
 </div>
 
-> **Status:** release candidate. Everything below works on the developer's PC; the first public release waits for a licence and a release location. There is nothing to download yet.
+> **Status: beta.** Releases before 1.0.0 are pre-releases for testing. Huedra changes a Windows display setting; read the [disclaimer](#disclaimer) before you use it.
 
 ## Table of contents
 
@@ -21,6 +21,7 @@
 - [Contributing](#contributing)
 - [Roadmap](#roadmap)
 - [Licence](#licence)
+- [Disclaimer](#disclaimer)
 - [Acknowledgements](#acknowledgements)
 
 ## About
@@ -44,7 +45,7 @@ Huedra is a small Windows tray application. It watches for games and HDR video, 
 
 Requirements: Windows 10 version 1903 or later, or Windows 11, on x64, and a display that supports HDR.
 
-1. Download `huedra-<version>-windows-x64.zip` from the release page and unpack it into a folder of your own, for example `%LOCALAPPDATA%\Programs\Huedra`. The folder must stay writable for updates.
+1. Download `huedra-<version>-windows-x64.zip` from the newest release on the [releases page](../../releases) (betas are marked Pre-release) and unpack it into a folder of your own, for example `%LOCALAPPDATA%\Programs\Huedra`. The folder must stay writable for updates.
 2. Optionally verify the download with [minisign](https://jedisct1.github.io/minisign/) and the public key published with the release:
    ```powershell
    minisign -Vm huedra-<version>-windows-x64.zip -P <public key>
@@ -148,16 +149,20 @@ Each feature has a short document in [`docs/features`](docs/features), stating i
 
 ## Licence
 
-Huedra is licensed under either of
+Huedra is licensed under the [Apache License, Version 2.0](LICENSE).
 
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
-- MIT License ([LICENSE-MIT](LICENSE-MIT))
-
-at your option.
-
-Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in Huedra by you, as defined in the Apache-2.0 licence, shall be dual licensed as above, without any additional terms or conditions.
+Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in Huedra by you shall be licensed under the Apache License 2.0, as its section 5 says, without any additional terms or conditions.
 
 The settings window uses [Slint](https://slint.dev) under the Slint Royalty-free Desktop, Mobile, and Web Applications License 2.0; its attribution is in General > About.
+
+## Disclaimer
+
+- **Beta software.** Huedra is in beta. It may have bugs, and its behaviour and settings may change between releases.
+- **No warranty.** Huedra is provided "as is", without warranty of any kind, as set out in sections 7 and 8 of the [licence](LICENSE). You use it at your own risk.
+- **Your display settings.** Huedra turns Windows HDR on and off for you. A failed or interrupted switch can leave a display in HDR or SDR until you change it back under Windows Settings > System > Display, or with `huedra hdr off --display all`. Huedra never changes a display's firmware or hardware settings.
+- **Games and anti-cheat.** Huedra does not read or change other programs' memory and does not inject code. Even so, no game publisher has reviewed or approved it, and the project cannot promise how any anti-cheat system will treat it.
+- **Not affiliated.** Huedra is an independent project. It is not affiliated with, endorsed by or sponsored by Microsoft, NVIDIA, AMD, Intel, Valve, Epic Games, GOG, Ubisoft, Electronic Arts, Rockstar Games, Google, Mozilla, PCGamingWiki, Discord, or any streaming service, nor by the SmartHdrManager project. Product names and trademarks belong to their owners and are used only to say what Huedra works with.
+- **Game information.** Details shown about games come from PCGamingWiki and Discord and may be incomplete or wrong.
 
 ## Acknowledgements
 
