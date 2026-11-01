@@ -105,3 +105,5 @@ Not verified: display scales other than this PC's, and the light theme with HDR 
 
 ## Result (2026-11-01) — supporter note
 - About: the support caption adds that supporters are thanked by name and get preview builds before each release. Every feature stays free; nothing is locked behind support (owner's decision).
+
+Verified by the owner on this PC (2026-11-01, build a84f210): About shows the new caption.
