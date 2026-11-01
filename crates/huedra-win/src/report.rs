@@ -1,12 +1,10 @@
-//! Problem reports on Windows: recording a crash, offering on the next start
+//! Problem reports on Windows: offering on the next start after a crash
 //! to copy the details, and copying them. Huedra sends nothing itself; the
 //! person pastes the details wherever they report the problem.
 //! Feature doc: `docs/features/14-problem-reports.md`.
 
-use std::ffi::c_void;
 use std::fs;
 use std::path::PathBuf;
-use std::sync::OnceLock;
 
 use huedra_core::locations::Locations;
 use huedra_core::report::{self, Details};
@@ -14,8 +12,6 @@ use windows::Win32::Foundation::{GlobalFree, HANDLE, HWND};
 use windows::Win32::System::DataExchange::{
     CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData,
 };
-use windows::Win32::System::Diagnostics::Debug::{EXCEPTION_POINTERS, SetUnhandledExceptionFilter};
-use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Memory::{GMEM_MOVEABLE, GlobalAlloc, GlobalLock, GlobalUnlock};
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DestroyWindow, HWND_MESSAGE, IDYES, MB_ICONWARNING, MB_YESNO, MessageBoxW,
@@ -24,70 +20,16 @@ use windows::Win32::UI::WindowsAndMessaging::{
 use windows::core::{HSTRING, PCWSTR, w};
 
 use crate::registry::{self, Hive};
-use crate::{clock, shell};
+use crate::shell;
 
 /// `CF_UNICODETEXT`: UTF-16 text on the clipboard.
 const CLIPBOARD_TEXT: u32 = 13;
-/// What an unhandled-exception filter returns to let Windows end the
-/// process as it would without one.
-const EXCEPTION_CONTINUE_SEARCH: i32 = 0;
-/// Addresses this far past the program's start are shown as an offset into
-/// it, which stays the same between runs.
-const MAX_IMAGE_OFFSET: usize = 64 << 20;
 const VERSION_KEY: &str = r"SOFTWARE\Microsoft\Windows NT\CurrentVersion";
 
 const OFFER_TITLE: &str = "Huedra closed unexpectedly";
 const OFFER_TEXT: &str = "Huedra stopped after an error the last time it ran.\n\n\
     Copy the details to the clipboard and open the log folder, so you can \
     send them with a problem report? Huedra itself sends nothing.";
-
-/// Where a Windows-level crash is written, and which part of Huedra it was.
-static CRASH_FILE: OnceLock<(PathBuf, &'static str)> = OnceLock::new();
-
-/// Writes a crash file when the process ends on a Windows exception (an
-/// access violation, for example). Rust panics are written by the panic
-/// hook instead. Best effort: a damaged process may not manage to write.
-pub fn record_native_crashes(path: PathBuf, role: &'static str) {
-    if CRASH_FILE.set((path, role)).is_ok() {
-        // SAFETY: installs a process-wide filter; the function is static and
-        // stays valid for the life of the process.
-        let _ = unsafe { SetUnhandledExceptionFilter(Some(on_unhandled_exception)) };
-    }
-}
-
-unsafe extern "system" fn on_unhandled_exception(info: *const EXCEPTION_POINTERS) -> i32 {
-    if let Some((path, role)) = CRASH_FILE.get() {
-        // SAFETY: Windows passes the filter a pointer to valid exception
-        // information (or null, which `as_ref` turns into `None`).
-        let record = unsafe { info.as_ref().and_then(|i| i.ExceptionRecord.as_ref()) };
-        let message = record.map_or_else(
-            || "a Windows exception".to_owned(),
-            |r| {
-                format!(
-                    "Windows exception 0x{:08X} at {}",
-                    r.ExceptionCode.0,
-                    address(r.ExceptionAddress)
-                )
-            },
-        );
-        let entry = report::crash_entry(&clock::now().to_string(), role, &message);
-        let _ = fs::write(path, entry);
-    }
-    EXCEPTION_CONTINUE_SEARCH
-}
-
-/// "huedra.exe+0x1234" when the address is inside the program.
-fn address(at: *mut c_void) -> String {
-    let at = at.addr();
-    // SAFETY: the handle of this program's own module; nothing to free.
-    let base = unsafe { GetModuleHandleW(None) }.map_or(0, |m| m.0.addr());
-    match at.checked_sub(base) {
-        Some(offset) if base != 0 && offset < MAX_IMAGE_OFFSET => {
-            format!("huedra.exe+0x{offset:X}")
-        }
-        _ => format!("0x{at:X}"),
-    }
-}
 
 /// When the last run crashed, asks once whether to copy the details. The
 /// question waits on its own thread, so the caller goes on starting.

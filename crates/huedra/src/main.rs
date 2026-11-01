@@ -84,7 +84,6 @@ fn record_crashes(role: &'static str) {
         return;
     };
     huedra_win::report::offer_after_crash(&locations);
-    huedra_win::report::record_native_crashes(locations.crash.clone(), role);
     let log = LogFile::new(locations.log, logfile::MAX_BYTES);
     let crash = locations.crash;
     let previous = std::panic::take_hook();
