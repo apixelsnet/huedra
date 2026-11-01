@@ -25,7 +25,7 @@ First release.
 - Aware of RTX Video HDR for SDR video in full screen.
 
 ### Settings and updates
-- Settings window with Status, Games, Video players, Displays and General pages.
+- Settings window with Status, Games, Video players, Displays and General pages, usable with the keyboard alone; every control has a name for screen readers.
 - Signed updates: a daily check (Install automatically, Ask before installing, or Off), `huedra update`, `--check`, `--from <folder>` and `--rollback`. A release is verified with minisign and SHA-256 before anything is replaced, and the previous version is kept.
 - Starts with Windows (set up on first start); `huedra uninstall` removes every registry entry Huedra wrote.
 - Timing lines in the log: start-up, game library scan, settings window and switch requests.

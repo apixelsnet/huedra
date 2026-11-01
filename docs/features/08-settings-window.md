@@ -77,3 +77,11 @@ Verified on this PC on a hidden desktop: the switch is on with no `content_only`
 - The log records "Settings window opened in N ms", from process creation to the first turn of the window's event loop (the window is shown by then; its first frame is drawn on that turn or the next).
 
 Verified on this PC on a hidden desktop: the Updates text in a build without a release address (captured); opening times 51, 39, 38, 40 ms (target 300 ms).
+
+## Result (2026-11-01) — names for screen readers
+Code: `SearchField` and `Toggle` (`spoken-text`) in `crates/huedra-ui/ui/controls.slint`; `ModeSelector`, the game list and the display switches in `pages.slint`.
+- Checked by reading the UI Automation tree of all five pages (what Narrator and NVDA read), on a hidden desktop. Before: the search field showed as two edit fields, one without a name; the mode selector and the game list had no name; both display switches read "Managed".
+- Now: one edit field "Search 22 games"; "Mode" (Automatic, Always HDR, Always SDR); list "Games"; "Manage Display 1 · MO27Q3" and "Manage Display 2 · LG ULTRAGEAR" (the visible text stays Managed / Not managed). No interactive control is left without a name: 16 buttons and switches, 4 drop-downs, 4 number fields, 2 edit fields, 9 list items, 28 tabs.
+
+Verified: CI green on the branch (build of the fix); the UI Automation tree above. Not verified: Narrator or NVDA actually speaking the pages (needs sound and a person); the navigation pane's items expose no selection pattern, so a screen reader may not announce which page is current.
+
