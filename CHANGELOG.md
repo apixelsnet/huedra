@@ -4,7 +4,7 @@ Changes that matter to people using Huedra (not the project's own build and work
 
 ## Unreleased
 
-## 0.2.0 — 2026-11-01
+## 0.1.1 — 2026-11-01
 
 ### Added
 - A disclaimer on first start. Huedra does not run, and never changes HDR, until it is accepted; it can be read again under General › About.
