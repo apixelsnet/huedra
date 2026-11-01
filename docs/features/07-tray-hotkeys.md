@@ -44,3 +44,7 @@ Code: `crates/huedra-core/src/icon.rs`.
 - The icon is now the visible colour gamut (CIE 1931 spectral locus, drawn a quarter wider than its true proportions): in HDR filled with the BT.2020 palette round the edge (green at the top, pink to the right, violet and ultramarine below, cyan on the left, no yellow) with a white glow at the white point and the white BT.2020 triangle from 32 pixels up; in SDR a grey outline of the same shape. The same `render` draws the tray icon, the program icon, the settings window's logo and the extension icons.
 - Tests: shape filled and outline hollow at the white point, corners clear, green on top and pink on the right, no yellow anywhere in the palette sweep.
 Verified: unit tests in CI; a preview of the same drawing at 16 to 256 pixels on dark and light backgrounds; the 16-pixel SDR outline is still recognisable. Not verified: the tray icon in the owner's own notification area (the new build is not installed there yet).
+
+## Result (2026-11-01) — Ko-fi menu item
+Code: `crates/huedra/src/app.rs` (`MENU_SUPPORT`).
+- Menu item **Support Huedra on Ko-fi...** between Open Huedra and Exit; opens `update::SUPPORT_URL` with `shell::open_web_page` (https only) and logs a line if the browser cannot be started.

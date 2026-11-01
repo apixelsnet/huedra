@@ -102,3 +102,6 @@ Code: `set_icon` in `crates/huedra-win/src/instance.rs`; `HeroCard` in `crates/h
 
 Verified on this PC on a hidden desktop: the title bar shows the gamut icon (WM_GETICON returns small and large icons); the switch shows on with no `manual` line in the file, off wrote `manual = "all"`, on again `manual = "main"`; with the tray switching Display 1 to HDR, the card, chart and navigation status went from SDR to HDR and back (captured frames for the README tour).
 Not verified: display scales other than this PC's, and the light theme with HDR on.
+
+## Result (2026-11-01) — supporter note
+- About: the support caption adds that supporters are thanked by name and get preview builds before each release. Every feature stays free; nothing is locked behind support (owner's decision).

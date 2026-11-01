@@ -207,6 +207,10 @@ jobs:
             echo "## Changes"
             echo
             cat changes.md
+            echo
+            echo "## Thank you"
+            echo
+            echo "Thank you to everyone who supports Huedra: the [supporters](https://github.com/$GITHUB_REPOSITORY/blob/main/SUPPORTERS.md) and everyone who reports problems and tests."
           } > notes.md
           cat notes.md
           # The same changes for the update dialog in the program, signed with the

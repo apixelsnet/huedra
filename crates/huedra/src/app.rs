@@ -58,6 +58,7 @@ const MENU_PAUSE: u32 = 21;
 const MENU_OPEN: u32 = 30;
 const MENU_EXIT: u32 = 31;
 const MENU_UPDATE: u32 = 32;
+const MENU_SUPPORT: u32 = 33;
 
 /// Runs the tray process until it is told to exit.
 pub fn run() -> anyhow::Result<()> {
@@ -807,6 +808,7 @@ impl App {
             ));
         }
         entries.push(item(MENU_OPEN, "Open Huedra"));
+        entries.push(item(MENU_SUPPORT, "Support Huedra on Ko-fi..."));
         entries.push(item(MENU_EXIT, "Exit"));
 
         let now = Instant::now(); // the menu may have been open a while
@@ -824,6 +826,11 @@ impl App {
             // The settings window shows the update dialog: what is new,
             // and Download and install.
             Some(MENU_UPDATE) => crate::open_settings(),
+            Some(MENU_SUPPORT) => {
+                if !huedra_win::shell::open_web_page(update::SUPPORT_URL) {
+                    self.log_line("Could not open the Ko-fi page in the browser.");
+                }
+            }
             Some(MENU_EXIT) => return Flow::Exit,
             _ => {}
         }
