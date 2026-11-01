@@ -1,6 +1,6 @@
 # 14 — Problem reports
 
-When Huedra crashes, the next start offers to copy the details for a problem report. **General › About › Report a problem** copies them at any time. Huedra sends nothing itself: the person reads and pastes the details wherever they report the problem.
+When Huedra crashes, the next start offers to copy the details for a problem report. **Report a problem...** in the tray menu copies them at any time. Huedra sends nothing itself: the person reads and pastes the details wherever they report the problem.
 
 ## Scope
 - Crash file `crash.txt` in the local data folder, one entry: time, version, role (tray or settings window) and the reason. Written by the panic hook (Rust panics; release builds abort) and by an unhandled-exception filter (Windows exceptions such as access violations, with the address as an offset into `huedra.exe`).
@@ -9,10 +9,10 @@ When Huedra crashes, the next start offers to copy the details for a problem rep
 - Copy and open: UTF-16 text on the clipboard (a message-only window owns it), Explorer opened with `huedra.log` selected.
 
 ## Notes
-- Chosen by the owner (2026-11-01): copy the details and open the log rather than a prefilled GitHub issue, so it works without a GitHub account; offered after a crash and from About.
+- Chosen by the owner (2026-11-01): copy the details and open the log rather than a prefilled GitHub issue, so it works without a GitHub account; offered after a crash and from a menu. A Report a problem button under General › About made the exe 10,018,816 bytes, over the 10 MB limit, so the owner moved it to the tray menu (menu items need no Slint code).
 - A crash that damages the process may leave no file; `__fastfail` and killing the process skip both handlers.
 
 ## Result (2026-11-01)
-Code: `crates/huedra-core/src/report.rs` (crash entry, Windows name, report text, profile redaction), `crates/huedra-win/src/report.rs` (exception filter, offer, clipboard), `crates/huedra-win/src/shell.rs` (`show_in_folder`), `crates/huedra/src/main.rs` (`record_crashes`), `crates/huedra-ui/src/app.rs` and `ui/pages.slint` (Report a problem), `crates/huedra-core/src/locations.rs` (`crash`, `last_crash`).
+Code: `crates/huedra-core/src/report.rs` (crash entry, Windows name, report text, profile redaction), `crates/huedra-win/src/report.rs` (exception filter, offer, clipboard), `crates/huedra-win/src/shell.rs` (`show_in_folder`), `crates/huedra/src/main.rs` (`record_crashes`), `crates/huedra/src/app.rs` (tray menu item `MENU_REPORT`), `crates/huedra-core/src/locations.rs` (`crash`, `last_crash`).
 - Tests: Windows 10 and 11 names, report layout with the newest 100 lines, "None recorded." without a crash, profile hidden in any case but not inside a longer folder name, short logs.
 Not verified yet: a real crash and the dialog on the next start, the clipboard and Explorer on this PC.
