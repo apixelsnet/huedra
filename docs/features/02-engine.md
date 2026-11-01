@@ -36,3 +36,11 @@ Verified: unit test (no window, then one display, moving to the other with hold 
 Not verified on this PC: a real switch of one display while the other stays in SDR.
 
 Status: done.
+
+## Result (2026-11-01) — Always HDR and the shortcut on the main display
+Code: `Engine::set_manual_target` and `manual_covers` in `crates/huedra-core/src/engine.rs`; `manual_target` in `crates/huedra/src/app.rs`.
+- The engine keeps a manual target for Always HDR mode and the "Turn HDR on or off" shortcut. A display outside it follows Automatic mode while Always HDR is on, so a game on the second display still switches it. Turning HDR off with the shortcut still turns every display off.
+- The tray sets it from Displays › Always HDR on the main display only (default on): the Windows primary display, or the lowest-numbered managed display when the primary one is not managed; every managed display when the setting is off. It is set again when displays change and when the settings are reloaded. A target that covers no managed display falls back to all of them.
+
+Verified: unit test (shortcut and Always HDR switch only the main display, a game on display 2 still switches it, every display when set to all, changing the setting switches nothing, fallback when the main display is gone). Build green, 99 core tests. On this PC with two HDR displays: Always HDR turned on Display 1 (MO27Q3) only, Display 2 (LG ULTRAGEAR) stayed in SDR, and Automatic returned Display 1 to SDR after the hold time (log, twice).
+Not verified on this PC: the shortcut (same engine path as Always HDR), and a primary display that is not managed.

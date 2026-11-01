@@ -33,7 +33,7 @@ Windows HDR makes HDR games and video look as intended, but it makes the desktop
 | --- | --- |
 | **Games, found automatically** | Reads the libraries of Steam, Epic Games, GOG, Xbox, Ubisoft Connect, EA app and Rockstar Games. HDR turns on while a game runs, with an optional delay and hold time per game. |
 | **HDR video** | VLC, mpv, MPC-HC, MPC-BE and PotPlayer, by the title of the file playing. YouTube and streaming sites through the Huedra browser extension. RTX Video HDR aware. |
-| **The right display** | Only the display showing the game or video switches, and HDR follows the window to another display. |
+| **The right display** | Only the display showing the game or video switches, and HDR follows the window to another display. Always HDR mode and the shortcut switch only the main display, unless you choose every display. |
 | **Start with HDR** | For games that misbehave when HDR changes while they start: a Steam launch option, a desktop shortcut, or a File Explorer menu entry turns HDR on first. |
 | **Light on the system** | One small executable, no installer, no background polling: Huedra waits for Windows to report a change. About 2 MB of memory. |
 | **Safe by design** | Runs without administrator rights. Never reads or writes another program's memory. Updates install only with a valid signature, and the previous version is kept. |

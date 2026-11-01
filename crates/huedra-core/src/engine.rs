@@ -217,18 +217,22 @@ pub struct Engine {
     default_hold: Duration,
     slots: BTreeMap<DisplayId, Slot>,
     active: BTreeMap<TriggerId, Active>,
+    /// The displays Always HDR mode and the shortcut turn on.
+    manual: Target,
 }
 
 impl Engine {
     /// Starts with the managed displays as they are now. Displays in `owned`
     /// (from the recovery record) that are in HDR are treated as turned on by
     /// Huedra, so they return to SDR after `default_hold` unless a trigger
-    /// starts; every other display in HDR is left alone.
+    /// starts; every other display in HDR is left alone. `manual` is the set
+    /// of displays Always HDR mode and the shortcut turn on.
     pub fn new(
         mode: Mode,
         default_hold: Duration,
         displays: &[(DisplayId, HdrState)],
         owned: &[DisplayId],
+        manual: Target,
         now: Instant,
     ) -> (Self, Outcome) {
         let slots = displays
@@ -255,6 +259,7 @@ impl Engine {
             default_hold,
             slots,
             active: BTreeMap::new(),
+            manual,
         };
         let mut outcome = Outcome::default();
         engine.evaluate(now, &mut outcome);
@@ -264,6 +269,24 @@ impl Engine {
     /// Current mode.
     pub fn mode(&self) -> Mode {
         self.mode
+    }
+
+    /// Changes the displays Always HDR mode and the shortcut turn on. A
+    /// display it no longer covers keeps its state and follows Automatic
+    /// mode from now on.
+    pub fn set_manual_target(&mut self, now: Instant, manual: Target) -> Outcome {
+        if self.manual == manual {
+            return Outcome::default();
+        }
+        self.manual = manual;
+        self.run(now)
+    }
+
+    /// Whether Always HDR mode and the shortcut turn this display on. A
+    /// target that covers none of the managed displays (its display was
+    /// disconnected) falls back to all of them, so the two never do nothing.
+    fn manual_covers(&self, id: &DisplayId) -> bool {
+        self.manual.covers(id) || !self.slots.keys().any(|d| self.manual.covers(d))
     }
 
     /// Changes the hold time used when no trigger supplied one.
@@ -387,7 +410,16 @@ impl Engine {
             if self.mode == Mode::AlwaysSdr {
                 self.mode = Mode::Automatic;
             }
+            let covered: Vec<DisplayId> = self
+                .slots
+                .keys()
+                .filter(|d| self.manual_covers(d))
+                .cloned()
+                .collect();
             for (id, slot) in &mut self.slots {
+                if !covered.contains(id) {
+                    continue;
+                }
                 slot.phase = Phase::HdrExternal;
                 switch(
                     &mut outcome,
@@ -557,6 +589,12 @@ impl Engine {
             self.paused_until = None;
         }
         let mode = self.mode;
+        let manual: BTreeSet<DisplayId> = self
+            .slots
+            .keys()
+            .filter(|d| self.manual_covers(d))
+            .cloned()
+            .collect();
         let default_hold = self.default_hold;
         let active = &self.active;
         for (id, slot) in &mut self.slots {
@@ -580,6 +618,12 @@ impl Engine {
             let pending = live().map(|(_, a)| a.started + a.trigger.delay).min();
             let hold = slot.holder.as_ref().map_or(default_hold, |h| h.hold);
             let off_reason = closed_reason(slot.holder.as_ref(), active, hold);
+            // Always HDR covers only the manual target; the other displays
+            // keep following their games and video.
+            let mode = match mode {
+                Mode::AlwaysHdr if !manual.contains(id) => Mode::Automatic,
+                mode => mode,
+            };
             match mode {
                 Mode::AlwaysHdr => match slot.phase {
                     Phase::Sdr | Phase::Waiting { .. } => {
@@ -694,7 +738,14 @@ mod tests {
     fn engine(state: HdrState, owned: bool) -> (Engine, Instant) {
         let now = Instant::now();
         let owned = if owned { vec![display()] } else { vec![] };
-        let (engine, _) = Engine::new(Mode::Automatic, HOLD, &[(display(), state)], &owned, now);
+        let (engine, _) = Engine::new(
+            Mode::Automatic,
+            HOLD,
+            &[(display(), state)],
+            &owned,
+            Target::All,
+            now,
+        );
         (engine, now)
     }
 
@@ -918,6 +969,65 @@ mod tests {
     }
 
     #[test]
+    fn manual_target_limits_always_hdr_and_the_shortcut() {
+        let t0 = Instant::now();
+        let (one, two) = (display(), DisplayId::new("monitor-2"));
+        let both = [(one.clone(), HdrState::Off), (two.clone(), HdrState::Off)];
+        let main = Target::Only(BTreeSet::from([one.clone()]));
+        let (mut e, _) = Engine::new(Mode::Automatic, HOLD, &both, &[], main, t0);
+        let only = |d: &DisplayId, state| {
+            vec![Action {
+                display: d.clone(),
+                state,
+            }]
+        };
+
+        assert_eq!(
+            e.toggle(t0).actions,
+            only(&one, HdrState::On),
+            "shortcut: main only"
+        );
+        assert_eq!(
+            e.toggle(t0).actions,
+            only(&one, HdrState::Off),
+            "shortcut off"
+        );
+        assert_eq!(
+            e.set_mode(t0, Mode::AlwaysHdr).actions,
+            only(&one, HdrState::On),
+            "Always HDR: main only"
+        );
+
+        // The other display still follows a game shown on it.
+        let mut on_two = game(0);
+        on_two.target = Target::Only(BTreeSet::from([two.clone()]));
+        let out = e.trigger_started(t0, TriggerId::new("a"), on_two);
+        assert_eq!(out.actions, only(&two, HdrState::On), "game on display 2");
+
+        // Every display.
+        let (mut e, _) = Engine::new(Mode::Automatic, HOLD, &both, &[], Target::All, t0);
+        assert_eq!(e.toggle(t0).actions.len(), 2, "shortcut: all");
+        e.toggle(t0);
+        let out = e.set_manual_target(t0, Target::Only(BTreeSet::from([two.clone()])));
+        assert!(
+            out.actions.is_empty(),
+            "changing the setting switches nothing"
+        );
+        assert_eq!(
+            e.toggle(t0).actions,
+            only(&two, HdrState::On),
+            "now display 2"
+        );
+
+        // A main display that is gone falls back to every display.
+        let gone = Target::Only(BTreeSet::from([DisplayId::new("gone")]));
+        let (_, out) = Engine::new(Mode::AlwaysHdr, HOLD, &both, &[], gone.clone(), t0);
+        assert_eq!(out.actions.len(), 2, "fallback: Always HDR on all");
+        let (mut e, _) = Engine::new(Mode::Automatic, HOLD, &both, &[], gone, t0);
+        assert_eq!(e.toggle(t0).actions.len(), 2, "fallback: shortcut on all");
+    }
+
+    #[test]
     fn failed_switch_does_not_loop() {
         let (mut e, t0) = engine(HdrState::Off, false);
         let id = TriggerId::new("a");
@@ -951,7 +1061,7 @@ mod tests {
         let t0 = Instant::now();
         let (one, two) = (display(), DisplayId::new("monitor-2"));
         let both = [(one.clone(), HdrState::Off), (two.clone(), HdrState::Off)];
-        let (mut e, _) = Engine::new(Mode::Automatic, HOLD, &both, &[], t0);
+        let (mut e, _) = Engine::new(Mode::Automatic, HOLD, &both, &[], Target::All, t0);
         let only = |d: &DisplayId| Target::Only(BTreeSet::from([d.clone()]));
         let id = TriggerId::new("video:chrome:1");
 

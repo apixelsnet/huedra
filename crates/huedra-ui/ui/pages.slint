@@ -266,61 +266,79 @@ component ModeSelector inherits Rectangle {
     }
 }
 
-// The status card: grey in SDR; the spectrum fades in while HDR is on.
+// The status card with its colour chart: the BT.2020 triangle around the
+// sRGB triangle. Grey in SDR; while HDR is on the spectrum fades into the
+// chart and the card over Theme.fade (400 ms), and back to grey in SDR.
 component HeroCard inherits Rectangle {
     in property <bool> hdr-on;
     in property <string> headline;
     in property <string> detail;
     in property <string> caption;
-    min-height: 150px;
+    min-height: 140px;
     border-radius: Theme.radius-card;
     background: Theme.surface;
     border-width: 1px;
-    border-color: Theme.border;
+    border-color: root.hdr-on ? Theme.violet : Theme.border;
+    animate border-color { duration: Theme.fade; easing: ease-in-out; }
     clip: true;
     Image {
         source: Theme.spectrum-image;
         image-fit: fill;
         width: parent.width;
         height: parent.height;
-        opacity: root.hdr-on ? 1 : 0;
+        opacity: root.hdr-on ? (Theme.dark ? 0.3 : 0.22) : 0;
         animate opacity { duration: Theme.fade; easing: ease-in-out; }
+        accessible-role: none;
     }
-    VerticalLayout {
-        padding: 24px;
-        spacing: 6px;
-        alignment: center;
-        HorizontalLayout {
-            spacing: 10px;
-            alignment: start;
+    HorizontalLayout {
+        padding: 22px;
+        spacing: 22px;
+        VerticalLayout {
+            alignment: center;
             Rectangle {
-                width: 14px;
-                height: 14px;
-                y: (parent.height - self.height) / 2;
-                border-radius: 7px;
-                background: root.hdr-on ? #FFFFFF : transparent;
-                border-width: root.hdr-on ? 0px : 2px;
-                border-color: Theme.sdr;
+                width: 84px;
+                height: 84px;
+                Image {
+                    source: Theme.chart-sdr;
+                    width: parent.width;
+                    height: parent.height;
+                    opacity: root.hdr-on ? 0 : 1;
+                    animate opacity { duration: Theme.fade; easing: ease-in-out; }
+                    accessible-role: none;
+                }
+                Image {
+                    source: Theme.chart-hdr;
+                    width: parent.width;
+                    height: parent.height;
+                    opacity: root.hdr-on ? 1 : 0;
+                    animate opacity { duration: Theme.fade; easing: ease-in-out; }
+                    accessible-role: none;
+                }
             }
+        }
+        VerticalLayout {
+            horizontal-stretch: 1;
+            spacing: 6px;
+            alignment: center;
             Text {
                 text: root.headline;
                 font-size: Theme.title-size;
                 font-weight: 600;
-                color: root.hdr-on ? #FFFFFF : Theme.text;
+                color: root.hdr-on ? Theme.pink : Theme.text;
                 animate color { duration: Theme.fade; }
             }
-        }
-        Text {
-            text: root.detail;
-            font-size: Theme.body-size;
-            color: root.hdr-on ? #FFFFFFF0 : Theme.text;
-            wrap: word-wrap;
-        }
-        Text {
-            text: root.caption;
-            font-size: Theme.caption-size;
-            color: root.hdr-on ? #FFFFFFCC : Theme.text-muted;
-            wrap: word-wrap;
+            Text {
+                text: root.detail;
+                font-size: Theme.body-size;
+                color: Theme.text;
+                wrap: word-wrap;
+            }
+            Text {
+                text: root.caption;
+                font-size: Theme.caption-size;
+                color: Theme.text-muted;
+                wrap: word-wrap;
+            }
         }
     }
 }
@@ -1161,9 +1179,11 @@ export component DisplaysPage inherits Rectangle {
     in property <[DisplayRow]> displays;
     in property <int> retries;
     in property <bool> content-only;
+    in property <bool> main-only;
     callback set-managed(string, bool);
     callback set-retries(int);
     callback set-content-only(bool);
+    callback set-main-only(bool);
 
     ScrollView {
         // At least the preferred height, so rows keep their wrapped text
@@ -1190,6 +1210,17 @@ export component DisplaysPage inherits Rectangle {
                     checked: root.content-only;
                     toggled => {
                         root.set-content-only(self.checked);
+                    }
+                }
+            }
+            SettingRow {
+                title: "Always HDR on the main display only";
+                description: "Always HDR mode and the shortcut turn HDR on only for the main display, the one Windows uses as the primary display. Off: every managed display.";
+                Toggle {
+                    accessible-label: "Always HDR on the main display only";
+                    checked: root.main-only;
+                    toggled => {
+                        root.set-main-only(self.checked);
                     }
                 }
             }

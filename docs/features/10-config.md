@@ -13,7 +13,7 @@ A config from every earlier version loads, and a power cut during a write never 
 
 ## Result (2026-10-31) — phase 2
 Code: `crates/huedra-core/src/{config,files,logfile,clock}.rs`, `crates/huedra/src/paths.rs`.
-- Schema version 1: `mode`, `[general]` (`start_with_windows`, `updates`, `game_info`, `start_delay_secs`, `hold_secs`, `retry_attempts`, `log_window_titles`, `hotkeys`), `[displays] unmanaged`, `content_only` (default true: HDR only on the display showing the game or video), `[[game]]` (`id`, `name`, `exe`, `hdr`, `start_delay_secs`, `hold_secs`, `launch_with_hdr`). Unknown keys are ignored; a newer schema is refused rather than overwritten; values are clamped (delay 120 s, hold 600 s, retries 5). A leading byte-order mark is accepted.
+- Schema version 1: `mode`, `[general]` (`start_with_windows`, `updates`, `game_info`, `start_delay_secs`, `hold_secs`, `retry_attempts`, `log_window_titles`, `hotkeys`), `[displays] unmanaged`, `content_only` (default true: HDR only on the display showing the game or video), `manual` (`"main"` by default: Always HDR mode and the shortcut switch only the main display; `"all"`: every managed display), `[[game]]` (`id`, `name`, `exe`, `hdr`, `start_delay_secs`, `hold_secs`, `launch_with_hdr`). Unknown keys are ignored; a newer schema is refused rather than overwritten; values are clamped (delay 120 s, hold 600 s, retries 5). A leading byte-order mark is accepted.
 - Files over 1 MB are refused before reading; writes go to `<name>.tmp`, are flushed, then renamed over the old file.
 - Portable mode: a file named `portable` next to the exe keeps everything in `data\` beside it.
 - Log `huedra.log`, 1 MB, rotated to `huedra.log.1`; one line per entry. Window titles are not logged at all yet.

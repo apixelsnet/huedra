@@ -7,7 +7,7 @@ use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 use std::time::{Duration, Instant, SystemTime};
 
 use anyhow::Context as _;
-use huedra_core::config::{Config, GameHdr, UpdatePolicy};
+use huedra_core::config::{Config, GameHdr, ManualDisplays, UpdatePolicy};
 use huedra_core::display::{Display, DisplayId, HdrState};
 use huedra_core::engine::{
     Engine, Mode, Note, NoteKind, Outcome, Phase, Status, Target, Trigger, TriggerId,
@@ -148,6 +148,7 @@ impl App {
             config.general.hold.duration(),
             &managed(&config, &displays),
             &owned,
+            manual_target(&config, &displays),
             now,
         );
         let scan_started = Instant::now();
@@ -605,9 +606,14 @@ impl App {
                 return;
             }
         }
-        let outcome = self
+        let mut outcome = self
             .engine
             .set_displays(now, &managed(&self.config, &self.displays));
+        let more = self
+            .engine
+            .set_manual_target(now, manual_target(&self.config, &self.displays));
+        outcome.actions.extend(more.actions);
+        outcome.notes.extend(more.notes);
         self.apply(host, now, outcome);
     }
 
@@ -887,6 +893,11 @@ impl App {
         let mut outcome = self
             .engine
             .set_displays(now, &managed(&self.config, &self.displays));
+        let more = self
+            .engine
+            .set_manual_target(now, manual_target(&self.config, &self.displays));
+        outcome.actions.extend(more.actions);
+        outcome.notes.extend(more.notes);
         if self.config.mode != self.engine.mode() {
             let more = self.engine.set_mode(now, self.config.mode);
             outcome.actions.extend(more.actions);
@@ -1233,6 +1244,24 @@ fn managed(config: &Config, displays: &[Display]) -> Vec<(DisplayId, HdrState)> 
         .filter(|d| d.support.is_capable() && config.is_managed(d.id.as_str()))
         .map(|d| (d.id.clone(), d.state))
         .collect()
+}
+
+/// The displays Always HDR mode and the shortcut turn on: every managed
+/// display, or only the main one — the Windows primary display, or the
+/// lowest-numbered managed display when the primary one is not managed.
+fn manual_target(config: &Config, displays: &[Display]) -> Target {
+    if config.displays.manual == ManualDisplays::All {
+        return Target::All;
+    }
+    let managed: Vec<&Display> = displays
+        .iter()
+        .filter(|d| d.support.is_capable() && config.is_managed(d.id.as_str()))
+        .collect();
+    let main = managed
+        .iter()
+        .find(|d| d.primary)
+        .or_else(|| managed.iter().min_by_key(|d| d.number));
+    Target::Only(main.map(|d| d.id.clone()).into_iter().collect())
 }
 
 /// Games added by hand come first, so their settings win over a store entry

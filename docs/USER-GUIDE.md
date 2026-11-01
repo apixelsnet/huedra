@@ -87,7 +87,7 @@ Huedra lives in the notification area next to the clock. If you do not see it, o
 | Mode | Behaviour |
 | --- | --- |
 | **Automatic** | HDR turns on while a game or HDR video runs and off again when it ends. This is the normal mode. |
-| **Always HDR** | HDR stays on for every managed display. |
+| **Always HDR** | HDR stays on for the main display (the one Windows uses as the primary display), or for every managed display when **Displays › Always HDR on the main display only** is off. |
 | **Always SDR** | HDR stays off. |
 
 Change the mode from the tray menu, the **Status** page, or with **Win+Alt+O**.
@@ -167,6 +167,7 @@ With NVIDIA RTX Video HDR turned on in the NVIDIA app, ordinary SDR video in a b
 | --- | --- |
 | **Managed** | Huedra changes HDR only on managed displays. Displays that support HDR are managed by default. |
 | **Only the display showing the content** | HDR turns on only for the display the game or video is on, and follows the window to another display. When off, every managed display switches together. |
+| **Always HDR on the main display only** | Always HDR mode and the Win+Alt+H shortcut turn HDR on only for the main display, the one Windows uses as the primary display. Other displays keep following their games and video. When off, every managed display. On by default. |
 | **Retry attempts** | How often Huedra tries again when a display does not accept a change. |
 
 ## 9. General settings

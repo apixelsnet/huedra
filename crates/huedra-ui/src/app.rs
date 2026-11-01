@@ -8,12 +8,12 @@ use std::collections::HashMap;
 use std::thread;
 use std::time::Duration;
 
-use huedra_core::config::{Config, GameHdr, GameSettings, Seconds, UpdatePolicy};
+use huedra_core::config::{Config, GameHdr, GameSettings, ManualDisplays, Seconds, UpdatePolicy};
 use huedra_core::display::{Display, HdrState, HdrSupport};
 use huedra_core::engine::{Mode, TriggerId};
 use huedra_core::gameinfo::{Cache, GameInfo};
 use huedra_core::geometry::WindowGeometry;
-use huedra_core::icon::{self, TrayIcon};
+use huedra_core::icon;
 use huedra_core::ipc::{HistoryKind, Request, Response, StatusReport};
 use huedra_core::launch;
 use huedra_core::library::{Game, GameId, Store};
@@ -37,8 +37,6 @@ use crate::ui::{
 const TITLE: &str = "Huedra";
 /// How often the Status page asks the tray process for its state.
 const STATUS_POLL: Duration = Duration::from_secs(1);
-const ICON_SIZE: u32 = 64;
-const DOT_SIZE: u32 = 44;
 const SPECTRUM_W: u32 = 640;
 const SPECTRUM_H: u32 = 160;
 
@@ -123,23 +121,12 @@ pub fn run(locations: Locations, page: Page) -> Result<(), slint::PlatformError>
         SPECTRUM_W,
         SPECTRUM_H,
     ));
-    theme.set_dot_image(rgba_image(
-        &icon::render(TrayIcon::Hdr, DOT_SIZE),
-        DOT_SIZE,
-        DOT_SIZE,
-    ));
-    theme.set_sdr_image(rgba_image(
-        &icon::render(TrayIcon::Sdr, DOT_SIZE),
-        DOT_SIZE,
-        DOT_SIZE,
-    ));
     ui.set_light_theme(registry::apps_use_light_theme());
     let weak = ui.as_weak();
     registry::watch_light_theme(move |light| {
         let _ = weak.upgrade_in_event_loop(move |ui| ui.set_light_theme(light));
     });
     ui.set_page(page as i32);
-    ui.set_app_icon(app_icon());
     ui.set_version(huedra_core::VERSION.into());
     ui.set_update_note(update_note(&locations.update).into());
     ui.set_data_folder(
@@ -227,21 +214,14 @@ fn log_start_time() {
 /// at a larger window; this stays well below that.
 const MAX_WINDOW_PIXELS: u16 = 16_384;
 
-/// Limits the window's size once the event loop has created it.
+/// Limits the window's size and gives it the program icon once the event
+/// loop has created it (Slint does not pass its `icon` on to the window).
 fn limit_size_once_shown(attempt: u32) {
     slint::Timer::single_shot(Duration::from_millis(50), move || {
         if instance::limit_window_size(MAX_WINDOW_PIXELS) == 0 && attempt < 40 {
             limit_size_once_shown(attempt + 1);
         }
     });
-}
-
-fn app_icon() -> Image {
-    rgba_image(
-        &icon::render(TrayIcon::Hdr, ICON_SIZE),
-        ICON_SIZE,
-        ICON_SIZE,
-    )
 }
 
 fn rgba_image(rgba: &[u8], width: u32, height: u32) -> Image {
@@ -336,6 +316,7 @@ fn show_status(ui: &SettingsWindow, state: &mut State, report: Option<&StatusRep
         let on = state.displays.iter().any(|d| d.state == HdrState::On);
         ui.set_hdr_on(on);
         ui.set_headline((if on { "HDR is on" } else { "SDR" }).into());
+        ui.set_nav_detail("Huedra is not running".into());
         ui.set_detail("Automatic switching is off while Huedra is not running.".into());
         ui.set_caption(caption(state, on).into());
         ui.set_history(ModelRc::default());
@@ -358,6 +339,7 @@ fn show_status(ui: &SettingsWindow, state: &mut State, report: Option<&StatusRep
     };
     ui.set_hdr_on(report.hdr_on);
     ui.set_headline((if report.hdr_on { "HDR is on" } else { "SDR" }).into());
+    ui.set_nav_detail(nav_detail(&on_labels, report.hdr_on, &report.reason).into());
     ui.set_detail(detail.into());
     ui.set_caption(caption(state, report.hdr_on).into());
     ui.set_mode(match report.mode {
@@ -396,6 +378,20 @@ fn show_status(ui: &SettingsWindow, state: &mut State, report: Option<&StatusRep
         .collect();
     ui.set_history(ModelRc::new(VecModel::from(history)));
     set_running(ui, state, report.active_games.clone());
+}
+
+/// The line under the state in the navigation pane, for example
+/// "Display 1 · Always HDR mode" or "No HDR content".
+fn nav_detail(on_labels: &[&str], hdr_on: bool, reason: &str) -> String {
+    if !hdr_on || on_labels.is_empty() {
+        return reason.to_owned();
+    }
+    // "Display 1 (MO27Q3)" is shortened to "Display 1".
+    let names: Vec<&str> = on_labels
+        .iter()
+        .map(|l| l.split(" (").next().unwrap_or(l))
+        .collect();
+    format!("{} · {reason}", join(&names))
 }
 
 fn set_running(ui: &SettingsWindow, state: &mut State, running: Vec<String>) {
@@ -907,11 +903,20 @@ fn show_displays(ui: &SettingsWindow, state: &State) {
     ui.set_displays(ModelRc::new(VecModel::from(rows)));
     ui.set_retries(i32::try_from(state.config.general.retry_attempts).unwrap_or(0));
     ui.set_content_only(state.config.displays.content_only);
+    ui.set_main_only(state.config.displays.manual == ManualDisplays::Main);
 }
 
 fn wire_displays(ui: &SettingsWindow) {
     ui.on_set_content_only(|on| {
         with_state(|s| edit(s, |c| c.displays.content_only = on));
+    });
+    ui.on_set_main_only(|on| {
+        let manual = if on {
+            ManualDisplays::Main
+        } else {
+            ManualDisplays::All
+        };
+        with_state(|s| edit(s, |c| c.displays.manual = manual));
     });
     ui.on_set_managed(|id, managed| {
         with_state(|s| {

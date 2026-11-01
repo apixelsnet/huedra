@@ -155,6 +155,21 @@ pub struct DisplaySettings {
     /// A game or video turns HDR on only for the display its window is
     /// on. Off: every managed display switches together.
     pub content_only: bool,
+    /// The displays Always HDR mode and the shortcut turn on.
+    pub manual: ManualDisplays,
+}
+
+/// The displays Always HDR mode and the "Turn HDR on or off" shortcut turn
+/// on, which have no window to follow.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ManualDisplays {
+    /// The main display (the Windows primary display), so a second
+    /// monitor stays in SDR.
+    #[default]
+    Main,
+    /// Every managed display.
+    All,
 }
 
 impl Default for DisplaySettings {
@@ -162,6 +177,7 @@ impl Default for DisplaySettings {
         Self {
             unmanaged: Vec::new(),
             content_only: true,
+            manual: ManualDisplays::Main,
         }
     }
 }
@@ -668,6 +684,21 @@ mod tests {
         assert!(
             config.is_some_and(|c| !c.displays.content_only),
             "turned off"
+        );
+    }
+
+    #[test]
+    fn manual_displays_default_to_the_main_one() {
+        assert_eq!(
+            Config::default().displays.manual,
+            ManualDisplays::Main,
+            "default"
+        );
+        let config = Config::parse("[displays]\nmanual = \"all\"\n").ok();
+        assert_eq!(
+            config.map(|c| c.displays.manual),
+            Some(ManualDisplays::All),
+            "every display"
         );
     }
 }
