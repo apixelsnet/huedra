@@ -15,6 +15,7 @@ anyhow.workspace = true
 
 [build-dependencies]
 huedra-core.workspace = true
+png = "0.18"
 
 [lints]
 workspace = true

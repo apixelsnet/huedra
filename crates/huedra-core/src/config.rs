@@ -124,6 +124,9 @@ pub struct General {
     pub log_window_titles: bool,
     /// Register the keyboard shortcuts.
     pub hotkeys: bool,
+    /// The disclaimer shown on the first start was accepted. Until then the
+    /// tray does not start and HDR is never changed.
+    pub disclaimer_accepted: bool,
 }
 
 impl Default for General {
@@ -137,6 +140,7 @@ impl Default for General {
             retry_attempts: 2,
             log_window_titles: false,
             hotkeys: true,
+            disclaimer_accepted: false,
         }
     }
 }

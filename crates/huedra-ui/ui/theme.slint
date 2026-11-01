@@ -17,6 +17,8 @@ export global Theme {
     // Drawn in Rust (huedra_core::icon) so every renderer shows it without seams.
     in property <image> spectrum-image;
     in property <image> dot-image;
+    // The same icon in SDR: a grey outline.
+    in property <image> sdr-image;
 
     // Neutrals.
     out property <color> background: dark ? #16141E : #F4F2F9;

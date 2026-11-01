@@ -74,6 +74,14 @@ pub fn run() -> anyhow::Result<()> {
         }
         Err(error) => return Err(error).context("could not open Huedra's channel"),
     };
+    // Nothing runs, and HDR is never touched, until the disclaimer has been
+    // accepted in the settings window, which then starts the tray again.
+    let accepted = Config::load(&paths.config).is_ok_and(|c| c.general.disclaimer_accepted);
+    if !accepted {
+        drop(pipe);
+        crate::open_settings();
+        return Ok(());
+    }
     let mut app = App::start(&host, paths, pipe)?;
     host.run(|host, event| app.handle(host, event))?;
     Ok(())

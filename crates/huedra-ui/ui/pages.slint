@@ -1280,6 +1280,15 @@ export component GeneralPage inherits Rectangle {
     in property <string> version;
     in property <string> data-folder;
     in property <string> update-note;
+    in property <bool> can-check-updates;
+    in property <bool> checking-updates;
+    in property <string> install-version;
+    in property <bool> has-project-page;
+    callback check-updates();
+    callback install-update();
+    callback open-project();
+    callback open-support();
+    callback show-disclaimer();
     callback set-start-with-windows(bool);
     callback set-context-menu(bool);
     callback set-updates(int);
@@ -1327,7 +1336,7 @@ export component GeneralPage inherits Rectangle {
             }
             SettingRow {
                 title: "Updates";
-                description: "Checks once a day and installs signed releases while no game or video is running. The previous version is kept; huedra update --rollback restores it." + (root.update-note != "" ? " " + root.update-note : "");
+                description: "Checks once a day and installs signed releases while no game or video is running. The previous version is kept; huedra update --rollback restores it. To check now, use Check for updates under About." + (root.update-note != "" ? " " + root.update-note : "");
                 Dropdown {
                     accessible-label: "Updates";
                     model: ["Install automatically", "Ask before installing", "Off"];
@@ -1408,6 +1417,49 @@ export component GeneralPage inherits Rectangle {
                         font-size: Theme.body-size;
                         font-weight: 600;
                         color: Theme.text;
+                    }
+                    HorizontalLayout {
+                        alignment: start;
+                        spacing: 8px;
+                        if root.install-version != "": ActionButton {
+                            text: "Install Huedra " + root.install-version;
+                            primary: true;
+                            clicked => {
+                                root.install-update();
+                            }
+                        }
+                        if root.can-check-updates: ActionButton {
+                            text: root.checking-updates ? "Checking..." : "Check for updates";
+                            enabled: !root.checking-updates;
+                            clicked => {
+                                root.check-updates();
+                            }
+                        }
+                        ActionButton {
+                            text: "Disclaimer";
+                            clicked => {
+                                root.show-disclaimer();
+                            }
+                        }
+                    }
+                    Caption {
+                        text: "If Huedra is useful to you, a star on GitHub or a coffee on Ko-fi helps the project continue.";
+                    }
+                    HorizontalLayout {
+                        alignment: start;
+                        spacing: 8px;
+                        if root.has-project-page: ActionButton {
+                            text: "Star on GitHub";
+                            clicked => {
+                                root.open-project();
+                            }
+                        }
+                        ActionButton {
+                            text: "Support on Ko-fi";
+                            clicked => {
+                                root.open-support();
+                            }
+                        }
                     }
                     Caption {
                         text: "Settings and logs: " + root.data-folder;

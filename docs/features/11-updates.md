@@ -31,3 +31,9 @@ Verified: unit tests with key pairs made by minisign 0.11 (signed manifest read;
 Not verified: downloading over HTTPS from a real release address (no hosting yet; the WinHTTP path is the one PCGamingWiki lookups use); the daily `--auto` run and its "Ask" menu item, which need that address; the busy refusal during a game; a folder without write access; signing with a password-protected key and `pack-release.ps1 -SecretKey` (minisign is not installed on this PC; the test signatures were made in the build container).
 
 Status: built; network half waits for hosting.
+
+## Result (2026-11-01) — update channel and Check for updates
+- The release address of GitHub builds is the fixed pre-release `update-channel` (`releases/download/update-channel/`), refreshed by every release, since `releases/latest/download/` skips the beta pre-releases.
+- `update::project_page()` derives the repository page from that address for the Star on GitHub button; `update::SUPPORT_URL` is the Ko-fi page.
+- Settings › General › About: Check for updates and Install (see 08). The note now says to choose Install under About or in the tray menu.
+Verified: the 0.1.0 beta release published `huedra.exe`, `release.toml` and its signature to `update-channel`. Not verified: an update from one release to the next through the channel (needs a second release and a public repository).

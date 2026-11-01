@@ -26,7 +26,7 @@ use crate::files;
 pub const PUBLIC_KEY: Option<&str> = option_env!("HUEDRA_UPDATE_KEY");
 /// Where releases are published, ending in `/`, set when the program is
 /// built (`HUEDRA_UPDATE_URL`); for example
-/// `https://github.com/<owner>/<repo>/releases/latest/download/`.
+/// `https://github.com/<owner>/<repo>/releases/download/update-channel/`.
 pub const RELEASE_URL: Option<&str> = option_env!("HUEDRA_UPDATE_URL");
 
 /// Name of the signed manifest at the release address.
@@ -53,6 +53,15 @@ pub fn public_key() -> Option<&'static str> {
 pub fn release_url() -> Option<ReleaseUrl> {
     RELEASE_URL.and_then(|u| ReleaseUrl::parse(u.trim()).ok())
 }
+
+/// The project's page, for "Star on GitHub": the repository the release
+/// address belongs to, when releases are published on GitHub.
+pub fn project_page() -> Option<String> {
+    release_url().and_then(|url| url.project_page())
+}
+
+/// Where people can support the project.
+pub const SUPPORT_URL: &str = "https://ko-fi.com/pixelsthecoder";
 
 /// Whether this build checks for updates: both the key and the address were
 /// set when it was built.
@@ -169,6 +178,17 @@ impl ReleaseUrl {
     /// The path of a file at the address.
     pub fn path_of(&self, file: &str) -> String {
         format!("{}{file}", self.path)
+    }
+
+    /// `https://github.com/<owner>/<repo>` for an address on GitHub, else
+    /// `None`.
+    pub fn project_page(&self) -> Option<String> {
+        if self.host != "github.com" {
+            return None;
+        }
+        let mut parts = self.path.split('/').filter(|p| !p.is_empty());
+        let (owner, repo) = (parts.next()?, parts.next()?);
+        Some(format!("https://github.com/{owner}/{repo}"))
     }
 }
 
@@ -438,6 +458,15 @@ mod tests {
             url.path_of(MANIFEST_NAME),
             "/a/releases/latest/download/release.toml",
             "path"
+        );
+        assert_eq!(url.project_page(), None, "not on GitHub");
+        let github =
+            ReleaseUrl::parse("https://github.com/owner/repo/releases/download/update-channel/")
+                .expect("valid");
+        assert_eq!(
+            github.project_page().as_deref(),
+            Some("https://github.com/owner/repo"),
+            "project page"
         );
         for bad in [
             "http://example.org/a/",

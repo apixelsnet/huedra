@@ -1632,6 +1632,7 @@ dependencies = [
  "huedra-core",
  "huedra-ui",
  "huedra-win",
+ "png",
 ]
 
 [[package]]

@@ -1,172 +1,103 @@
 <div align="center">
+  <img src="docs/assets/huedra-logo.svg" width="148" alt="Huedra logo: the visible colour gamut with the BT.2020 triangle">
   <h1>Huedra</h1>
-  <p>Turns Windows HDR on while games and HDR video run, and back off when they end.</p>
+  <p><strong>Automatic HDR for Windows.</strong><br>HDR turns on when a game or HDR video starts, and off again when it ends.</p>
   <p>
-    <a href="#getting-started">Download</a> ·
-    <a href="SECURITY.md">Report a security problem</a> ·
-    <a href="#roadmap">Roadmap</a>
+    <a href="../../releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/apixelsnet/huedra?include_prereleases&label=release&color=3341E6"></a>
+    <img alt="Windows 10 and 11" src="https://img.shields.io/badge/Windows-10%20%7C%2011-9B3DFF">
+    <a href="LICENSE"><img alt="Licence: Apache 2.0" src="https://img.shields.io/badge/licence-Apache%202.0-00C8F0"></a>
+    <a href="https://ko-fi.com/pixelsthecoder"><img alt="Support on Ko-fi" src="https://img.shields.io/badge/Ko--fi-support-FF2D6F?logo=kofi&logoColor=white"></a>
+  </p>
+  <p>
+    <a href="../../releases"><strong>Download</strong></a> ·
+    <a href="docs/USER-GUIDE.md">User guide</a> ·
+    <a href="../../issues">Report a problem</a> ·
+    <a href="#support-the-project">Support the project</a>
   </p>
 </div>
 
-> **Status: beta.** Releases before 1.0.0 are pre-releases for testing. Huedra changes a Windows display setting; read the [disclaimer](#disclaimer) before you use it.
+> [!NOTE]
+> **Huedra is in beta.** Releases before 1.0.0 are pre-releases for testing. Huedra changes a Windows display setting; please read the [disclaimer](#disclaimer) before using it.
 
-## Table of contents
+<p align="center">
+  <img src="docs/assets/huedra-tour.gif" width="820" alt="The Huedra window: status, games, video players, displays and general settings">
+</p>
 
-- [About](#about)
-- [Built with](#built-with)
-- [Getting started](#getting-started)
-- [Usage](#usage)
-- [Questions](#questions)
-- [Building from source](#building-from-source)
-- [Contributing](#contributing)
-- [Roadmap](#roadmap)
-- [Licence](#licence)
-- [Disclaimer](#disclaimer)
-- [Acknowledgements](#acknowledgements)
+## Why Huedra
 
-## About
+Windows HDR makes HDR games and video look as intended, but it makes the desktop and SDR content look washed out. Most people switch it by hand before playing and forget to switch it back. Huedra does it for you, per display, and leaves everything else alone.
 
-Huedra is a small Windows tray application. It watches for games and HDR video, turns HDR on for the display showing them, and returns that display to SDR when they end. It only ever turns off HDR that it turned on itself.
+## Features
 
-- One executable, nothing to install, no runtime.
-- No background activity between events: it waits for Windows to report a window coming to the front, a title changing or a program closing.
-- Games from Steam, Epic, GOG, Xbox, Ubisoft Connect, EA app and Rockstar are found on their own.
-- HDR video in mpv, VLC, MPC-HC, MPC-BE and PotPlayer, and on YouTube through the Huedra browser extension.
-- "Start with HDR": HDR turns on before a game starts, for games that misbehave when HDR changes while they run.
-- Signed automatic updates, with the previous version kept.
+| | |
+| --- | --- |
+| **Games, found automatically** | Reads the libraries of Steam, Epic Games, GOG, Xbox, Ubisoft Connect, EA app and Rockstar Games. HDR turns on while a game runs, with an optional delay and hold time per game. |
+| **HDR video** | VLC, mpv, MPC-HC, MPC-BE and PotPlayer, by the title of the file playing. YouTube and streaming sites through the Huedra browser extension. RTX Video HDR aware. |
+| **The right display** | Only the display showing the game or video switches, and HDR follows the window to another display. |
+| **Start with HDR** | For games that misbehave when HDR changes while they start: a Steam launch option, a desktop shortcut, or a File Explorer menu entry turns HDR on first. |
+| **Light on the system** | One small executable, no installer, no background polling: Huedra waits for Windows to report a change. About 2 MB of memory. |
+| **Safe by design** | Runs without administrator rights. Never reads or writes another program's memory. Updates install only with a valid signature, and the previous version is kept. |
+| **Private** | No accounts and no telemetry. See [PRIVACY.md](PRIVACY.md). |
 
-## Built with
-
-- [Rust](https://www.rust-lang.org) and [windows-rs](https://github.com/microsoft/windows-rs)
-- [Slint](https://slint.dev) for the settings window
-- [minisign-verify](https://github.com/jedisct1/rust-minisign-verify) for update signatures
+<p align="center">
+  <img src="docs/assets/screenshot-games.png" width="820" alt="The Games page, listing installed games with their HDR settings">
+</p>
 
 ## Getting started
 
-Requirements: Windows 10 version 1903 or later, or Windows 11, on x64, and a display that supports HDR.
+1. Download `huedra-<version>-windows-x64.zip` from the newest [release](../../releases).
+2. Unpack it into a folder of your own, for example `%LOCALAPPDATA%\Programs\Huedra`.
+3. Start `huedra.exe` and accept the disclaimer.
 
-1. Download `huedra-<version>-windows-x64.zip` from the newest release on the [releases page](../../releases) (betas are marked Pre-release) and unpack it into a folder of your own, for example `%LOCALAPPDATA%\Programs\Huedra`. The folder must stay writable for updates.
-2. Optionally verify the download with [minisign](https://jedisct1.github.io/minisign/) and the public key published with the release:
-   ```powershell
-   minisign -Vm huedra-<version>-windows-x64.zip -P <public key>
-   ```
-3. Start `huedra.exe`. Windows SmartScreen may warn on first start, because the program is not code-signed yet (see [Questions](#questions)).
+Huedra starts in the notification area in Automatic mode, adds itself to Windows start-up and finds your games. Nothing else needs to be set up.
 
-On first start Huedra adds itself to Windows start-up (Settings, General turns this off), scans the game stores and starts in Automatic mode. Nothing else needs setting up.
+**Requirements:** Windows 10 (version 1903 or later) or Windows 11, 64-bit, and a display that supports HDR.
 
-## Usage
+The [user guide](docs/USER-GUIDE.md) covers every setting, the browser extension, keyboard shortcuts, the command line, troubleshooting and removal.
 
-Huedra runs in the notification area: a full-colour dot while HDR is on, a grey ring in SDR. Right-click the icon for the menu; left-click it to open the settings window.
+## Frequently asked questions
 
-| Keys | Action |
-| --- | --- |
-| Win+Alt+H | Turn HDR on or off |
-| Win+Alt+O | Change mode (Automatic, Always HDR, Always SDR) |
-| Win+Alt+P | Pause or resume automatic switching |
+**Is it safe to use with anti-cheat software?**
+Huedra reads only the name and path of the program in front and waits for programs to close. It never reads or writes another program's memory and never injects code. No game publisher has reviewed it, so this cannot be guaranteed.
 
-For a Steam game, Settings › Games shows a launch option that starts the game with HDR already on:
+**Why does Windows SmartScreen show a warning?**
+Huedra does not yet have a Windows code-signing certificate. Choose **More info** and **Run anyway**. Every release is signed with the project's own key, and updates are installed only when that signature is valid.
 
-```text
-"C:\path\to\huedra.exe" launch -- %command%
-```
+**Why does the screen go black briefly?**
+That is Windows changing the display mode, as it does when HDR is switched in Windows Settings.
 
-Command line:
+**What has it been tested on?**
+Windows 11 with an NVIDIA graphics card and two HDR displays. Reports from AMD and Intel graphics, Windows 10 and laptops are very welcome.
 
-```text
-huedra                       Start Huedra in the notification area.
-huedra settings [page]       Open the settings window (status, games, video, displays, general).
-huedra status                Show what the running Huedra is doing.
-huedra games                 List the games found in every store.
-huedra mode automatic|hdr|sdr
-huedra pause [minutes]       Pause automatic switching (default 60).
-huedra resume
-huedra toggle                Turn HDR on or off, as Win+Alt+H does.
-huedra launch -- <program> [arguments]
-huedra hdr status            List the displays and their HDR state.
-huedra hdr on|off [--display N | all]
-huedra update [--check]      Install a newer signed release now, or only report it.
-huedra update --rollback     Go back to the version before the last update.
-huedra uninstall             Close Huedra and remove its registry entries.
-huedra exit
-```
+## Support the project
 
-Settings are kept in `%APPDATA%\Huedra\config.toml`; the log, the recovery record and caches in `%LOCALAPPDATA%\Huedra`. A file named `portable` next to `huedra.exe` keeps everything in a `data` folder beside it instead, and leaves Windows start-up alone.
+If Huedra is useful to you:
 
-## Questions
+- **Star the repository** on GitHub, so that others can find it.
+- **Support development** on [Ko-fi](https://ko-fi.com/pixelsthecoder).
+- **Report problems and test** on hardware the project has not seen yet.
 
-**Can this cause problems with anti-cheat software?**
-It should not. Huedra reads the name and path of the program in front and waits for programs to close. It never reads or writes another program's memory and never places code in another program.
-
-**What information leaves this computer?**
-Two things, both on by default and both can be turned off under Settings › General:
-- Update checks: once a day, the release files are downloaded from the release location. No identifier is sent beyond a `Huedra/<version>` user agent.
-- Game information: the settings window looks up installed games on [PCGamingWiki](https://www.pcgamingwiki.com), sending each game's Steam ID, or its name for other stores, at most once per second, and downloads Discord's public list of games for icons. Results are kept for 30 days.
-
-There is no telemetry. Window titles are not written to the log unless you turn that on. The full statement, including the browser extension, is in [PRIVACY.md](PRIVACY.md).
-
-**Why does SmartScreen show a warning?**
-The program has no Windows code-signing certificate yet. Updates are still checked: each one must carry a valid signature from the project's own key before it is installed.
-
-**Why does the screen turn black briefly when switching?**
-That is Windows changing the display mode; it takes one to two seconds and is the same when HDR is switched in Windows Settings.
-
-**How is it removed completely?**
-Run `huedra uninstall`: it closes Huedra and removes the start-up entry and the "Start with HDR" menu entry. Then delete the program folder and `%APPDATA%\Huedra` and `%LOCALAPPDATA%\Huedra`. Desktop shortcuts made by Huedra are ordinary files.
-
-**Which graphics cards and Windows versions have been tested?**
-Windows 11 (build 26300) with an NVIDIA card and two HDR displays. AMD and Intel graphics, Windows 10 and laptops are not tested yet.
-
-## Building from source
-
-Huedra is cross-compiled for Windows on a Linux machine with Docker, reached over SSH.
-
-1. Name the build server (this file is ignored by Git):
-   ```sh
-   echo "HUEDRA_BUILD_HOST=<server>" > build/local.env
-   ```
-2. Build and test on the server, and copy `huedra.exe` to `dist/`:
-   ```sh
-   bash build/remote-fmt.sh     # optional: format the sources with rustfmt
-   bash build/remote-build.sh
-   ```
-3. Run it on Windows:
-   ```powershell
-   powershell -File build/run.ps1 --version
-   ```
-
-Without a build server, open a pull request: GitHub Actions builds it, and the run's artifacts hold `huedra.exe`.
+Both links are also in the app, under **General › About**.
 
 ## Contributing
 
-- Read the feature's document in [`docs/features`](docs/features) before changing it, and add a dated Result section to it with what you changed and how you checked it.
-- Add a line under `## Unreleased` in [CHANGELOG.md](CHANGELOG.md); changes to the browser extension go in [extras/browser/CHANGELOG.md](extras/browser/CHANGELOG.md).
-- Every pull request is checked by GitHub Actions: formatting, Clippy, dependency licences and advisories, tests, the Windows build and a start of `huedra.exe` on Windows. It must pass.
-- Report security problems privately, as described in [SECURITY.md](SECURITY.md).
-- The build and release setup (`.github/`, `build/`) is kept by the maintainers. Pull requests may suggest changes to it, but releases and the files that publish them are changed only by them.
-
-## Roadmap
-
-Each feature has a short document in [`docs/features`](docs/features), stating its scope and what has been built and verified. Changes are listed in [CHANGELOG.md](CHANGELOG.md).
+Contributions are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) explains how to build Huedra, the project layout and what a pull request needs. Changes are listed in [CHANGELOG.md](CHANGELOG.md).
 
 ## Licence
 
-Huedra is licensed under the [Apache License, Version 2.0](LICENSE).
-
-Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in Huedra by you shall be licensed under the Apache License 2.0, as its section 5 says, without any additional terms or conditions.
-
-The settings window uses [Slint](https://slint.dev) under the Slint Royalty-free Desktop, Mobile, and Web Applications License 2.0; its attribution is in General > About.
+Huedra is licensed under the [Apache License, Version 2.0](LICENSE). The settings window uses [Slint](https://slint.dev) under the Slint Royalty-free Desktop, Mobile, and Web Applications License 2.0.
 
 ## Disclaimer
 
-- **Beta software.** Huedra is in beta. It may have bugs, and its behaviour and settings may change between releases.
-- **No warranty.** Huedra is provided "as is", without warranty of any kind, as set out in sections 7 and 8 of the [licence](LICENSE). You use it at your own risk.
-- **Your display settings.** Huedra turns Windows HDR on and off for you. A failed or interrupted switch can leave a display in HDR or SDR until you change it back under Windows Settings > System > Display, or with `huedra hdr off --display all`. Huedra never changes a display's firmware or hardware settings.
-- **Games and anti-cheat.** Huedra does not read or change other programs' memory and does not inject code. Even so, no game publisher has reviewed or approved it, and the project cannot promise how any anti-cheat system will treat it.
-- **Not affiliated.** Huedra is an independent project. It is not affiliated with, endorsed by or sponsored by Microsoft, NVIDIA, AMD, Intel, Valve, Epic Games, GOG, Ubisoft, Electronic Arts, Rockstar Games, Google, Mozilla, PCGamingWiki, Discord, or any streaming service, nor by the SmartHdrManager project. Product names and trademarks belong to their owners and are used only to say what Huedra works with.
-- **Game information.** Details shown about games come from PCGamingWiki and Discord and may be incomplete or wrong.
+- **Beta software.** Huedra may contain bugs, and its behaviour and settings may change between releases.
+- **No warranty.** Huedra is provided "as is", without warranty of any kind, as set out in sections 7 and 8 of the [licence](LICENSE). You use it at your own risk. Its authors and contributors are not liable for any damage, data loss or other problem with your computer, displays, games or other software that may result from using it.
+- **Display settings.** Huedra changes only the HDR setting that Windows offers. An interrupted switch can leave a display in HDR or SDR until it is changed back under **Settings › System › Display**, or with `huedra hdr off --display all`.
+- **Not affiliated.** Huedra is an independent project, not affiliated with, endorsed by or sponsored by Microsoft, NVIDIA, AMD, Intel, Valve, Epic Games, GOG, Ubisoft, Electronic Arts, Rockstar Games, Google, Mozilla, PCGamingWiki, Discord, any streaming service, or the SmartHdrManager project. Product names and trademarks belong to their owners.
+- **Game information.** Details about games come from PCGamingWiki and Discord and may be incomplete or inaccurate.
 
 ## Acknowledgements
 
-- [SmartHdrManager](https://github.com/VantaCode420/SmartHdrManager) by VantaCode420, for the original idea.
+- [SmartHdrManager](https://github.com/VantaCode420/SmartHdrManager), for the original idea.
 - [PCGamingWiki](https://www.pcgamingwiki.com), for game information (CC BY-NC-SA 3.0).
-- [Slint](https://slint.dev), for the settings window, used under its royalty-free licence.
+- [Slint](https://slint.dev), for the user interface toolkit.
+- [minisign](https://jedisct1.github.io/minisign/), for release signatures.

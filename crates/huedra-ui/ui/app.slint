@@ -4,7 +4,7 @@
 
 import { Palette } from "std-widgets.slint";
 import { Theme } from "theme.slint";
-import { FocusRing } from "controls.slint";
+import { FocusRing, ActionButton } from "controls.slint";
 import {
     StatusPage, GamesPage, VideoPage, DisplaysPage, GeneralPage,
     GameRow, GameDetail, DisplayRow, HistoryRow, StoreChip, VideoAppRow, SiteRow
@@ -188,6 +188,20 @@ export component SettingsWindow inherits Window {
     in property <string> version;
     in property <string> data-folder;
     in property <string> update-note;
+    in property <bool> can-check-updates;
+    in property <bool> checking-updates;
+    in property <string> install-version;
+    in property <bool> has-project-page;
+    callback check-updates();
+    callback install-update();
+    callback open-project();
+    callback open-support();
+
+    // Disclaimer: shown until accepted; the tray does not run before that.
+    in-out property <bool> show-disclaimer;
+    in property <bool> disclaimer-accepted;
+    callback accept-disclaimer();
+    callback decline-disclaimer();
     callback set-start-with-windows(bool);
     callback set-context-menu(bool);
     callback set-updates(int);
@@ -229,18 +243,12 @@ export component SettingsWindow inherits Window {
                     padding-left: root.compact ? 0px : 14px;
                     spacing: 10px;
                     alignment: root.compact ? center : start;
-                    Rectangle {
-                        width: 18px;
-                        height: 18px;
+                    Image {
+                        width: 22px;
+                        height: 22px;
                         y: (parent.height - self.height) / 2;
-                        border-radius: 9px;
-                        border-width: root.hdr-on ? 0px : 2px;
-                        border-color: Theme.sdr;
-                        if root.hdr-on: Image {
-                            source: Theme.dot-image;
-                            width: parent.width;
-                            height: parent.height;
-                        }
+                        source: root.hdr-on ? Theme.dot-image : Theme.sdr-image;
+                        accessible-role: none;
                     }
                     if !root.compact: Text {
                         text: "Huedra";
@@ -432,6 +440,25 @@ export component SettingsWindow inherits Window {
                 version: root.version;
                 data-folder: root.data-folder;
                 update-note: root.update-note;
+                can-check-updates: root.can-check-updates;
+                checking-updates: root.checking-updates;
+                install-version: root.install-version;
+                has-project-page: root.has-project-page;
+                check-updates => {
+                    root.check-updates();
+                }
+                install-update => {
+                    root.install-update();
+                }
+                open-project => {
+                    root.open-project();
+                }
+                open-support => {
+                    root.open-support();
+                }
+                show-disclaimer => {
+                    root.show-disclaimer = true;
+                }
                 set-start-with-windows(on) => {
                     root.set-start-with-windows(on);
                 }
@@ -456,6 +483,76 @@ export component SettingsWindow inherits Window {
                 set-log-titles(on) => {
                     root.set-log-titles(on);
                 }
+            }
+        }
+    }
+
+    // The disclaimer, over everything else.
+    if root.show-disclaimer: Rectangle {
+        background: #000000a0;
+        TouchArea {
+            // Takes the clicks meant for the window behind.
+        }
+        Rectangle {
+            width: min(parent.width - 48px, 620px);
+            height: min(parent.height - 48px, card.preferred-height);
+            border-radius: Theme.radius-card;
+            background: Theme.surface;
+            border-width: 1px;
+            border-color: Theme.border;
+            drop-shadow-blur: 24px;
+            drop-shadow-color: #00000060;
+            card := VerticalLayout {
+                padding: 28px;
+                spacing: 14px;
+                Text {
+                    text: "Before you start";
+                    font-size: Theme.heading-size;
+                    font-weight: 600;
+                    color: Theme.text;
+                }
+                Text {
+                    text: "Huedra turns Windows HDR on and off for you while games and HDR video run. It changes only the HDR setting that Windows offers under Settings > System > Display.";
+                    wrap: word-wrap;
+                    color: Theme.text;
+                }
+                Text {
+                    text: "Huedra is beta software, provided \"as is\", without warranty of any kind, and you use it at your own risk. Its authors and contributors are not liable for any damage, data loss or other problem with your computer, displays, games or other software that may result from using it, including a display left in HDR or SDR after an interrupted switch.";
+                    wrap: word-wrap;
+                    color: Theme.text;
+                }
+                Text {
+                    text: "Huedra does not read or change the memory of other programs. No game publisher has reviewed it, and how anti-cheat software treats it cannot be guaranteed.";
+                    wrap: word-wrap;
+                    color: Theme.text;
+                }
+                Text {
+                    text: "If a display is left in the wrong mode, turn HDR off under Settings > System > Display, or run: huedra hdr off --display all";
+                    wrap: word-wrap;
+                    color: Theme.text-muted;
+                    font-size: Theme.caption-size;
+                }
+                HorizontalLayout {
+                    alignment: end;
+                    spacing: 8px;
+                    padding-top: 6px;
+                    if !root.disclaimer-accepted: ActionButton {
+                        text: "Exit";
+                        clicked => {
+                            root.decline-disclaimer();
+                        }
+                    }
+                    accept := ActionButton {
+                        text: root.disclaimer-accepted ? "Close" : "Accept and continue";
+                        primary: true;
+                        clicked => {
+                            root.accept-disclaimer();
+                        }
+                    }
+                }
+            }
+            init => {
+                accept.focus();
             }
         }
     }

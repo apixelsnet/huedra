@@ -31,7 +31,13 @@ step "extension icons"
 icons=$(mktemp -d)
 cargo run -q -p huedra-core --example extension_icons $locked -- "$icons"
 for icon in "$icons"/*.png; do
-  cmp -s "$icon" "extras/browser/icons/${icon##*/}" || { echo "extras/browser/icons is out of date: run the extension_icons example" >&2; exit 1; }
+  if ! cmp -s "$icon" "extras/browser/icons/${icon##*/}"; then
+    # Kept for the CI run's artifacts, to be committed.
+    mkdir -p "${CARGO_TARGET_DIR:-target}/extension-icons"
+    cp "$icons"/*.png "${CARGO_TARGET_DIR:-target}/extension-icons/"
+    echo "extras/browser/icons is out of date: run the extension_icons example (CI keeps the new icons as the artifact extension-icons)" >&2
+    exit 1
+  fi
 done
 
 step "doc"

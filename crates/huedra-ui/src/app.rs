@@ -38,7 +38,7 @@ const TITLE: &str = "Huedra";
 /// How often the Status page asks the tray process for its state.
 const STATUS_POLL: Duration = Duration::from_secs(1);
 const ICON_SIZE: u32 = 64;
-const DOT_SIZE: u32 = 36;
+const DOT_SIZE: u32 = 44;
 const SPECTRUM_W: u32 = 640;
 const SPECTRUM_H: u32 = 160;
 
@@ -128,6 +128,11 @@ pub fn run(locations: Locations, page: Page) -> Result<(), slint::PlatformError>
         DOT_SIZE,
         DOT_SIZE,
     ));
+    theme.set_sdr_image(rgba_image(
+        &icon::render(TrayIcon::Sdr, DOT_SIZE),
+        DOT_SIZE,
+        DOT_SIZE,
+    ));
     ui.set_light_theme(registry::apps_use_light_theme());
     let weak = ui.as_weak();
     registry::watch_light_theme(move |light| {
@@ -147,6 +152,11 @@ pub fn run(locations: Locations, page: Page) -> Result<(), slint::PlatformError>
     );
 
     let config = Config::load(&locations.config).unwrap_or_default();
+    ui.set_disclaimer_accepted(config.general.disclaimer_accepted);
+    ui.set_show_disclaimer(!config.general.disclaimer_accepted);
+    ui.set_can_check_updates(huedra_core::update::is_available());
+    ui.set_has_project_page(huedra_core::update::project_page().is_some());
+    ui.set_install_version(install_version(&locations.update).into());
     let mut games = config.manual_games();
     games.extend(stores::scan());
     let state = State {
@@ -176,6 +186,7 @@ pub fn run(locations: Locations, page: Page) -> Result<(), slint::PlatformError>
     wire_video(&ui);
     wire_displays(&ui);
     wire_general(&ui);
+    wire_about(&ui);
     restore_geometry(&ui);
     start_status_polling(&ui);
     start_lookups(&ui);
@@ -1177,6 +1188,117 @@ fn save_geometry(ui: &SettingsWindow) {
 
 // ---- Updates ----------------------------------------------------------
 
+/// The newer version waiting to be installed, or an empty string.
+fn install_version(path: &std::path::Path) -> String {
+    use huedra_core::update::{UpdateState, Version};
+    UpdateState::load(path)
+        .waiting(Version::current())
+        .map(|v| v.to_string())
+        .unwrap_or_default()
+}
+
+/// Runs this program with `args` and no console window, then calls `done`
+/// on the window's thread with whether it succeeded.
+fn run_program(
+    ui: &SettingsWindow,
+    args: &'static [&'static str],
+    done: impl FnOnce(&SettingsWindow, bool) + Send + 'static,
+) {
+    use std::os::windows::process::CommandExt as _;
+    /// `CREATE_NO_WINDOW`: no console window for the child process.
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    let weak = ui.as_weak();
+    thread::spawn(move || {
+        let ok = std::env::current_exe().is_ok_and(|exe| {
+            std::process::Command::new(exe)
+                .args(args)
+                .creation_flags(CREATE_NO_WINDOW)
+                .status()
+                .is_ok_and(|s| s.success())
+        });
+        let _ = weak.upgrade_in_event_loop(move |ui| done(&ui, ok));
+    });
+}
+
+/// Check for updates, install, the project's links and the disclaimer.
+fn wire_about(ui: &SettingsWindow) {
+    let weak = ui.as_weak();
+    ui.on_check_updates(move || {
+        let Some(ui) = weak.upgrade() else {
+            return;
+        };
+        ui.set_checking_updates(true);
+        run_program(&ui, &["update", "--check"], |ui, ok| {
+            ui.set_checking_updates(false);
+            let Some(path) = with_state(|s| s.locations.update.clone()) else {
+                return;
+            };
+            let mut note = update_note(&path);
+            if !ok {
+                note = format!("The check did not succeed; the log has the reason. {note}");
+            }
+            ui.set_update_note(note.into());
+            ui.set_install_version(install_version(&path).into());
+        });
+    });
+    let weak = ui.as_weak();
+    ui.on_install_update(move || {
+        let Some(ui) = weak.upgrade() else {
+            return;
+        };
+        ui.set_update_note(
+            "Installing. Huedra starts again in the notification area when it is done.".into(),
+        );
+        ui.set_install_version("".into());
+        run_program(&ui, &["update"], |ui, ok| {
+            if !ok {
+                ui.set_update_note("The update was not installed; the log has the reason.".into());
+            }
+        });
+    });
+    ui.on_open_project(|| {
+        if let Some(url) = huedra_core::update::project_page() {
+            shell::open_web_page(&url);
+        }
+    });
+    ui.on_open_support(|| {
+        shell::open_web_page(huedra_core::update::SUPPORT_URL);
+    });
+    let weak = ui.as_weak();
+    ui.on_accept_disclaimer(move || {
+        let Some(ui) = weak.upgrade() else {
+            return;
+        };
+        ui.set_show_disclaimer(false);
+        if ui.get_disclaimer_accepted() {
+            return;
+        }
+        ui.set_disclaimer_accepted(true);
+        let setup = with_state(|s| {
+            edit(s, |c| c.general.disclaimer_accepted = true);
+            !s.locations.portable && s.config.general.start_with_windows
+        });
+        // What the tray did on its first start before there was a
+        // disclaimer: Start with Windows is on by default, so a copy that is
+        // not portable adds the start-up entry.
+        if setup == Some(true)
+            && registry::startup_command().is_none()
+            && let Ok(exe) = std::env::current_exe()
+        {
+            let _ = registry::set_startup(Some(&format!("\"{}\"", exe.display())));
+            ui.set_start_with_windows(registry::startup_command().is_some());
+        }
+        if !matches!(pipe::call(&Request::Status), Ok(Response::Status(_)))
+            && let Ok(exe) = std::env::current_exe()
+        {
+            huedra_win::process::spawn_detached(&exe, &[]);
+        }
+    });
+    ui.on_decline_disclaimer(|| {
+        let _ = slint::quit_event_loop();
+    });
+}
+
 /// The Updates row's extra sentence: whether this build checks, when it
 /// last did, and what is waiting.
 fn update_note(path: &std::path::Path) -> String {
@@ -1198,7 +1320,7 @@ fn update_note(path: &std::path::Path) -> String {
     };
     if let Some(version) = state.waiting(Version::current()) {
         note.push_str(&format!(
-            " Huedra {version} is available: choose Install in the tray menu."
+            " Huedra {version} is available: choose Install under About, or in the tray menu."
         ));
     }
     note

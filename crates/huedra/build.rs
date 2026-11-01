@@ -99,11 +99,20 @@ END
     ))
 }
 
-/// An `.ico` file with 32-bit images at every size in [`ICON_SIZES`].
+/// An `.ico` file with 32-bit images at every size in [`ICON_SIZES`]; the
+/// 256-pixel image is stored as PNG, which Windows accepts at that size and
+/// which is a fraction of the bitmap's size.
 fn ico() -> Result<Vec<u8>, String> {
     let images: Vec<(u32, Vec<u8>)> = ICON_SIZES
         .iter()
-        .map(|&size| Ok((size, bmp_entry(size)?)))
+        .map(|&size| {
+            let data = if size == 256 {
+                png_entry(size)?
+            } else {
+                bmp_entry(size)?
+            };
+            Ok((size, data))
+        })
         .collect::<Result<_, String>>()?;
     let count = u16::try_from(images.len()).map_err(|e| e.to_string())?;
     let mut file = Vec::new();
@@ -125,6 +134,19 @@ fn ico() -> Result<Vec<u8>, String> {
         file.extend_from_slice(&data);
     }
     Ok(file)
+}
+
+/// One icon image as a compressed PNG.
+fn png_entry(size: u32) -> Result<Vec<u8>, String> {
+    let rgba = icon::render(TrayIcon::Hdr, size);
+    let mut out = Vec::new();
+    let mut encoder = png::Encoder::new(&mut out, size, size);
+    encoder.set_color(png::ColorType::Rgba);
+    encoder.set_depth(png::BitDepth::Eight);
+    let mut writer = encoder.write_header().map_err(|e| e.to_string())?;
+    writer.write_image_data(&rgba).map_err(|e| e.to_string())?;
+    writer.finish().map_err(|e| e.to_string())?;
+    Ok(out)
 }
 
 /// One icon image: a BITMAPINFOHEADER, BGRA rows bottom-up, and an empty

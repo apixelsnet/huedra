@@ -38,3 +38,9 @@ Code: `window_proc` in `crates/huedra-win/src/event_loop.rs`.
 - Fix: every queued event also posts a `WM_NULL` to the tray window, so `GetMessageW` returns at once.
 
 Verified: build green; the fixed build runs as the owner's tray. Verified by the owner (2026-11-01): several right-clicks on the icon, the menu shows almost at once. Not verified: left-click timing and display-change reaction were not timed separately (same code path).
+
+## Result (2026-11-01) — gamut icon
+Code: `crates/huedra-core/src/icon.rs`.
+- The icon is now the visible colour gamut (CIE 1931 spectral locus, drawn a quarter wider than its true proportions): in HDR filled with the BT.2020 palette round the edge (green at the top, pink to the right, violet and ultramarine below, cyan on the left, no yellow) with a white glow at the white point and the white BT.2020 triangle from 32 pixels up; in SDR a grey outline of the same shape. The same `render` draws the tray icon, the program icon, the settings window's logo and the extension icons.
+- Tests: shape filled and outline hollow at the white point, corners clear, green on top and pink on the right, no yellow anywhere in the palette sweep.
+Verified: unit tests in CI; a preview of the same drawing at 16 to 256 pixels on dark and light backgrounds; the 16-pixel SDR outline is still recognisable. Not verified: the tray icon in the owner's own notification area (the new build is not installed there yet).

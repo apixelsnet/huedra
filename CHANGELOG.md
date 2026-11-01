@@ -4,7 +4,14 @@ Changes that matter to people using Huedra (not the project's own build and work
 
 ## Unreleased
 
-Nothing yet.
+### Added
+- A disclaimer on first start. Huedra does not run, and never changes HDR, until it is accepted; it can be read again under General › About.
+- Check for updates and Install buttons under General › About.
+- Links to star the project on GitHub and to support it on Ko-fi, under General › About.
+- A user guide: `docs/USER-GUIDE.md`.
+
+### Changed
+- New icon: the visible colour gamut with the BT.2020 triangle, in colour while HDR is on and as a grey outline in SDR. Used for the program, the tray, the settings window and the browser extension.
 
 ## 0.1.0 — 2026-11-01
 

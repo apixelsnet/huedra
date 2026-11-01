@@ -42,3 +42,6 @@ Status: done.
 
 ## Result (2026-11-01) — phase 5
 - `update.toml` in the local folder (or `data` when portable): `last_check` (seconds since 1970), `available` (a version waiting for consent), `skipped` (a version rolled back from). Missing or damaged means "never checked". `[general] updates` = `install` (default), `ask` or `off`.
+
+## Result (2026-11-01) — disclaimer flag
+- `[general] disclaimer_accepted` (default `false`): set by the settings window's Accept and continue. Until it is `true` the tray does not run. Existing settings files without it show the disclaimer once.
