@@ -37,4 +37,4 @@ Code: `window_proc` in `crates/huedra-win/src/event_loop.rs`.
 - Cause: the window procedure only queued events, counting on the loop to drain the queue after `DispatchMessageW`. Explorer's tray callbacks (and `WM_DISPLAYCHANGE`) are sent, not posted, so `GetMessageW` handled them inside its wait without returning; the queued menu event waited for the next posted message (a timer, a window coming to the front, a pipe call). Left-click (opening the settings window) and display changes were delayed the same way.
 - Fix: every queued event also posts a `WM_NULL` to the tray window, so `GetMessageW` returns at once.
 
-Verified: build green; the fixed build runs as the owner's tray. Not verified: the menu's speed by the owner's own right-click (no synthetic clicks on the owner's taskbar).
+Verified: build green; the fixed build runs as the owner's tray. Verified by the owner (2026-11-01): several right-clicks on the icon, the menu shows almost at once. Not verified: left-click timing and display-change reaction were not timed separately (same code path).

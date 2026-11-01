@@ -101,7 +101,7 @@ Two things, both on by default and both can be turned off under Settings › Gen
 - Update checks: once a day, the release files are downloaded from the release location. No identifier is sent beyond a `Huedra/<version>` user agent.
 - Game information: the settings window looks up installed games on [PCGamingWiki](https://www.pcgamingwiki.com), sending each game's Steam ID, or its name for other stores, at most once per second, and downloads Discord's public list of games for icons. Results are kept for 30 days.
 
-There is no telemetry. Window titles are not written to the log unless you turn that on.
+There is no telemetry. Window titles are not written to the log unless you turn that on. The full statement, including the browser extension, is in [PRIVACY.md](PRIVACY.md).
 
 **Why does SmartScreen show a warning?**
 The program has no Windows code-signing certificate yet. Updates are still checked: each one must carry a valid signature from the project's own key before it is installed.
@@ -148,7 +148,16 @@ Each feature has a short document in [`docs/features`](docs/features), stating i
 
 ## Licence
 
-Not yet chosen. Until a licence is added, all rights are reserved.
+Huedra is licensed under either of
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
+- MIT License ([LICENSE-MIT](LICENSE-MIT))
+
+at your option.
+
+Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in Huedra by you, as defined in the Apache-2.0 licence, shall be dual licensed as above, without any additional terms or conditions.
+
+The settings window uses [Slint](https://slint.dev) under the Slint Royalty-free Desktop, Mobile, and Web Applications License 2.0; its attribution is in General > About.
 
 ## Acknowledgements
 

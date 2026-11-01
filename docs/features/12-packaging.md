@@ -58,7 +58,7 @@ Pre-release checklist (testers on other machines, before the first public releas
 
 ## Result (2026-11-01) — phase 5
 Code: `build/pack-release.ps1`, `startup_entry` in `crates/huedra/src/app.rs`, `uninstall` in `crates/huedra/src/launch.rs`, `minisign` in `build/Dockerfile`, update variables in `build/remote-build.sh`; `README.md`, `SECURITY.md`, `CHANGELOG.md`.
-- `pack-release.ps1` reads the version from `huedra.exe --version` and writes `dist\release\<version>\`: `huedra.exe`, `release.toml` (LF, no byte-order mark) and `huedra-<version>-windows-x64.zip` (program, README, SECURITY, CHANGELOG, and LICENSE once there is one). With `-SecretKey` it signs the manifest and the zip with minisign.
+- `pack-release.ps1` reads the version from `huedra.exe --version` and writes `dist\release\<version>\`: `huedra.exe`, `release.toml` (LF, no byte-order mark) and `huedra-<version>-windows-x64.zip` (program, README, SECURITY, CHANGELOG, PRIVACY, LICENSE-MIT and LICENSE-APACHE). With `-SecretKey` it signs the manifest and the zip with minisign.
 - Start-up entry: written on the first start (no settings file yet) of a non-portable copy, because Start with Windows is on by default; rewritten when the entry names a program that no longer exists. Portable copies never touch it.
 - `uninstall` now names both data folders (roaming and local).
 - README follows Best-README-Template, with the questions from the plan (anti-cheat, what leaves the PC, SmartScreen, the black flash, removal, tested hardware).

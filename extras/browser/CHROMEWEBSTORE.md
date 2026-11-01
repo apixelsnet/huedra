@@ -98,7 +98,7 @@ Firefox: the manifest declares `data_collection_permissions: { required: ["none"
 ## Privacy Policy
 
 **Privacy Policy URL**
-Not created. Not strictly required (no data handled), but recommended. Text to host:
+`PRIVACY.md` at the top of the repository (once the repository is public: `https://github.com/<owner>/huedra/blob/main/PRIVACY.md`). Its extension part, for reference:
 
 ```
 Privacy Policy for Huedra (browser extension)

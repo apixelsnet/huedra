@@ -40,7 +40,7 @@ if (Test-Path $zip) { Remove-Item $zip }
 $archive = [System.IO.Compression.ZipFile]::Open($zip, 'Create')
 try {
     $null = [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $program, 'huedra.exe', 'Optimal')
-    foreach ($doc in 'README.md', 'SECURITY.md', 'CHANGELOG.md', 'LICENSE') {
+    foreach ($doc in 'README.md', 'SECURITY.md', 'CHANGELOG.md', 'PRIVACY.md', 'LICENSE-MIT', 'LICENSE-APACHE') {
         $path = Join-Path $root $doc
         if (Test-Path $path) {
             $null = [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $path, $doc, 'Optimal')

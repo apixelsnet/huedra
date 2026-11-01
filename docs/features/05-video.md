@@ -60,7 +60,7 @@ Code: `StreamingSite` and the site rule in `assess` in `crates/huedra-core/src/v
 - Settings: `[video] sites`, none by default. Video players page, Streaming sites: one switch per site, with its address.
 
 Verified on this PC: unit tests (marker read, chosen site full screen, windowed waits, site not chosen, Never, players ignore markers; config read, write and round trip). The script in headless Edge (nothing on the screen) on a stand-in `www.netflix.com` page served by the test, with a canvas-stream video: marked in full screen, kept through a title rewrite, removed on leaving full screen, not marked full screen without a video, nothing done on another host. The page on a hidden desktop: five switches, off at first; Netflix and HBO Max on wrote `sites`, and turning them off removed the line.
-Not verified: the real sites (their players, full-screen element and title changes); the extension loaded into a browser; Firefox; the tray and any HDR switch from it (the tray path is the YouTube marker's).
+Not verified: the real sites (their players, full-screen element and title changes); Firefox. The owner has no subscription to any of them, so this stays untested here; the extension and the tray path are the ones verified with YouTube (see below). Status of this part: partly done (built and tested on a stand-in page only).
 
 ## Result (2026-10-31) — Extension icons and packaging
 Code: `crates/huedra-core/examples/extension_icons.rs`, `extras/browser/icons/`, `extras/browser/manifest.json` (0.3.0), `build/pack-extension.ps1`, extension icon step in `build/ci.sh`.
@@ -80,7 +80,7 @@ Code: `VideoWindow::monitor` and `Assessment::monitors` in `crates/huedra-core/s
 - Governed by Displays, "Only the display showing the content" (on by default); off, every managed display switches together as before. A window on a display Huedra does not manage switches nothing.
 
 Verified: unit test (HDR tab on display 2 beside a full-screen window on 1 gives display 2; SDR full screen gives its display; While open gives every window's display). Build green. Earlier, by the owner: an HDR YouTube video turned HDR on, but on both displays (before this change).
-Verified on this PC by the owner (YouTube HDR video, full screen, 3 s hold): full screen on display 2 turned HDR on for display 2 only and back to SDR 3 s after leaving full screen; the same on display 1 turned only display 1 on and off. Display 2 stayed in SDR throughout the second run. After the switch YouTube played its HDR stream (the owner saw HDR in the player's quality menu), so the extension's reload on the `dynamic-range` change works in Chrome; the YouTube half of "Done when" is met.
+Verified on this PC by the owner (YouTube HDR video, full screen, 3 s hold): full screen on display 2 turned HDR on for display 2 only and back to SDR 3 s after leaving full screen; the same on display 1 turned only display 1 on and off. Display 2 stayed in SDR throughout the second run. After the switch YouTube played its HDR stream (the owner saw HDR in the player's quality menu), so the extension's reload on the `dynamic-range` change works in Chrome; the YouTube half of "Done when" is met. An HDR file in MPC-HC, full screen on display 2, turned only display 2 on and back to SDR 3 s after it ended (mpv itself not yet tried).
 Not verified: HDR following a window that moves while it stays in HDR (leaving full screen ends the trigger first, so moving a full-screen video did not exercise it).
 
 Status: in progress (phase 4).
