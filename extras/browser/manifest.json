@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Huedra",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Tells Huedra when an HDR video is open, so it can turn HDR on for it.",
   "minimum_chrome_version": "111",
   "icons": {

@@ -126,6 +126,7 @@ The extension does not use cookies, analytics or third-party services.
 
 | Version | Date | Changes | Status |
 |---------|------|---------|--------|
+| 0.3.1 | 2026-11-01 | New icons: the visible colour gamut with the BT.2020 triangle, matching the program. | Draft |
 | 0.3.0 | 2026-10-31 | First store version: YouTube HDR detection, streaming-site full-screen rule, icons, Chrome 111 or later, Firefox 128 or later. | Draft |
 
 ## Review Notes
