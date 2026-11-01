@@ -41,3 +41,6 @@ fi
   cat "$text"
   echo '````'
 } >> "$out"
+
+# Some crates ship their licence with CRLF line endings; the file uses LF.
+sed -i 's/\r$//' "$out"
