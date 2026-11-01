@@ -50,3 +50,7 @@ Not verified: a real update through the dialog. The update channel answers 404 w
 
 ## Result (2026-11-01) — wording for the hold time
 - The setting is now "Keep HDR on after a game or video ends (seconds)", per game "Keep HDR on after the game closes", for video "Keep HDR on after the video ends", each with a description of why it exists. The history reason reads, for example, "Cyberpunk 2077 closed; HDR stayed on for 10 more seconds". The settings file keeps `hold_secs`.
+
+## Result (2026-11-01) — first update through the channel
+Verified on this PC with the published releases, the repository now public: a portable copy of the downloaded 0.1.0 zip ran `huedra update --check` against the real release address ("Huedra 0.1.1 is available"), then `huedra update` installed 0.1.1 (its SHA-256 matches the signed `release.toml`) and kept 0.1.0 as `huedra.previous.exe`; `update --rollback` restored 0.1.0, `update` installed 0.1.1 again, and 0.1.1 then reported itself up to date. The update channel answers 200 for every file.
+Not verified: the daily check and the Update available dialog in a running tray (the test copy ran no tray); Install automatically.

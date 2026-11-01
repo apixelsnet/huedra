@@ -163,3 +163,7 @@ Not verified: the CI run on GitHub; the zip from `pack-release.ps1` with the fil
 
 ## Result (2026-11-01) — repository rules applied
 - Run by the owner after the repository went public: "Protect main" was created as designed. "Protect release tags" was refused (HTTP 422): GitHub does not accept GitHub Actions (`Integration` 15368) as a bypass actor, and without it a creation rule would also stop the Release workflow from tagging versions. The tag ruleset now blocks only moving and deleting `v*` and `update-channel`, admins excepted; creating a tag needs write access, which only admins have.
+
+## Result (2026-11-01) — 0.1.1, the first public release
+- Started with Release > Run workflow (version 0.1.1) after the repository went public: every job green (version, build, Windows run and pack, publish). "Huedra 0.1.1 beta" (pre-release): `huedra-0.1.1-windows-x64.zip` (5,521,108 bytes, with `THIRD-PARTY-LICENSES.md`), its signature and `huedra-browser-extension-0.3.1.zip`. The update channel carries `huedra.exe` (10,048,512 bytes with the update key, so above the old 10 MB limit), `release.toml`, `release-notes.md` and their signatures.
+- Verified on this PC from the downloads: the zip, `release.toml` and `release-notes.md` signatures verify with the release key (trusted comment "huedra 0.1.1"); the exe's size and SHA-256 match `release.toml`; the extension zip's manifest says 0.3.1; Defender finds nothing in the zip, the exe or the extension zip.
