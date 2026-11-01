@@ -7,34 +7,24 @@ use crate::{APP_NAME, VERSION};
 /// How many of the newest log lines a report includes.
 pub const LOG_LINES: usize = 100;
 
-/// Windows 11 builds start here; earlier ones are Windows 10.
-const FIRST_WINDOWS_11_BUILD: u32 = 22_000;
-
 /// Put in place of the user's profile folder, so a report does not carry
 /// the user name.
-const PROFILE_PLACEHOLDER: &str = "%USERPROFILE%";
+const PROFILE_PLACEHOLDER: &str = r"%USERPROFILE%\";
 
 /// The crash file's content: when, which part of Huedra, and why.
 pub fn crash_entry(time: &str, role: &str, message: &str) -> String {
     format!("{time} {APP_NAME} {VERSION} ({role}) stopped: {message}\n")
 }
 
-/// "Windows 11 24H2 (build 26100)", from the registry's `CurrentBuild` and
-/// `DisplayVersion`.
+/// "Windows 24H2 (build 26100)", from the registry's `DisplayVersion` and
+/// `CurrentBuild` (builds from 22000 are Windows 11).
 pub fn windows_name(build: Option<&str>, display_version: Option<&str>) -> String {
-    let number = build.and_then(|b| b.trim().parse::<u32>().ok());
-    let name = match number {
-        Some(n) if n >= FIRST_WINDOWS_11_BUILD => "Windows 11",
-        Some(_) => "Windows 10",
-        None => "Windows",
-    };
-    let version = display_version
-        .map(str::trim)
-        .filter(|v| !v.is_empty())
-        .map(|v| format!(" {v}"))
-        .unwrap_or_default();
-    let build = number.map(|n| format!(" (build {n})")).unwrap_or_default();
-    format!("{name}{version}{build}")
+    let unknown = "unknown";
+    format!(
+        "Windows {} (build {})",
+        display_version.unwrap_or(unknown),
+        build.unwrap_or(unknown)
+    )
 }
 
 /// What goes into a report.
@@ -46,7 +36,7 @@ pub struct Details<'a> {
     pub portable: bool,
     /// The newest crash file's content, if there is one.
     pub crash: Option<&'a str>,
-    /// The log, oldest line first (the rotated file followed by the current one).
+    /// The log, oldest line first.
     pub log: &'a str,
     /// The user's profile folder, replaced by `%USERPROFILE%`.
     pub profile: Option<&'a str>,
@@ -87,41 +77,15 @@ fn last_lines(text: &str, count: usize) -> &str {
     &text[start..]
 }
 
-/// Replaces the profile folder (in any letter case) with `%USERPROFILE%`,
-/// only where the whole folder name matches: `C:\Users\Al` is not replaced
-/// inside `C:\Users\Alex`.
+/// Replaces paths inside the profile folder, written as Windows writes it,
+/// with `%USERPROFILE%`. The path separator is part of the match, so
+/// `C:\Users\Al` is not found inside `C:\Users\Alex`.
 fn redact(text: &str, profile: &str) -> String {
-    let profile = profile.trim_end_matches(['\\', '/']);
+    let profile = profile.trim_end_matches('\\');
     if profile.is_empty() {
         return text.to_owned();
     }
-    let mut out = String::with_capacity(text.len());
-    let mut rest = text;
-    while let Some(found) = find_ignore_case(rest, profile) {
-        let end = found + profile.len();
-        let whole = rest[end..]
-            .chars()
-            .next()
-            .is_none_or(|c| !c.is_alphanumeric() && c != '_' && c != '-' && c != '.');
-        out.push_str(&rest[..found]);
-        out.push_str(if whole {
-            PROFILE_PLACEHOLDER
-        } else {
-            &rest[found..end]
-        });
-        rest = &rest[end..];
-    }
-    out.push_str(rest);
-    out
-}
-
-/// The byte position of `needle` in `haystack`, ignoring ASCII letter case.
-fn find_ignore_case(haystack: &str, needle: &str) -> Option<usize> {
-    haystack.char_indices().map(|(i, _)| i).find(|&i| {
-        haystack
-            .get(i..i + needle.len())
-            .is_some_and(|part| part.eq_ignore_ascii_case(needle))
-    })
+    text.replace(&format!("{profile}\\"), PROFILE_PLACEHOLDER)
 }
 
 #[cfg(test)]
@@ -132,15 +96,14 @@ mod tests {
     fn windows_names() {
         assert_eq!(
             windows_name(Some("26100"), Some("24H2")),
-            "Windows 11 24H2 (build 26100)",
-            "Windows 11"
+            "Windows 24H2 (build 26100)",
+            "both known"
         );
         assert_eq!(
-            windows_name(Some("19045"), Some("22H2")),
-            "Windows 10 22H2 (build 19045)",
-            "Windows 10"
+            windows_name(None, None),
+            "Windows unknown (build unknown)",
+            "unknown"
         );
-        assert_eq!(windows_name(None, None), "Windows", "unknown");
     }
 
     #[test]
@@ -148,7 +111,7 @@ mod tests {
         let log: String = (1..=150).map(|n| format!("line {n}\n")).collect();
         let crash = crash_entry("2026-11-01 18:06:04", "tray", "boom");
         let report = text(&Details {
-            windows: "Windows 11 24H2 (build 26100)",
+            windows: "Windows 24H2 (build 26100)",
             portable: false,
             crash: Some(&crash),
             log: &log,
@@ -158,7 +121,7 @@ mod tests {
             report.starts_with(&format!("Huedra {VERSION} problem report\n")),
             "title: {report}"
         );
-        assert!(report.contains("Windows: Windows 11 24H2"), "windows");
+        assert!(report.contains("Windows: Windows 24H2"), "windows");
         assert!(report.contains("(tray) stopped: boom"), "crash");
         assert!(report.contains("\nline 51\n"), "first kept line");
         assert!(!report.contains("\nline 50\n"), "older lines left out");
@@ -179,16 +142,15 @@ mod tests {
     }
 
     #[test]
-    fn profile_folder_is_hidden_in_any_case() {
+    fn profile_folder_is_hidden() {
         let report = text(&Details {
             windows: "Windows",
             portable: false,
             crash: Some(r"panicked at C:\Users\Alex\src"),
-            log: "Game: c:\\users\\alex\\Games\\a.exe\nOther: C:\\Users\\Alexandra\\b.exe\n",
+            log: "Game: C:\\Users\\Alex\\Games\\a.exe\nOther: C:\\Users\\Alexandra\\b.exe\n",
             profile: Some(r"C:\Users\Alex\"),
         });
         assert!(!report.contains(r"\Alex\"), "name hidden: {report}");
-        assert!(!report.contains(r"\alex\"), "lower case hidden: {report}");
         assert!(
             report.contains(r"%USERPROFILE%\Games\a.exe"),
             "replaced: {report}"

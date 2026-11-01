@@ -4,7 +4,6 @@
 //! Feature doc: `docs/features/14-problem-reports.md`.
 
 use std::fs;
-use std::path::PathBuf;
 
 use huedra_core::locations::Locations;
 use huedra_core::report::{self, Details};
@@ -27,9 +26,9 @@ const CLIPBOARD_TEXT: u32 = 13;
 const VERSION_KEY: &str = r"SOFTWARE\Microsoft\Windows NT\CurrentVersion";
 
 const OFFER_TITLE: &str = "Huedra closed unexpectedly";
-const OFFER_TEXT: &str = "Huedra stopped after an error the last time it ran.\n\n\
-    Copy the details to the clipboard and open the log folder, so you can \
-    send them with a problem report? Huedra itself sends nothing.";
+const OFFER_TEXT: &str = "Huedra stopped after an error last time.\n\n\
+    Copy the details for a problem report and open the log folder? \
+    Huedra sends nothing itself.";
 
 /// When the last run crashed, asks once whether to copy the details. The
 /// question waits on its own thread, so the caller goes on starting.
@@ -71,17 +70,11 @@ fn details(locations: &Locations) -> String {
         registry::string(Hive::LocalMachine, VERSION_KEY, "CurrentBuild").as_deref(),
         registry::string(Hive::LocalMachine, VERSION_KEY, "DisplayVersion").as_deref(),
     );
-    let crash = fs::read_to_string(&locations.crash)
-        .or_else(|_| fs::read_to_string(&locations.last_crash))
-        .ok();
-    let mut rotated = locations.log.clone().into_os_string();
-    rotated.push(".1");
-    let read = |path: PathBuf| {
-        fs::read(path)
-            .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
-            .unwrap_or_default()
-    };
-    let log = read(PathBuf::from(rotated)) + &read(locations.log.clone());
+    // The offer on each start has moved any new crash here already.
+    let crash = fs::read_to_string(&locations.last_crash).ok();
+    // The current file only; it holds the newest lines unless it was just
+    // started again. Huedra writes it as UTF-8.
+    let log = fs::read_to_string(&locations.log).unwrap_or_default();
     let profile = std::env::var("USERPROFILE").ok();
     report::text(&Details {
         windows: &windows,
