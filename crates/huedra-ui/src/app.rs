@@ -302,9 +302,10 @@ fn wire_status(ui: &SettingsWindow) {
             Request::Pause { minutes: 60 }
         });
     });
+    // This window is open already, so Huedra starts in the background.
     ui.on_start_huedra(|| {
         if let Ok(exe) = std::env::current_exe() {
-            let _ = std::process::Command::new(exe).spawn();
+            huedra_win::process::spawn_detached(&exe, &[command::BACKGROUND]);
         }
     });
 }
@@ -1262,24 +1263,38 @@ fn program_version() -> Option<huedra_core::update::Version> {
 }
 
 /// Runs this program with `args` and no console window, then calls `done`
-/// on the window's thread with whether it succeeded.
+/// on the window's thread with whether it succeeded. The program logs its
+/// own failures; a program that did not start at all is logged here.
 fn run_program(
     ui: &SettingsWindow,
     args: &'static [&'static str],
     done: impl FnOnce(&SettingsWindow, bool) + Send + 'static,
 ) {
     use std::os::windows::process::CommandExt as _;
+    use std::process::Stdio;
     /// `CREATE_NO_WINDOW`: no console window for the child process.
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
     let weak = ui.as_weak();
+    let log = with_state(|s| s.locations.log.clone());
     thread::spawn(move || {
-        let ok = std::env::current_exe().is_ok_and(|exe| {
+        let status = std::env::current_exe().and_then(|exe| {
             std::process::Command::new(exe)
                 .args(args)
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
                 .creation_flags(CREATE_NO_WINDOW)
                 .status()
-                .is_ok_and(|s| s.success())
         });
+        if let (Err(error), Some(path)) = (&status, log) {
+            let log = huedra_core::logfile::LogFile::new(path, huedra_core::logfile::MAX_BYTES);
+            let _ = log.append(&format!(
+                "{} Could not start `huedra {}`: {error}",
+                huedra_win::clock::now(),
+                args.join(" ")
+            ));
+        }
+        let ok = status.is_ok_and(|s| s.success());
         let _ = weak.upgrade_in_event_loop(move |ui| done(&ui, ok));
     });
 }
