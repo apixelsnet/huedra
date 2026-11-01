@@ -18,6 +18,8 @@ permissions:
 jobs:
   label:
     name: Label for the release notes
+    # Of edits, only a new title matters.
+    if: github.event.action != 'edited' || github.event.changes.title != null
     runs-on: ubuntu-24.04
     steps:
       - name: Add the label
