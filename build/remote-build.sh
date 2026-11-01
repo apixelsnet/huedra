@@ -40,4 +40,5 @@ echo "==> fetch"
 mkdir -p dist
 scp -q "$host:$remote/target/x86_64-pc-windows-msvc/release/huedra.exe" dist/huedra.exe
 scp -q "$host:$remote/src/Cargo.lock" Cargo.lock
+scp -q "$host:$remote/src/THIRD-PARTY-LICENSES.md" THIRD-PARTY-LICENSES.md
 ls -l dist/huedra.exe

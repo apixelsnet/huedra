@@ -38,6 +38,9 @@ on:
       - build/check-changelog.ps1
       - build/pack-release.ps1
       - build/pack-extension.ps1
+      - build/about.toml
+      - build/about.hbs
+      - THIRD-PARTY-LICENSES.md
       - .github/workflows/ci.yml
   pull_request:
     paths:
@@ -54,6 +57,9 @@ on:
       - build/check-changelog.ps1
       - build/pack-release.ps1
       - build/pack-extension.ps1
+      - build/about.toml
+      - build/about.hbs
+      - THIRD-PARTY-LICENSES.md
       - .github/workflows/ci.yml
   workflow_dispatch:
   workflow_call:
@@ -177,6 +183,9 @@ jobs:
       - name: Cargo.lock is up to date
         if: env.VERSION == ''
         run: git diff --exit-code Cargo.lock
+
+      - name: THIRD-PARTY-LICENSES.md is up to date
+        run: git diff --exit-code THIRD-PARTY-LICENSES.md
 
       # Only the Windows job reads it, and that job does not run for pushes
       # to main.

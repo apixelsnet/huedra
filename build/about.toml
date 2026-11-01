@@ -1,0 +1,22 @@
+# cargo-about: the licences of the libraries built into huedra.exe, written to
+# THIRD-PARTY-LICENSES.md by build/ci.sh and shipped in the release zip.
+# The accepted list matches deny.toml. Feature doc: docs/features/12-packaging.md.
+accepted = [
+    "MIT",
+    "Apache-2.0",
+    "Unicode-3.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "BSL-1.0",
+    "ISC",
+    "Zlib",
+    "LicenseRef-Slint-Royalty-free-2.0",
+]
+# Only the shipped target, as in deny.toml.
+targets = ["x86_64-pc-windows-msvc"]
+ignore-build-dependencies = true
+ignore-dev-dependencies = true
+# Huedra's own crates are not third-party.
+private = { ignore = true }
+# build/licences.sh runs this with --offline and adds Slint's licence, whose
+# LicenseRef text cargo-about 0.9 leaves out.
