@@ -104,7 +104,11 @@ fn redact(text: &str, profile: &str) -> String {
             .next()
             .is_none_or(|c| !c.is_alphanumeric() && c != '_' && c != '-' && c != '.');
         out.push_str(&rest[..found]);
-        out.push_str(if whole { PROFILE_PLACEHOLDER } else { &rest[found..end] });
+        out.push_str(if whole {
+            PROFILE_PLACEHOLDER
+        } else {
+            &rest[found..end]
+        });
         rest = &rest[end..];
     }
     out.push_str(rest);
