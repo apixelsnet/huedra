@@ -4,32 +4,27 @@
 //! Feature doc: `docs/features/14-problem-reports.md`.
 
 use std::fs;
+use std::io::Write as _;
+use std::os::windows::process::CommandExt as _;
 use std::path::PathBuf;
+use std::process::{Command, Stdio};
 
 use huedra_core::locations::Locations;
 use huedra_core::report::{self, Details};
-use windows::Win32::Foundation::{GlobalFree, HANDLE, HWND};
-use windows::Win32::System::DataExchange::{
-    CloseClipboard, EmptyClipboard, OpenClipboard, SetClipboardData,
-};
-use windows::Win32::System::Memory::{GMEM_MOVEABLE, GlobalAlloc, GlobalLock, GlobalUnlock};
-use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DestroyWindow, HWND_MESSAGE, IDYES, MB_ICONWARNING, MB_YESNO, MessageBoxW,
-    WINDOW_EX_STYLE, WINDOW_STYLE,
-};
-use windows::core::{HSTRING, PCWSTR, w};
+use windows::Win32::UI::WindowsAndMessaging::{IDYES, MB_ICONWARNING, MB_YESNO, MessageBoxW};
+use windows::core::HSTRING;
 
 use crate::registry::{self, Hive};
 use crate::shell;
 
-/// `CF_UNICODETEXT`: UTF-16 text on the clipboard.
-const CLIPBOARD_TEXT: u32 = 13;
 const VERSION_KEY: &str = r"SOFTWARE\Microsoft\Windows NT\CurrentVersion";
+/// `CREATE_NO_WINDOW`: no console window for `clip.exe`.
+const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 const OFFER_TITLE: &str = "Huedra closed unexpectedly";
-const OFFER_TEXT: &str = "Huedra stopped after an error the last time it ran.\n\n\
-    Copy the details to the clipboard and open the log folder, so you can \
-    send them with a problem report? Huedra itself sends nothing.";
+const OFFER_TEXT: &str = "Huedra stopped after an error last time.\n\n\
+    Copy the details for a problem report and open the log folder? \
+    Huedra sends nothing itself.";
 
 /// When the last run crashed, asks once whether to copy the details. The
 /// question waits on its own thread, so the caller goes on starting.
@@ -92,90 +87,29 @@ fn details(locations: &Locations) -> String {
     })
 }
 
-/// Puts `text` on the clipboard.
+/// Puts `text` on the clipboard with Windows' own `clip.exe` (from System32,
+/// never from the search path).
 fn copy_text(text: &str) -> bool {
-    let utf16: Vec<u16> = text.encode_utf16().chain([0]).collect();
-    // The clipboard needs an owner window for `SetClipboardData` to work.
-    let Some(owner) = MessageWindow::new() else {
+    let Some(windows) = std::env::var_os("SystemRoot") else {
         return false;
     };
-    // SAFETY: opens the clipboard for `owner`, which outlives the guard.
-    if unsafe { OpenClipboard(Some(owner.0)) }.is_err() {
-        return false;
-    }
-    let _open = OpenClipboardGuard;
-    // SAFETY: the clipboard is open by this thread.
-    if unsafe { EmptyClipboard() }.is_err() {
-        return false;
-    }
-    let bytes = utf16.len() * size_of::<u16>();
-    // SAFETY: allocates movable global memory, as the clipboard requires.
-    let Ok(memory) = (unsafe { GlobalAlloc(GMEM_MOVEABLE, bytes) }) else {
+    let clip = PathBuf::from(windows).join(r"System32\clip.exe");
+    let Ok(mut child) = Command::new(clip)
+        .stdin(Stdio::piped())
+        .creation_flags(CREATE_NO_WINDOW)
+        .spawn()
+    else {
         return false;
     };
-    // SAFETY: locks the block just allocated; null on failure.
-    let target = unsafe { GlobalLock(memory) }.cast::<u16>();
-    if target.is_null() {
-        // SAFETY: the block is ours and not yet handed to the clipboard.
-        let _ = unsafe { GlobalFree(Some(memory)) };
-        return false;
-    }
-    // SAFETY: `target` holds `bytes` bytes, exactly `utf16.len()` units; the
-    // block is unlocked right after the copy.
-    unsafe {
-        std::ptr::copy_nonoverlapping(utf16.as_ptr(), target, utf16.len());
-        let _ = GlobalUnlock(memory);
-    }
-    // SAFETY: hands the block to the clipboard, which owns it on success.
-    if unsafe { SetClipboardData(CLIPBOARD_TEXT, Some(HANDLE(memory.0))) }.is_err() {
-        // SAFETY: the clipboard refused the block, so it is still ours.
-        let _ = unsafe { GlobalFree(Some(memory)) };
-        return false;
-    }
-    true
-}
-
-/// A hidden message-only window, destroyed when dropped.
-struct MessageWindow(HWND);
-
-impl MessageWindow {
-    fn new() -> Option<Self> {
-        // SAFETY: a message-only window of the system's STATIC class with no
-        // name, menu or creation data.
-        let hwnd = unsafe {
-            CreateWindowExW(
-                WINDOW_EX_STYLE(0),
-                w!("STATIC"),
-                PCWSTR::null(),
-                WINDOW_STYLE(0),
-                0,
-                0,
-                0,
-                0,
-                Some(HWND_MESSAGE),
-                None,
-                None,
-                None,
-            )
-        }
-        .ok()?;
-        Some(Self(hwnd))
-    }
-}
-
-impl Drop for MessageWindow {
-    fn drop(&mut self) {
-        // SAFETY: a window this thread created, destroyed once.
-        let _ = unsafe { DestroyWindow(self.0) };
-    }
-}
-
-/// Closes the clipboard when dropped.
-struct OpenClipboardGuard;
-
-impl Drop for OpenClipboardGuard {
-    fn drop(&mut self) {
-        // SAFETY: the clipboard was opened by this thread.
-        let _ = unsafe { CloseClipboard() };
-    }
+    // UTF-16 with a byte order mark, so clip.exe keeps every character.
+    let bytes: Vec<u8> = [0xFF, 0xFE]
+        .into_iter()
+        .chain(text.encode_utf16().flat_map(u16::to_le_bytes))
+        .collect();
+    // Dropping the pipe after writing ends clip.exe's input.
+    let written = child
+        .stdin
+        .take()
+        .is_some_and(|mut input| input.write_all(&bytes).is_ok());
+    child.wait().is_ok_and(|status| status.success()) && written
 }
