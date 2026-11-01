@@ -4,12 +4,14 @@ Thank you for helping. Bug reports, testing on hardware the project has not seen
 
 ## Reporting a problem
 
-Open an issue with:
+[Open an issue](../../issues/new/choose) and pick the form that fits: **Bug report**, **Game or display problem**, **Feature request**, **Documentation** or **Question**. The forms ask for what is needed to find a problem:
 
 - the Huedra version (`huedra --version`) and the Windows version;
 - the graphics card and the displays involved;
 - what happened and what you expected;
 - the relevant lines of the log (`%LOCALAPPDATA%\Huedra\huedra.log`).
+
+Issues are labelled by kind (`bug`, `enhancement`, `compatibility`…), area (`area: games`, `area: video`…), status and priority. A maintainer confirms new issues; `good first issue` marks ones suited to a first contribution.
 
 Report security problems privately, as described in [SECURITY.md](SECURITY.md), not in a public issue.
 
@@ -30,6 +32,23 @@ Huedra is cross-compiled for Windows from Linux in Docker (`build/Dockerfile`, w
 
 - **With a Linux machine running Docker, reached over SSH:** put `HUEDRA_BUILD_HOST=<server>` in `build/local.env` (ignored by Git), then run `bash build/remote-build.sh`. It copies `huedra.exe` to `dist/`. `bash build/remote-fmt.sh` formats the sources.
 - **Without one:** open a pull request. GitHub Actions runs the same checks, and the run's artifacts contain `huedra.exe`, the release zip and the browser extension.
+
+## Branches and commits
+
+Work on a branch named after the kind of change, in lower case with hyphens:
+
+| Prefix | For |
+| --- | --- |
+| `feat/` | A new feature, for example `feat/per-display-sdr-lock` |
+| `fix/` | A bug fix, for example `fix/hdr-stays-on-after-exit` |
+| `docs/` | Documentation only |
+| `perf/` | Size, memory or speed |
+| `refactor/` | Code changes that do not change behaviour |
+| `test/` | Tests only |
+| `ci/` | Workflows and the build |
+| `chore/` | Dependencies and housekeeping |
+
+Commit messages and pull request titles follow [Conventional Commits](https://www.conventionalcommits.org/): `feat: per-display SDR lock`, `fix: keep HDR off after an outside change`. The title decides the section of the release notes the change is listed in: `feat` under Added, `fix` under Fixed, anything else under Changed.
 
 ## Pull requests
 

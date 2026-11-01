@@ -1,0 +1,130 @@
+# The repository's labels. The Labels workflow creates each one that is missing
+# and brings the colour and description of the others in line with this file.
+# A label that is not listed here is left alone, so removing one from this file
+# does not delete it.
+#
+# Keep each colour in quotes: unquoted, 5319e7 reads as a number in scientific
+# notation and 008672 as 8672, and GitHub refuses both.
+
+# What kind of issue it is. The first ones are GitHub's own names, kept so old
+# links and issues still match.
+- name: bug
+  color: "d73a4a"
+  description: Something isn't working
+- name: enhancement
+  color: "a2eeef"
+  description: New feature or request
+- name: documentation
+  color: "0075ca"
+  description: Improvements or additions to the README, the user guide or the docs
+- name: question
+  color: "d876e3"
+  description: Further information is requested
+- name: security
+  color: "b60205"
+  description: Hardening or a fix found outside a private report
+- name: dependencies
+  color: "0366d6"
+  description: Updates a dependency
+- name: performance
+  color: "fbca04"
+  description: Size, memory, CPU use or speed
+- name: compatibility
+  color: "c5def5"
+  description: A game, display, graphics card or Windows version that behaves differently
+- name: upstream
+  color: "c5def5"
+  description: The cause is in Windows, a graphics driver, a game or another program
+- name: duplicate
+  color: "cfd3d7"
+  description: This issue or pull request already exists
+- name: invalid
+  color: "e4e669"
+  description: This doesn't seem right
+- name: wontfix
+  color: "ffffff"
+  description: This will not be worked on
+- name: good first issue
+  color: "7057ff"
+  description: Good for newcomers
+- name: help wanted
+  color: "008672"
+  description: Extra attention is needed
+
+# Where an issue stands.
+- name: "status: needs triage"
+  color: "ededed"
+  description: Not looked at by a maintainer yet
+- name: "status: confirmed"
+  color: "0e8a16"
+  description: Reproduced or accepted
+- name: "status: in progress"
+  color: "1d76db"
+  description: Someone is working on it
+- name: "status: needs info"
+  color: "fef2c0"
+  description: Waiting on the reporter for more details
+- name: "status: blocked"
+  color: "5319e7"
+  description: Waiting on something else first
+
+# How soon.
+- name: "priority: critical"
+  color: "b60205"
+  description: Leaves displays in the wrong mode or breaks Huedra for most people
+- name: "priority: high"
+  color: "d93f0b"
+  description: Should be in the next release
+- name: "priority: medium"
+  color: "fbca04"
+  description: Will be done when there is time
+- name: "priority: low"
+  color: "c2e0c6"
+  description: Nice to have
+
+# Which part of Huedra. The issue forms' Area field sets these (Triage workflow).
+- name: "area: hdr switching"
+  color: "bfdadc"
+  description: Turning HDR on and off, modes, displays and recovery
+- name: "area: games"
+  color: "bfdadc"
+  description: Game libraries, game detection, PCGamingWiki and Start with HDR
+- name: "area: video"
+  color: "bfdadc"
+  description: Video players, streaming sites and RTX Video HDR
+- name: "area: browser extension"
+  color: "bfdadc"
+  description: The Chrome, Edge and Firefox extension
+- name: "area: tray"
+  color: "bfdadc"
+  description: The notification area icon, its menu and keyboard shortcuts
+- name: "area: settings"
+  color: "bfdadc"
+  description: The settings window
+- name: "area: updates"
+  color: "bfdadc"
+  description: Update checks, the update dialog, signatures and rollback
+- name: "area: cli"
+  color: "bfdadc"
+  description: The huedra command line
+- name: "area: packaging"
+  color: "bfdadc"
+  description: The release zip, installing, portable use and removal
+- name: "area: ci"
+  color: "bfdadc"
+  description: Workflows and releases
+
+# Which section of the release notes a pull request goes in (.github/release.yml).
+# The Changelog workflow sets one from the pull request's title.
+- name: "changelog: added"
+  color: "0e8a16"
+  description: A new feature, listed under Added
+- name: "changelog: changed"
+  color: "1d76db"
+  description: A change to what is there, listed under Changed
+- name: "changelog: fixed"
+  color: "d93f0b"
+  description: A fix, listed under Fixed
+- name: "changelog: skip"
+  color: "ededed"
+  description: Left out of the release notes

@@ -1,0 +1,115 @@
+name: Game or display problem
+description: A game is not found, HDR does not switch for it, or a display behaves differently.
+title: "[Compatibility]: "
+labels: ["compatibility", "status: needs triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Huedra is tested on few games, graphics cards and displays, so reports like
+        this one help the most. Please name the exact game, store and display.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before opening
+      options:
+        - label: I searched the [open and closed issues](https://github.com/apixelsnet/huedra/issues?q=is%3Aissue) and this has not been reported.
+          required: true
+        - label: I am on the [newest release](https://github.com/apixelsnet/huedra/releases), or this happens on it too.
+          required: true
+        - label: This is not a security problem. Those go through [SECURITY.md](https://github.com/apixelsnet/huedra/blob/main/SECURITY.md).
+          required: true
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What goes wrong
+      options:
+        - The game is not in the Games list
+        - HDR does not turn on for the game
+        - HDR turns on, but not off again
+        - The wrong display switches
+        - The game crashes, flickers or loses HDR when HDR switches
+        - HDR video is not detected
+        - Something else
+    validations:
+      required: true
+
+  - type: input
+    id: game
+    attributes:
+      label: Game or program
+      description: Its name, and the store or player it comes from.
+      placeholder: Cyberpunk 2077 (Steam), or mpv 0.39
+    validations:
+      required: true
+
+  - type: input
+    id: setting
+    attributes:
+      label: Its setting in Huedra
+      description: The game's setting on the Games page, and whether Start with HDR is used.
+      placeholder: Enable while running, Start with HDR off
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened
+      description: What you did, what you saw, and what you expected.
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Huedra version
+      description: Settings › General › About, or `huedra --version`.
+      placeholder: 0.1.1
+    validations:
+      required: true
+
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      description: Press Win+R and run `winver`.
+      placeholder: Windows 11 24H2 (build 26100)
+    validations:
+      required: true
+
+  - type: input
+    id: gpu
+    attributes:
+      label: Graphics card and driver
+      placeholder: NVIDIA GeForce RTX 4070, driver 576.02
+    validations:
+      required: true
+
+  - type: textarea
+    id: displays
+    attributes:
+      label: Displays
+      description: Each display's model, how it is connected, and whether Windows offers HDR for it. `huedra hdr status` lists them.
+      placeholder: |
+        Display 1: LG 27GP950, DisplayPort, HDR supported
+        Display 2: Dell U2720Q, HDMI, no HDR
+    validations:
+      required: true
+
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: |
+        The lines of `huedra.log` around the time it happened. It is in
+        `%LOCALAPPDATA%\Huedra`, or in the `data` folder next to `huedra.exe` for a
+        portable copy. Window titles are only in it when you turned that on; take
+        out anything you would rather not share. This is formatted as code on its own.
+      render: text
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Screenshots and anything else
+      description: Pictures of the Games or Displays page, or whatever else helps.

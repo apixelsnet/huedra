@@ -1,0 +1,128 @@
+name: Bug report
+description: Something in Huedra does not work the way it should.
+title: "[Bug]: "
+labels: ["bug", "status: needs triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. The more of this form is filled
+        in, the sooner the problem can be found.
+
+        A game that is not found, or that does not switch HDR, goes in a
+        **Game or display problem** instead.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before opening
+      options:
+        - label: I searched the [open and closed issues](https://github.com/apixelsnet/huedra/issues?q=is%3Aissue) and this has not been reported.
+          required: true
+        - label: I am on the [newest release](https://github.com/apixelsnet/huedra/releases), or this happens on it too.
+          required: true
+        - label: This is not a security problem. Those go through [SECURITY.md](https://github.com/apixelsnet/huedra/blob/main/SECURITY.md).
+          required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened
+      description: A clear and short description of the bug.
+      placeholder: After closing the game, Display 1 stays in HDR.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The smallest set of steps that shows the problem.
+      placeholder: |
+        1. Start Huedra in Automatic mode
+        2. Start Cyberpunk 2077 from Steam
+        3. Close the game
+        4. Wait longer than the time set to keep HDR on
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of Huedra is it in? Pick every one that applies.
+      multiple: true
+      options:
+        - HDR switching and displays
+        - Games and game detection
+        - Video players and streaming sites
+        - Browser extension
+        - Tray icon and keyboard shortcuts
+        - Settings window
+        - Updates
+        - Command line
+        - Installing and removing
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Huedra version
+      description: Settings › General › About, or `huedra --version`.
+      placeholder: 0.1.1
+    validations:
+      required: true
+
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      description: Press Win+R and run `winver`.
+      placeholder: Windows 11 24H2 (build 26100)
+    validations:
+      required: true
+
+  - type: input
+    id: gpu
+    attributes:
+      label: Graphics card and driver
+      placeholder: NVIDIA GeForce RTX 4070, driver 576.02
+    validations:
+      required: true
+
+  - type: textarea
+    id: displays
+    attributes:
+      label: Displays
+      description: Each display's model, how it is connected, and whether Windows offers HDR for it. `huedra hdr status` lists them.
+      placeholder: |
+        Display 1: LG 27GP950, DisplayPort, HDR supported
+        Display 2: Dell U2720Q, HDMI, no HDR
+    validations:
+      required: true
+
+  - type: textarea
+    id: log
+    attributes:
+      label: Log
+      description: |
+        The lines of `huedra.log` around the time it happened. It is in
+        `%LOCALAPPDATA%\Huedra`, or in the `data` folder next to `huedra.exe` for a
+        portable copy. Window titles are only in it when you turned that on; take
+        out anything you would rather not share. This is formatted as code on its own.
+      render: text
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Screenshots and anything else
+      description: Pictures, a screen recording, or whatever else helps. Drag files here.
