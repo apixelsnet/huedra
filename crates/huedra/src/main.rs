@@ -52,11 +52,11 @@ fn run(command: Command) -> anyhow::Result<ExitCode> {
         Command::Remote(request) => client::run(&request)?,
         Command::Games => games::run()?,
         Command::Tray => {
-            log_panics();
+            record_crashes("tray");
             app::run()?;
         }
         Command::Settings(page) => {
-            log_panics();
+            record_crashes("settings window");
             let page = match page.as_deref() {
                 None => huedra_ui::Page::default(),
                 Some(name) => huedra_ui::Page::from_name(name).ok_or_else(|| {
@@ -70,24 +70,30 @@ fn run(command: Command) -> anyhow::Result<ExitCode> {
     Ok(ExitCode::SUCCESS)
 }
 
-/// Writes a panic to the log before the process ends. Release builds abort
-/// on panic and the tray and the settings window have no console, so this
-/// is the only trace. The tray's recovery record still restores SDR on the
-/// next start.
+/// Writes a crash to the log and to the crash file before the process ends,
+/// and offers to copy the details of the previous run's crash. Release
+/// builds abort on panic and the tray and the settings window have no
+/// console, so this is the only trace. The tray's recovery record still
+/// restores SDR on the next start. Feature doc:
+/// `docs/features/14-problem-reports.md`.
 #[cfg(windows)]
-fn log_panics() {
+fn record_crashes(role: &'static str) {
     use huedra_core::logfile::{self, LogFile};
 
     let Ok(locations) = huedra_core::locations::Locations::resolve() else {
         return;
     };
+    huedra_win::report::offer_after_crash(&locations);
     let log = LogFile::new(locations.log, logfile::MAX_BYTES);
+    let crash = locations.crash;
     let previous = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
         let now = huedra_win::clock::now();
         let _ = log.append(&format!(
             "{now} Huedra stopped after an internal error: {info}"
         ));
+        let entry = huedra_core::report::crash_entry(&now.to_string(), role, &info.to_string());
+        let _ = std::fs::write(&crash, entry);
         previous(info);
     }));
 }
