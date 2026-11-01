@@ -70,16 +70,32 @@ jobs:
           cache-from: type=gha,scope=huedra-build
           cache-to: type=gha,scope=huedra-build,mode=max
 
-      - name: Restore caches
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # Linux, Windows debug (clippy, tests) and Windows release builds together
+      # outgrow the runner's free disk; the runner's preinstalled SDKs are not used.
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      # Downloads (crates, Microsoft CRT and SDK) and build output are kept
+      # apart: the first is small and changes rarely, the second is large.
+      - name: Restore downloads
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: downloads
         with:
           path: |
             ${{ runner.temp }}/cache/cargo
             ${{ runner.temp }}/cache/xwin
-            ${{ runner.temp }}/cache/target
-          key: huedra-${{ hashFiles('rust-toolchain.toml', 'build/Dockerfile') }}-${{ hashFiles('Cargo.lock') }}
-          restore-keys: |
-            huedra-${{ hashFiles('rust-toolchain.toml', 'build/Dockerfile') }}-
+          key: downloads-${{ hashFiles('build/Dockerfile') }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: downloads-${{ hashFiles('build/Dockerfile') }}-
+
+      - name: Restore build output
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        id: target
+        with:
+          path: ${{ runner.temp }}/cache/target
+          key: target-${{ hashFiles('rust-toolchain.toml', 'build/Dockerfile') }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: target-${{ hashFiles('rust-toolchain.toml', 'build/Dockerfile') }}-
 
       - name: Check, test, build
         env:
@@ -114,6 +130,33 @@ jobs:
           path: ${{ runner.temp }}/cache/target/${{ env.TARGET }}/release/huedra.exe
           if-no-files-found: error
           retention-days: 7
+
+      # Caches are written only from main, so pull requests and releases cannot
+      # fill the repository's cache space; they read main's.
+      - name: Save downloads
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.downloads.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ${{ runner.temp }}/cache/cargo
+            ${{ runner.temp }}/cache/xwin
+          key: ${{ steps.downloads.outputs.cache-primary-key }}
+
+      - name: Trim build output
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.target.outputs.cache-hit != 'true'
+        run: |
+          target="$RUNNER_TEMP/cache/target"
+          # Incremental state and documentation are rebuilt quickly and are most of the size.
+          find "$target" -maxdepth 3 -type d \( -name incremental -o -name doc \) -prune -exec rm -rf {} +
+          du -sh "$target"
+          df -h /
+
+      - name: Save build output
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.target.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/cache/target
+          key: ${{ steps.target.outputs.cache-primary-key }}
 
   windows:
     name: Run on Windows and pack
