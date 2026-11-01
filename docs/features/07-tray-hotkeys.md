@@ -48,3 +48,5 @@ Verified: unit tests in CI; a preview of the same drawing at 16 to 256 pixels on
 ## Result (2026-11-01) — Ko-fi menu item
 Code: `crates/huedra/src/app.rs` (`MENU_SUPPORT`).
 - Menu item **Support Huedra on Ko-fi...** between Open Huedra and Exit; opens `update::SUPPORT_URL` with `shell::open_web_page` (https only) and logs a line if the browser cannot be started.
+
+Verified: CI green (a84f210). Verified by the owner on this PC (2026-11-01): the item opens the Ko-fi page in the browser. Not verified: the log line when no browser can be started.
