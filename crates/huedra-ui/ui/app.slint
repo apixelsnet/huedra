@@ -193,6 +193,7 @@ export component SettingsWindow inherits Window {
     in property <string> update-note;
     in property <bool> can-check-updates;
     in property <bool> checking-updates;
+    in property <string> update-check-status;
     in property <string> install-version;
     in property <bool> has-project-page;
     callback check-updates();
@@ -488,6 +489,7 @@ export component SettingsWindow inherits Window {
                 update-note: root.update-note;
                 can-check-updates: root.can-check-updates;
                 checking-updates: root.checking-updates;
+                update-check-status: root.update-check-status;
                 install-version: root.install-version;
                 has-project-page: root.has-project-page;
                 check-updates => {

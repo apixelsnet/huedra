@@ -848,7 +848,11 @@ impl App {
                     self.log_line("Could not open the Ko-fi page in the browser.");
                 }
             }
-            Some(MENU_EXIT) => return Flow::Exit,
+            Some(MENU_EXIT) => {
+                // Exit closes all of Huedra: the settings window too.
+                huedra_win::instance::close_window(huedra_core::APP_NAME);
+                return Flow::Exit;
+            }
             _ => {}
         }
         Flow::Continue

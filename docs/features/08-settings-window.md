@@ -115,3 +115,10 @@ Code: `on_close_requested` and `wire_general` in `crates/huedra-ui/src/app.rs`; 
 
 Verified on this PC: with `on_close = "quit"`, closing the window closed the tray as well ("Huedra closed." in the log); with the default, the tray kept running.
 Verified by the owner on this PC (2026-11-01): the new row and choosing it in the Dropdown.
+
+## Result (2026-11-01) — the update check says what it is doing
+Code: `wire_about` in `crates/huedra-ui/src/app.rs`; `update-check-status` in `pages.slint`, `app.slint`.
+- Check for updates showed only a brief "Checking..." on the button; the result went to the Updates row higher up the page. A line under the About buttons now says "Checking for updates...", then "Huedra <version> is up to date.", "Huedra <version> is available." (the update dialog opens as before) or "The check did not succeed; the log has the reason."
+
+Verified on this PC through UI Automation, with a test build carrying the update key (it reports 0.1.0): during the check the button read "Checking..." and the line "Checking for updates..."; after it, "Huedra 0.1.1 is available." and the update dialog was open.
+Not verified: the up-to-date and failed messages (they need a build of the newest version, and no network).

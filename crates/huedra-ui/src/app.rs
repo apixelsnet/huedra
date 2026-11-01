@@ -37,7 +37,8 @@ use crate::ui::{
 };
 
 /// The window's title; also used to find an open window.
-const TITLE: &str = "Huedra";
+/// The window title; the tray closes the window by it (Exit in its menu).
+const TITLE: &str = huedra_core::APP_NAME;
 /// How often the Status page asks the tray process for its state.
 const STATUS_POLL: Duration = Duration::from_secs(1);
 const SPECTRUM_W: u32 = 640;
@@ -1291,11 +1292,23 @@ fn wire_about(ui: &SettingsWindow) {
             return;
         };
         ui.set_checking_updates(true);
+        ui.set_update_check_status("Checking for updates...".into());
         run_program(&ui, &["update", "--check"], |ui, ok| {
             ui.set_checking_updates(false);
             let Some(path) = with_state(|s| s.locations.update.clone()) else {
                 return;
             };
+            let waiting = install_version(&path);
+            ui.set_update_check_status(
+                if !ok {
+                    "The check did not succeed; the log has the reason.".to_owned()
+                } else if waiting.is_empty() {
+                    format!("Huedra {} is up to date.", huedra_core::VERSION)
+                } else {
+                    format!("Huedra {waiting} is available.")
+                }
+                .into(),
+            );
             let mut note = update_note(&path);
             if !ok {
                 note = format!("The check did not succeed; the log has the reason. {note}");

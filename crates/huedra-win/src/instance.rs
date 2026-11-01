@@ -11,9 +11,9 @@ use windows::Win32::UI::HiDpi::{GetDpiForWindow, GetSystemMetricsForDpi};
 use windows::Win32::UI::Shell::{DefSubclassProc, RemoveWindowSubclass, SetWindowSubclass};
 use windows::Win32::UI::WindowsAndMessaging::{
     ASFW_ANY, AllowSetForegroundWindow, EnumThreadWindows, FindWindowW, ICON_BIG, ICON_SMALL,
-    IMAGE_ICON, IsIconic, IsWindowVisible, LR_DEFAULTCOLOR, LoadImageW, SM_CXICON, SM_CXSMICON,
-    SW_RESTORE, SWP_NOSIZE, SYSTEM_METRICS_INDEX, SendMessageW, SetForegroundWindow, ShowWindow,
-    WINDOWPOS, WM_NCDESTROY, WM_SETICON, WM_WINDOWPOSCHANGING,
+    IMAGE_ICON, IsIconic, IsWindowVisible, LR_DEFAULTCOLOR, LoadImageW, PostMessageW, SM_CXICON,
+    SM_CXSMICON, SW_RESTORE, SWP_NOSIZE, SYSTEM_METRICS_INDEX, SendMessageW, SetForegroundWindow,
+    ShowWindow, WINDOWPOS, WM_CLOSE, WM_NCDESTROY, WM_SETICON, WM_WINDOWPOSCHANGING,
 };
 use windows::core::{BOOL, HSTRING, PCWSTR};
 
@@ -39,6 +39,21 @@ pub fn activate_window(title: &str) -> bool {
         let _ = SetForegroundWindow(hwnd);
     }
     true
+}
+
+/// Closes the top-level window with this exact title, as its close button
+/// would. Does nothing when there is none.
+pub fn close_window(title: &str) {
+    // SAFETY: looks up a top-level window by title; strings outlive the call.
+    let Ok(hwnd) = (unsafe { FindWindowW(PCWSTR::null(), &HSTRING::from(title)) }) else {
+        return;
+    };
+    if hwnd.0.is_null() {
+        return;
+    }
+    // SAFETY: posts a message to a window handle just returned by Windows; a
+    // window that closed meanwhile only makes the call fail.
+    let _ = unsafe { PostMessageW(Some(hwnd), WM_CLOSE, WPARAM(0), LPARAM(0)) };
 }
 
 /// Lets the next process that asks bring its window to the front. Windows

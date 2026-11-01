@@ -1320,6 +1320,8 @@ export component GeneralPage inherits Rectangle {
     in property <string> update-note;
     in property <bool> can-check-updates;
     in property <bool> checking-updates;
+    // What Check for updates found, shown under the About buttons.
+    in property <string> update-check-status;
     in property <string> install-version;
     in property <bool> has-project-page;
     callback check-updates();
@@ -1492,6 +1494,9 @@ export component GeneralPage inherits Rectangle {
                                 root.show-disclaimer();
                             }
                         }
+                    }
+                    if root.update-check-status != "": Caption {
+                        text: root.update-check-status;
                     }
                     Caption {
                         text: "If Huedra is useful to you, a star on GitHub or a coffee on Ko-fi helps the project continue. Supporters are thanked by name and get preview builds before each release.";
