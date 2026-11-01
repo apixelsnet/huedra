@@ -92,4 +92,5 @@ Code: `.github/workflows/ci.yml`, `.github/workflows/release.yml`, `build/check-
 - Actions pinned to commit hashes; the workflow token reads only, except `release`, which writes contents.
 
 Verified on GitHub (run of commit cc3b1f2): `build` green in 22 min from empty caches (96 tests; every `ci.sh` step); `windows` green in 18 s (`--version` on Windows Server 2025, changelog check, both packs, artifacts uploaded). The cache save failed for lack of disk space, fixed as above: the next run (commit 59f7e76) was green in 17 min and saved both caches (build output 4.4 GB on disk, 1.04 GiB stored; downloads 299 MiB); the Docker image came from its layer cache.
-Not verified: a run with warm caches; `release.yml` (no tag pushed yet); signing in Actions (no secret set).
+With warm caches (commit 94f6df5): `build` 5 min 46 s, `windows` 25 s, both green.
+Not verified: `release.yml` (no tag pushed yet); signing in Actions (no secret set).
