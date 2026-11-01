@@ -63,3 +63,12 @@ Code: `remove_previous` and `install` in `crates/huedra/src/update.rs`; `run` in
 
 Verified on this PC (scratch portable copy, Always SDR): with a `huedra.previous.exe` beside it, the tray started with `--background` had deleted it within 3 s; `huedra update --rollback` is refused (exit code 2). Build green (109 tests), Defender clean.
 Not verified: deletion right after a real update (the updating process holds the file; covered by the retries).
+
+## Result (2026-11-02) — Check for updates and Install from a window opened through Explorer
+Code: `release_own_console` in `crates/huedra-win/src/console.rs`; `run_program` and `on_start_huedra` in `crates/huedra-ui/src/app.rs`.
+- Fault in 0.1.1 to 0.1.3: when Huedra was started from Explorer, Check for updates and Download and install in the window failed at once ("The check did not succeed"), with nothing in the log. The tray opens the window with `CREATE_NO_WINDOW`, so the window gets a hidden console; it released that console but kept its standard handles, which then pointed nowhere. `std::process::Command` duplicates those handles for the program it starts, the duplication failed (`ERROR_INVALID_HANDLE`), and `huedra update` never ran. Started from a shell, the window had no such handles, which is why earlier tests passed.
+- Fix: `release_own_console` clears the three standard handles after `FreeConsole`. `run_program` gives the program no standard handles and logs a program that could not be started. Start Huedra in the window starts it in the background, as Accept does.
+- Users of 0.1.1 to 0.1.3 who start Huedra from Explorer get this version through Install automatically, or with `huedra update` in a terminal.
+
+Verified on this PC, with a portable copy started through Explorer as a double-click does: 0.1.2 reproduced the fault (no log line, no `update.toml`); this build said "Checking for updates...", then "Huedra 0.1.3 is available.", and Download and install updated it to 0.1.3, restarted it and left only `huedra.exe` in the folder. Build green, Defender clean.
+Not verified: Windows 10 (no detached console policy; the same path applies).
