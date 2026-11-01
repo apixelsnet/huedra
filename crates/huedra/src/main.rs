@@ -14,6 +14,8 @@ mod games;
 mod hdr;
 #[cfg(windows)]
 mod launch;
+#[cfg(windows)]
+mod update;
 
 use std::process::ExitCode;
 
@@ -43,6 +45,7 @@ fn run(command: Command) -> anyhow::Result<ExitCode> {
         // The started program's exit code is passed on.
         Command::Launch(program) => return launch::run(&program),
         Command::Uninstall => launch::uninstall()?,
+        Command::Update(update) => update::run(&update)?,
         Command::Version => println!("{APP_NAME} {VERSION}"),
         Command::Help => println!("{APP_NAME} {VERSION}\n\n{USAGE}"),
         Command::Hdr(hdr) => hdr::run(hdr)?,

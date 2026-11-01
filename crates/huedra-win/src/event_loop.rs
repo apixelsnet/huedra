@@ -17,8 +17,8 @@ use windows::Win32::UI::Shell::NIN_SELECT;
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW, KillTimer, MSG,
     PostMessageW, RegisterClassExW, RegisterWindowMessageW, SetTimer, TranslateMessage,
-    WINDOW_EX_STYLE, WM_APP, WM_CONTEXTMENU, WM_DISPLAYCHANGE, WM_HOTKEY, WM_TIMER, WNDCLASSEXW,
-    WS_POPUP,
+    WINDOW_EX_STYLE, WM_APP, WM_CONTEXTMENU, WM_DISPLAYCHANGE, WM_HOTKEY, WM_NULL, WM_TIMER,
+    WNDCLASSEXW, WS_POPUP,
 };
 use windows::core::{Error, PCWSTR, Result, w};
 
@@ -253,9 +253,16 @@ unsafe extern "system" fn window_proc(
     };
     match event {
         Some(event) => {
-            // Queue directly: posting another wake from inside the window
-            // procedure is unnecessary, the loop drains after dispatching.
             QUEUE.with_borrow_mut(|q| q.push_back(event));
+            // Explorer's tray callbacks and WM_DISPLAYCHANGE are sent, not
+            // posted: GetMessageW handles them inside its wait and does not
+            // return, so the queue would wait for some later posted message
+            // (the tray menu opened only when a timer or another event came
+            // along). A posted WM_NULL makes GetMessageW return now; when
+            // the message came through DispatchMessageW it only costs one
+            // empty turn of the loop.
+            // SAFETY: posts to this thread's own window.
+            let _ = unsafe { PostMessageW(Some(hwnd), WM_NULL, WPARAM(0), LPARAM(0)) };
             LRESULT(0)
         }
         // SAFETY: unhandled messages go to the default procedure unchanged.

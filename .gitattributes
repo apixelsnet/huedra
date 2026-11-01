@@ -1,2 +1,4 @@
 * text=auto eol=lf
 *.ps1 text eol=crlf
+# Signed test fixtures: the signature covers the exact bytes.
+crates/huedra-core/tests/data/update/** -text

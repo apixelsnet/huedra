@@ -39,3 +39,6 @@ Status: done.
 
 ## Result (2026-10-31) — Video players page
 - The settings window writes `[video.apps]` only for programs not set to `when-hdr-plays`, and an empty keyword line restores the default words (`config::default_keywords`). The tray's "Never for" uses the same `VideoSettings::set_mode`.
+
+## Result (2026-11-01) — phase 5
+- `update.toml` in the local folder (or `data` when portable): `last_check` (seconds since 1970), `available` (a version waiting for consent), `skipped` (a version rolled back from). Missing or damaged means "never checked". `[general] updates` = `install` (default), `ask` or `off`.

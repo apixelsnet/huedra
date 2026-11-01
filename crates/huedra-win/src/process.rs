@@ -57,11 +57,11 @@ fn path_of(process: HANDLE) -> Option<String> {
     Some(String::from_utf16_lossy(&buffer))
 }
 
-/// Starts a program in the background with no console window, no
-/// arguments and no inherited input or output (a caller reading this
-/// process's output would otherwise wait for it too), outside the job this
-/// process is in when that job allows it.
-pub fn spawn_detached(program: &Path) -> bool {
+/// Starts a program in the background with no console window and no
+/// inherited input or output (a caller reading this process's output would
+/// otherwise wait for it too), outside the job this process is in when that
+/// job allows it. Arguments are passed directly, never through a shell.
+pub fn spawn_detached(program: &Path, args: &[&str]) -> bool {
     // This process's own standard handles were inherited and are marked
     // inheritable, so the new process would receive them as well. Children
     // started later through `std::process` still get them: it passes
@@ -77,6 +77,7 @@ pub fn spawn_detached(program: &Path) -> bool {
     }
     let spawn = |flags: u32| {
         std::process::Command::new(program)
+            .args(args)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())

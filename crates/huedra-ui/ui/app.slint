@@ -184,6 +184,7 @@ export component SettingsWindow inherits Window {
     in property <bool> log-titles;
     in property <string> version;
     in property <string> data-folder;
+    in property <string> update-note;
     callback set-start-with-windows(bool);
     callback set-context-menu(bool);
     callback set-updates(int);
@@ -427,6 +428,7 @@ export component SettingsWindow inherits Window {
                 log-titles: root.log-titles;
                 version: root.version;
                 data-folder: root.data-folder;
+                update-note: root.update-note;
                 set-start-with-windows(on) => {
                     root.set-start-with-windows(on);
                 }

@@ -23,3 +23,18 @@ Verified on this PC: all three shortcuts (synthetic key presses) change the stat
 Not verified: the menu and icon were not inspected by eye during this session; contrast of the grey ring on light and dark taskbars.
 
 Status: done; "Use SDR for this video" comes with video in phase 4.
+
+## Result (2026-11-01) — phase 5
+- Menu item "Install Huedra x.y.z" while a release waits for consent (Updates: Ask before installing); it starts `huedra update`, which closes the tray, installs and starts the new version (see 11).
+- The log's start line gives the time from process creation to the tray icon, and the game library scan time: "Huedra 0.1.0 started in 34 ms; game libraries read in 3 ms." Each switch logs "Switch requested N ms after the event".
+- First start (no settings file, not portable) adds the start-up entry, since Start with Windows is on by default; an entry naming a program that no longer exists is pointed at the running one.
+
+Verified on this PC: start lines from the running copy (34 ms, 3 ms) and from test copies (44–46 ms warm; 119 ms and 91 ms on the very first run of a newly copied exe). Not verified: the update menu item (needs a release address); the switch timing line during a real switch.
+
+## Result (2026-11-01) — slow tray menu
+Code: `window_proc` in `crates/huedra-win/src/event_loop.rs`.
+- Reported by the owner: right-clicking the icon took a long time to show the menu.
+- Cause: the window procedure only queued events, counting on the loop to drain the queue after `DispatchMessageW`. Explorer's tray callbacks (and `WM_DISPLAYCHANGE`) are sent, not posted, so `GetMessageW` handled them inside its wait without returning; the queued menu event waited for the next posted message (a timer, a window coming to the front, a pipe call). Left-click (opening the settings window) and display changes were delayed the same way.
+- Fix: every queued event also posts a `WM_NULL` to the tray window, so `GetMessageW` returns at once.
+
+Verified: build green; the fixed build runs as the owner's tray. Not verified: the menu's speed by the owner's own right-click (no synthetic clicks on the owner's taskbar).

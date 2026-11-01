@@ -71,3 +71,9 @@ Code: `DisplaysPage` in `crates/huedra-ui/ui/pages.slint`, `show_displays` and `
 - A switch above the display list, on by default: "Only the display showing the content".
 
 Verified on this PC on a hidden desktop: the switch is on with no `content_only` line in the file; off wrote `content_only = false`, on again wrote `content_only = true`. Exe 9,859,072 bytes (about 141 KB under the limit).
+
+## Result (2026-11-01) — phase 5
+- General › Updates now says whether this build checks ("This build has no release address, so no checks are made."), when it last checked, and which version waits for consent (`update_note`, from `update.toml`).
+- The log records "Settings window opened in N ms", from process creation to the first turn of the window's event loop (the window is shown by then; its first frame is drawn on that turn or the next).
+
+Verified on this PC on a hidden desktop: the Updates text in a build without a release address (captured); opening times 51, 39, 38, 40 ms (target 300 ms).

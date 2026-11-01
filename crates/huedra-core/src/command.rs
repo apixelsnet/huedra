@@ -26,6 +26,12 @@ Usage:
                                \"<path to huedra.exe>\" launch -- %command%
   huedra uninstall             Close Huedra and remove everything it added
                                to the registry.
+  huedra update [--check] [--from <folder>]
+                               Install a newer signed release now, or with
+                               --check only report it. --from reads the
+                               release files from a folder instead of the
+                               release address.
+  huedra update --rollback     Go back to the version before the last update.
   huedra hdr status            List the displays and their HDR state.
   huedra hdr on  [--display N | all]
   huedra hdr off [--display N | all]
@@ -55,6 +61,26 @@ pub enum Command {
     Launch(LaunchCommand),
     /// Remove every registry entry Huedra wrote.
     Uninstall,
+    /// Check for, install or roll back an update.
+    Update(UpdateCommand),
+}
+
+/// The `update` forms.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum UpdateCommand {
+    /// Check, and install a newer release unless `check_only`.
+    Run {
+        /// Only report what is available.
+        check_only: bool,
+        /// A folder holding the release files, instead of the release
+        /// address.
+        from: Option<String>,
+    },
+    /// Restore the program kept from before the last update.
+    Rollback,
+    /// The daily check started by the tray, which follows the Updates
+    /// setting.
+    Auto,
 }
 
 /// The `hdr` subcommands.
@@ -101,6 +127,9 @@ pub enum UsageError {
     /// `launch` with a batch file, which would run through `cmd.exe`.
     #[error("`{0}` is a batch file; `launch` starts programs only")]
     BatchFile(String),
+    /// `--from` without a folder.
+    #[error("`--from` needs a folder")]
+    MissingFolder,
 }
 
 /// Parses the arguments after the program name.
@@ -132,6 +161,7 @@ where
         "toggle" => Command::Remote(Request::ToggleHdr),
         "exit" => Command::Remote(Request::Exit),
         "uninstall" => Command::Uninstall,
+        "update" => return parse_update(args).map(Command::Update),
         // Everything after `launch` belongs to the program.
         "launch" => return parse_launch(args).map(Command::Launch),
         _ => return Err(UsageError::UnknownCommand(first)),
@@ -176,6 +206,34 @@ fn parse_launch(args: impl Iterator<Item = String>) -> Result<LaunchCommand, Usa
         program,
         args: args.collect(),
     })
+}
+
+fn parse_update(mut args: impl Iterator<Item = String>) -> Result<UpdateCommand, UsageError> {
+    let first = args.next();
+    let command = match first.as_deref() {
+        Some("--rollback") => UpdateCommand::Rollback,
+        Some("--auto") => UpdateCommand::Auto,
+        _ => return parse_update_run(first.into_iter().chain(args)),
+    };
+    match args.next() {
+        Some(extra) => Err(UsageError::UnexpectedArgument(extra)),
+        None => Ok(command),
+    }
+}
+
+fn parse_update_run(mut args: impl Iterator<Item = String>) -> Result<UpdateCommand, UsageError> {
+    let (mut check_only, mut from) = (false, None);
+    while let Some(arg) = args.next() {
+        match arg.as_str() {
+            "--check" if !check_only => check_only = true,
+            "--from" if from.is_none() => {
+                let folder = args.next().filter(|f| !f.trim().is_empty());
+                from = Some(folder.ok_or(UsageError::MissingFolder)?);
+            }
+            _ => return Err(UsageError::UnexpectedArgument(arg)),
+        }
+    }
+    Ok(UpdateCommand::Run { check_only, from })
 }
 
 fn parse_mode(value: Option<&str>) -> Result<Mode, UsageError> {
@@ -331,6 +389,52 @@ mod tests {
             "batch file"
         );
         assert_eq!(run("uninstall"), Ok(Command::Uninstall), "uninstall");
+    }
+
+    #[test]
+    fn update_commands() {
+        let update = |args: &[&str]| parse(args.iter().map(|a| (*a).to_owned()));
+        assert_eq!(
+            update(&["update"]),
+            Ok(Command::Update(UpdateCommand::Run {
+                check_only: false,
+                from: None
+            })),
+            "install now"
+        );
+        assert_eq!(
+            update(&["update", "--from", r"D:\Huedra 0.2.0", "--check"]),
+            Ok(Command::Update(UpdateCommand::Run {
+                check_only: true,
+                from: Some(r"D:\Huedra 0.2.0".into())
+            })),
+            "check a folder"
+        );
+        assert_eq!(
+            update(&["update", "--rollback"]),
+            Ok(Command::Update(UpdateCommand::Rollback)),
+            "rollback"
+        );
+        assert_eq!(
+            update(&["update", "--auto"]),
+            Ok(Command::Update(UpdateCommand::Auto)),
+            "auto"
+        );
+        assert_eq!(
+            update(&["update", "--from"]),
+            Err(UsageError::MissingFolder),
+            "no folder"
+        );
+        assert_eq!(
+            update(&["update", "--rollback", "--check"]),
+            Err(UsageError::UnexpectedArgument("--check".into())),
+            "rollback takes nothing"
+        );
+        assert_eq!(
+            update(&["update", "--check", "--check"]),
+            Err(UsageError::UnexpectedArgument("--check".into())),
+            "repeated"
+        );
     }
 
     #[test]

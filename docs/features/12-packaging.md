@@ -6,7 +6,8 @@ How Huedra is built, run, installed and removed.
 - Build on the server in Docker (`build/Dockerfile`, image `huedra-build`); cross-compile with `cargo-xwin` to `x86_64-pc-windows-msvc`.
 - `build/remote-build.sh` syncs the source, runs `build/ci.sh` in the container and copies `huedra.exe` to `dist/`.
 - `build/run.ps1` stops a running copy and starts the new one.
-- Later: release archive, start-up entry (HKCU Run), `huedra uninstall` removing every key Huedra wrote.
+- `build/pack-release.ps1`: release folder with the zip, `release.toml` and minisign signatures (see 11).
+- Start-up entry (HKCU Run) on first start; `huedra uninstall` removing every key Huedra wrote.
 
 ## Notes
 - The server name is read from `HUEDRA_BUILD_HOST` or the git-ignored `build/local.env`; it never appears in committed files.
@@ -55,4 +56,36 @@ Pre-release checklist (testers on other machines, before the first public releas
 ## Result (2026-10-31) — phase 4
 - `huedra uninstall` exists early because Launch with HDR writes a registry key: it closes the tray and removes every value and key Huedra writes (start-up value, "Start with HDR" menu entry). See 06.
 
-Status: phase 0 done, `uninstall` done. Release archive and start-up entry come in phase 5.
+## Result (2026-11-01) — phase 5
+Code: `build/pack-release.ps1`, `startup_entry` in `crates/huedra/src/app.rs`, `uninstall` in `crates/huedra/src/launch.rs`, `minisign` in `build/Dockerfile`, update variables in `build/remote-build.sh`; `README.md`, `SECURITY.md`, `CHANGELOG.md`.
+- `pack-release.ps1` reads the version from `huedra.exe --version` and writes `dist\release\<version>\`: `huedra.exe`, `release.toml` (LF, no byte-order mark) and `huedra-<version>-windows-x64.zip` (program, README, SECURITY, CHANGELOG, and LICENSE once there is one). With `-SecretKey` it signs the manifest and the zip with minisign.
+- Start-up entry: written on the first start (no settings file yet) of a non-portable copy, because Start with Windows is on by default; rewritten when the entry names a program that no longer exists. Portable copies never touch it.
+- `uninstall` now names both data folders (roaming and local).
+- README follows Best-README-Template, with the questions from the plan (anti-cheat, what leaves the PC, SmartScreen, the black flash, removal, tested hardware).
+
+Performance targets, measured on this PC (Windows 11 build 26300):
+
+| Target | Result |
+| --- | --- |
+| Start-up to tray icon ≤ 100 ms | 20–46 ms from process creation (log line); 119 ms on the very first run of a newly copied exe (antivirus scan) |
+| Library scan ≤ 200 ms | 3–4 ms; 91 ms on that first run |
+| Settings window ≤ 300 ms | 38–51 ms to the first turn of its event loop (hidden desktop, 4 runs) |
+| Tray memory ≤ 4 MB | 1.5 MB private working set, 2 threads, about 12 minutes after start |
+| Idle wake-ups: none between events | not proven: about 995 context switches in 17 of 60 ten-second windows over 10 minutes, while other tests and the owner's own use produced foreground changes; a run with the PC untouched is still needed |
+| Switch request ≤ 50 ms | not measured: the log line exists ("Switch requested N ms after the event") but no real switch was made in this session |
+| Executable | 9,883,136 bytes without an update key, about 9.94 MB with one (limit 10,000,000) |
+
+Verified on this PC: a non-portable copy's first start wrote `HKCU\...\Run\Huedra` with its quoted path and logged "Huedra will start with Windows."; `huedra uninstall` closed it and left neither the Run value nor the `exefile` menu key; no Huedra process remained. `pack-release.ps1` without a key packed a test release (zip 5.2 MB, manifest read back by the updater after signing in the build container).
+Not verified: `pack-release.ps1 -SecretKey` with minisign on this PC; a clean idle measurement; tray memory after one hour; a release from a fresh clone.
+
+Note: `uninstall` and `update` act on whichever tray owns the per-user pipe, including a copy started from another folder.
+
+Status: done except the open measurements above; publishing waits for licence and hosting.
+
+## Result (2026-11-01) — GitHub Actions
+Code: `.github/workflows/ci.yml`, `build/check-changelog.ps1`, `extras/browser/CHANGELOG.md`.
+- `build` (Ubuntu): builds `build/Dockerfile` (layers kept in the Actions cache) and runs `build/ci.sh` in it, as `remote-build.sh` does on the server. The Cargo registry, the Microsoft CRT and SDK files and `target` are kept in the Actions cache, keyed by the toolchain, the Dockerfile and `Cargo.lock`. Fails when `ci.sh` had to change `Cargo.lock`. Uploads `huedra.exe`.
+- `windows` (Windows Server 2025): `huedra.exe --version` must print the `Cargo.toml` version and an unknown option must exit 2; every version needs a changelog section (the program's in `CHANGELOG.md`, the extension's in `extras/browser/CHANGELOG.md`); then `pack-release.ps1` and `pack-extension.ps1`. Uploads the release folder and the extension zip (kept 14 days).
+- `release`, only for a tag `v<version>`: the tag must match the program's version; the notes are that version's section of `CHANGELOG.md`; with the `MINISIGN_SECRET_KEY` and `MINISIGN_PASSWORD` secrets it signs `release.toml` and the zip; then it publishes the GitHub release with every file. Without the key the release is published unsigned with a warning, and the updater refuses it.
+- Repository variables `HUEDRA_UPDATE_KEY` and `HUEDRA_UPDATE_URL` go into the build when set.
+- Actions pinned to commit hashes; the workflow token reads only, except `release`, which writes contents.

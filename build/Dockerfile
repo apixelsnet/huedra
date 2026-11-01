@@ -1,9 +1,10 @@
 # Build image for Huedra: the pinned Rust toolchain plus cargo-xwin for the
-# Windows MSVC target and cargo-deny for dependency checks.
+# Windows MSVC target, cargo-deny for dependency checks, and minisign for
+# signing test releases (docs/features/11-updates.md).
 FROM rust:1.99.1-bookworm
 
 RUN apt-get update \
- && apt-get install -y --no-install-recommends clang lld llvm \
+ && apt-get install -y --no-install-recommends clang lld llvm minisign \
  && rm -rf /var/lib/apt/lists/*
 
 RUN rustup component add rustfmt clippy \

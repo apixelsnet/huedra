@@ -3,7 +3,8 @@
 //!
 //! Nothing here calls Windows, so every test in this crate runs on Linux.
 //! Feature docs: `docs/features/02-engine.md`, `04-game-library.md`,
-//! `05-video.md`, `06-launch-with-hdr.md`, `09-cli-ipc.md`, `10-config.md`, `13-game-info.md`.
+//! `05-video.md`, `06-launch-with-hdr.md`, `09-cli-ipc.md`, `10-config.md`, `11-updates.md`,
+//! `13-game-info.md`.
 
 #![forbid(unsafe_code)]
 
@@ -24,6 +25,7 @@ pub mod locations;
 pub mod logfile;
 pub mod paths;
 pub mod tracker;
+pub mod update;
 pub mod video;
 
 /// Application name as shown to users.

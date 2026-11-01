@@ -43,6 +43,12 @@ pub enum Request {
         /// The program it starts, to name the game.
         program: String,
     },
+    /// A newer signed release was found and waits for the user's consent
+    /// (Updates: Ask before installing). Sent by `huedra update --auto`.
+    UpdateAvailable {
+        /// Its version, `1.2.3`.
+        version: String,
+    },
     /// Close the tray process.
     Exit,
 }
@@ -80,6 +86,10 @@ pub struct StatusReport {
     pub reason: String,
     /// Ids of the games currently keeping HDR on or about to.
     pub active_games: Vec<String>,
+    /// Whether a game, video or launch is running, or HDR that Huedra
+    /// turned on is still on: an update must wait.
+    #[serde(default)]
+    pub busy: bool,
     /// Managed displays.
     pub displays: Vec<DisplayReport>,
     /// Recent changes, newest first.
@@ -201,6 +211,9 @@ mod tests {
             Request::Launch {
                 pid: 7,
                 program: r"D:\Games\Foo\foo.exe".into(),
+            },
+            Request::UpdateAvailable {
+                version: "0.2.0".into(),
             },
             Request::Exit,
         ] {

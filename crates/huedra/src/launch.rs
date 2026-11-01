@@ -73,7 +73,7 @@ fn ask_tray(request: &Request) -> Result<Response, PipeError> {
 /// that waits for a game's processes (Steam) does not wait for Huedra too.
 fn start_tray() {
     if let Ok(exe) = std::env::current_exe() {
-        process::spawn_detached(&exe);
+        process::spawn_detached(&exe, &[]);
     }
 }
 
@@ -89,13 +89,15 @@ pub fn uninstall() -> anyhow::Result<()> {
     println!(
         "Huedra's registry entries were removed (the start-up entry and the \"Start with HDR\" menu entry)."
     );
-    let folder = Locations::resolve()
-        .ok()
-        .and_then(|l| l.config.parent().map(std::path::Path::to_path_buf));
-    if let Some(folder) = folder {
+    if let Ok(locations) = Locations::resolve() {
+        let mut folders: Vec<String> = [&locations.config, &locations.log]
+            .iter()
+            .filter_map(|p| p.parent().map(|d| d.display().to_string()))
+            .collect();
+        folders.dedup();
         println!(
-            "To remove the settings and the log as well, delete {}.",
-            folder.display()
+            "To remove the settings, the log and the caches as well, delete {}.",
+            folders.join(" and ")
         );
     }
     Ok(())

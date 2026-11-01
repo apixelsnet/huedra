@@ -1276,6 +1276,7 @@ export component GeneralPage inherits Rectangle {
     in property <bool> log-titles;
     in property <string> version;
     in property <string> data-folder;
+    in property <string> update-note;
     callback set-start-with-windows(bool);
     callback set-context-menu(bool);
     callback set-updates(int);
@@ -1323,7 +1324,7 @@ export component GeneralPage inherits Rectangle {
             }
             SettingRow {
                 title: "Updates";
-                description: "Checks once a day and installs signed releases while no game or video is running. The previous version is kept. Release hosting is not set up yet, so no checks are made.";
+                description: "Checks once a day and installs signed releases while no game or video is running. The previous version is kept; huedra update --rollback restores it." + (root.update-note != "" ? " " + root.update-note : "");
                 Dropdown {
                     accessible-label: "Updates";
                     model: ["Install automatically", "Ask before installing", "Off"];

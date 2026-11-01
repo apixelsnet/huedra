@@ -20,6 +20,8 @@ pub struct Locations {
     pub window: PathBuf,
     /// `icons\`, the game icons and their index (local).
     pub icons: PathBuf,
+    /// `update.toml`, the record of update checks (local).
+    pub update: PathBuf,
     /// Whether portable mode is on.
     pub portable: bool,
 }
@@ -66,6 +68,7 @@ impl Locations {
             game_info: local.join("gameinfo.toml"),
             window: local.join("window.toml"),
             icons: local.join("icons"),
+            update: local.join("update.toml"),
             portable,
         }
     }

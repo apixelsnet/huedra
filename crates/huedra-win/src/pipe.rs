@@ -149,6 +149,30 @@ pub fn call(request: &Request) -> Result<Response, PipeError> {
     Ok(ipc::decode(&bytes)?)
 }
 
+/// Waits until no tray process owns the pipe any more, for at most
+/// `timeout`, without connecting to it. Returns whether it is gone.
+pub fn wait_closed(timeout: Duration) -> bool {
+    let Ok(sid) = current_user_sid() else {
+        return false;
+    };
+    let name = HSTRING::from(pipe_name(&sid));
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        // SAFETY: asks whether a pipe of this name exists, waiting at most
+        // 1 ms; no connection is made.
+        let gone = unsafe { WaitNamedPipeW(&name, 1) }
+            .ok()
+            .is_err_and(|e| e.code() == ERROR_FILE_NOT_FOUND.to_hresult());
+        if gone {
+            return true;
+        }
+        if std::time::Instant::now() >= deadline {
+            return false;
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+}
+
 fn pipe_name(sid: &str) -> String {
     format!(r"\\.\pipe\Huedra-{sid}")
 }

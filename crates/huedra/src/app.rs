@@ -4,10 +4,10 @@
 //! `06-launch-with-hdr.md`, `07-tray-hotkeys.md`.
 
 use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 use anyhow::Context as _;
-use huedra_core::config::{Config, GameHdr};
+use huedra_core::config::{Config, GameHdr, UpdatePolicy};
 use huedra_core::display::{Display, DisplayId, HdrState};
 use huedra_core::engine::{
     Engine, Mode, Note, NoteKind, Outcome, Phase, Status, Target, Trigger, TriggerId,
@@ -19,6 +19,7 @@ use huedra_core::launch;
 use huedra_core::library::{GameId, Library};
 use huedra_core::logfile::{self, LogFile};
 use huedra_core::tracker::{Exit, Pid, Tracker};
+use huedra_core::update::{self, UpdateState, Version};
 use huedra_core::video::{self, PlayerHdr, VideoApp, VideoKind};
 use huedra_win::event_loop::{Event, EventLoop, Flow, TimerId, Waker};
 use huedra_win::hotkey::{Hotkey, Hotkeys};
@@ -34,6 +35,11 @@ use huedra_win::stores;
 const ENGINE_TIMER: TimerId = TimerId(1);
 const FOLLOW_TIMER: TimerId = TimerId(2);
 const VIDEO_TIMER: TimerId = TimerId(3);
+/// The daily update check; runs only in builds that can update.
+const UPDATE_TIMER: TimerId = TimerId(4);
+/// The first check waits this long after start, so it does not compete
+/// with Windows starting up.
+const UPDATE_FIRST_DELAY: Duration = Duration::from_secs(120);
 /// How often the process list is read while following a launcher.
 const FOLLOW_POLL: Duration = Duration::from_secs(1);
 /// How often a video program is read again while SDR video can count
@@ -51,6 +57,7 @@ const MENU_NEVER: u32 = 20;
 const MENU_PAUSE: u32 = 21;
 const MENU_OPEN: u32 = 30;
 const MENU_EXIT: u32 = 31;
+const MENU_UPDATE: u32 = 32;
 
 /// Runs the tray process until it is told to exit.
 pub fn run() -> anyhow::Result<()> {
@@ -101,6 +108,12 @@ struct App {
     /// Running `huedra launch` processes; HDR is held while each lives.
     launches: HashMap<Pid, ExitWatch>,
     displays: Vec<Display>,
+    /// The daily check came due while a game or video used HDR; it runs
+    /// once they end.
+    update_due: bool,
+    /// A newer release waiting for consent (Updates: Ask before
+    /// installing), offered in the menu.
+    update_available: Option<Version>,
     saved_owned: Vec<DisplayId>,
     history: VecDeque<HistoryEntry>,
     log: LogFile,
@@ -114,6 +127,7 @@ struct App {
 impl App {
     fn start(host: &EventLoop, paths: Locations, pipe: PipeServer) -> anyhow::Result<Self> {
         let log = LogFile::new(paths.log.clone(), logfile::MAX_BYTES);
+        let first_run = !paths.config.exists();
         let (config, problem) = match Config::load(&paths.config) {
             Ok(config) => (config, None),
             Err(error) => (Config::default(), Some(error.to_string())),
@@ -128,8 +142,12 @@ impl App {
             &owned,
             now,
         );
+        let scan_started = Instant::now();
+        let library = build_library(&config);
+        let scan_time = scan_started.elapsed();
+        let update_available = UpdateState::load(&paths.update).waiting(Version::current());
         let mut app = Self {
-            library: build_library(&config),
+            library,
             tray: tray::Tray::new(host).context("could not create the tray icon")?,
             hotkeys: None,
             _foreground: foreground::ForegroundHook::install(),
@@ -143,6 +161,8 @@ impl App {
             foreground: 0,
             video_polling: false,
             launches: HashMap::new(),
+            update_due: false,
+            update_available,
             saved_owned: owned,
             history: VecDeque::new(),
             waker: host.waker(),
@@ -153,12 +173,6 @@ impl App {
             log,
             pipe,
         };
-        app.log_line("Huedra started.");
-        if let Some(problem) = problem {
-            app.log_line(&format!(
-                "The settings were not loaded and defaults are used: {problem}"
-            ));
-        }
         app.register_hotkeys(host);
         app.apply(host, now, outcome);
         if let Some(pid) = foreground::foreground_pid() {
@@ -166,6 +180,20 @@ impl App {
         }
         app.update_video_poll(host);
         app.refresh_tray(now);
+        let started = huedra_win::clock::since_process_start()
+            .map_or_else(String::new, |d| format!(" in {} ms", d.as_millis()));
+        app.log_line(&format!(
+            "Huedra {} started{started}; game libraries read in {} ms.",
+            huedra_core::VERSION,
+            scan_time.as_millis()
+        ));
+        if let Some(problem) = problem {
+            app.log_line(&format!(
+                "The settings were not loaded and defaults are used: {problem}"
+            ));
+        }
+        app.startup_entry(first_run);
+        app.schedule_update(host);
         Ok(app)
     }
 
@@ -189,6 +217,11 @@ impl App {
             }
             Event::Timer(FOLLOW_TIMER) => self.on_follow_tick(host, now),
             Event::Timer(VIDEO_TIMER) => self.on_video_tick(host, now),
+            Event::Timer(UPDATE_TIMER) => {
+                // Timers repeat: the next check is a day later.
+                host.set_timer(UPDATE_TIMER, update::CHECK_INTERVAL);
+                self.update_due = true;
+            }
             Event::Timer(_) => {}
             Event::DisplayChanged => self.on_display_change(host, now),
             Event::Hotkey(key) => self.on_hotkey(host, now, key),
@@ -215,6 +248,7 @@ impl App {
             }
         }
         self.update_video_poll(host);
+        self.run_due_update();
         self.refresh_tray(now);
         Flow::Continue
     }
@@ -748,6 +782,9 @@ impl App {
             &format!("{pause_text}\t{}", Hotkey::Pause.label()),
         ));
         entries.push(MenuEntry::Separator);
+        if let Some(version) = self.update_available {
+            entries.push(item(MENU_UPDATE, &format!("Install Huedra {version}")));
+        }
         entries.push(item(MENU_OPEN, "Open Huedra"));
         entries.push(item(MENU_EXIT, "Exit"));
 
@@ -763,6 +800,13 @@ impl App {
             }
             Some(MENU_PAUSE) => self.toggle_pause(host, now),
             Some(MENU_OPEN) => crate::open_settings(),
+            Some(MENU_UPDATE) => {
+                // The updater closes this process, installs and starts
+                // the new version; its result goes to the log.
+                if let Ok(exe) = std::env::current_exe() {
+                    process::spawn_detached(&exe, &["update"]);
+                }
+            }
             Some(MENU_EXIT) => return Flow::Exit,
             _ => {}
         }
@@ -805,6 +849,15 @@ impl App {
                 done("The settings were reloaded.")
             }
             Request::Launch { pid, program } => self.launch(host, now, Pid(*pid), program),
+            Request::UpdateAvailable { version } => match version.parse::<Version>() {
+                Ok(version) if version > Version::current() => {
+                    self.update_available = Some(version);
+                    done(&format!("Huedra {version} is offered in the menu."))
+                }
+                _ => Response::Failed {
+                    message: "That is not a newer version.".to_owned(),
+                },
+            },
             Request::Exit => return (done("Huedra has closed."), Flow::Exit),
         };
         (response, Flow::Continue)
@@ -822,6 +875,7 @@ impl App {
         self.engine
             .set_default_hold(self.config.general.hold.duration());
         self.register_hotkeys(host);
+        self.schedule_update(host);
         let mut outcome = self
             .engine
             .set_displays(now, &managed(&self.config, &self.displays));
@@ -872,6 +926,68 @@ impl App {
         self.log_line("Huedra closed.");
     }
 
+    // --- Updates and start-up --------------------------------------------
+
+    /// Whether a game, video or launch keeps HDR on or is about to, or HDR
+    /// Huedra turned on is still held: no update may restart Huedra now.
+    fn busy(&self) -> bool {
+        !self.engine.active_triggers().is_empty() || !self.engine.owned().is_empty()
+    }
+
+    /// Sets the daily check's timer from the last check, or stops it when
+    /// updates are off or this build cannot update.
+    fn schedule_update(&mut self, host: &EventLoop) {
+        if !update::is_available() || self.config.general.updates == UpdatePolicy::Off {
+            host.kill_timer(UPDATE_TIMER);
+            self.update_due = false;
+            return;
+        }
+        let due = UpdateState::load(&self.paths.update).due_in(SystemTime::now());
+        host.set_timer(UPDATE_TIMER, due.max(UPDATE_FIRST_DELAY));
+    }
+
+    /// Starts `huedra update --auto` once the check is due and nothing uses
+    /// HDR. The check runs in its own process, so the network code never
+    /// loads into this one.
+    fn run_due_update(&mut self) {
+        if !self.update_due || self.busy() {
+            return;
+        }
+        self.update_due = false;
+        if let Ok(exe) = std::env::current_exe()
+            && !process::spawn_detached(&exe, &["update", "--auto"])
+        {
+            self.log_line("Could not start the update check.");
+        }
+    }
+
+    /// Adds the start-up entry on the first start, as Start with Windows is
+    /// on by default, and points an entry at this program when the one it
+    /// names no longer exists (the folder was moved). Portable copies leave
+    /// the registry alone.
+    fn startup_entry(&mut self, first_run: bool) {
+        if self.paths.portable || !self.config.general.start_with_windows {
+            return;
+        }
+        let Ok(exe) = std::env::current_exe() else {
+            return;
+        };
+        let missing = registry::startup_command().is_some_and(|command| {
+            !std::path::Path::new(command.trim().trim_matches('"')).is_file()
+        });
+        if !first_run && !missing {
+            return;
+        }
+        let command = format!("\"{}\"", exe.display());
+        match registry::set_startup(Some(&command)) {
+            Ok(()) => self.log_line("Huedra will start with Windows."),
+            Err(error) => self.log_line(&format!("Could not add the start-up entry: {error}")),
+        }
+        if first_run {
+            self.edit_config(|_| {});
+        }
+    }
+
     // --- Applying decisions ---------------------------------------------
 
     fn apply(&mut self, host: &EventLoop, now: Instant, mut outcome: Outcome) {
@@ -890,6 +1006,10 @@ impl App {
                 }
             }
             self.save_owned(&planned);
+            self.log_line(&format!(
+                "Switch requested {} ms after the event.",
+                now.elapsed().as_millis()
+            ));
             let mut next = Outcome::default();
             for action in outcome.actions {
                 if let Err(error) =
@@ -1041,6 +1161,7 @@ impl App {
                 .into_iter()
                 .map(|(id, _)| id.as_str().to_owned())
                 .collect(),
+            busy: self.busy(),
             displays: status
                 .displays
                 .iter()

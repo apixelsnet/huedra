@@ -136,6 +136,7 @@ pub fn run(locations: Locations, page: Page) -> Result<(), slint::PlatformError>
     ui.set_page(page as i32);
     ui.set_app_icon(app_icon());
     ui.set_version(huedra_core::VERSION.into());
+    ui.set_update_note(update_note(&locations.update).into());
     ui.set_data_folder(
         locations
             .config
@@ -188,7 +189,27 @@ pub fn run(locations: Locations, page: Page) -> Result<(), slint::PlatformError>
         CloseRequestResponse::HideWindow
     });
     limit_size_once_shown(0);
+    log_start_time();
     ui.run()
+}
+
+/// Logs how long the window took to open, measured from the process's
+/// creation to the first turn of its event loop (the window is shown by
+/// then; its first frame is drawn on the same turn or the next).
+fn log_start_time() {
+    let Some(path) = with_state(|s| s.locations.log.clone()) else {
+        return;
+    };
+    slint::Timer::single_shot(Duration::ZERO, move || {
+        if let Some(elapsed) = huedra_win::clock::since_process_start() {
+            let log = huedra_core::logfile::LogFile::new(path, huedra_core::logfile::MAX_BYTES);
+            let _ = log.append(&format!(
+                "{} Settings window opened in {} ms.",
+                huedra_win::clock::now(),
+                elapsed.as_millis()
+            ));
+        }
+    });
 }
 
 /// Slint's software renderer works in 16-bit pixel coordinates and stops
@@ -1152,4 +1173,33 @@ fn save_geometry(ui: &SettingsWindow) {
     with_state(|s| {
         let _ = geometry.save(&s.locations.window);
     });
+}
+
+// ---- Updates ----------------------------------------------------------
+
+/// The Updates row's extra sentence: whether this build checks, when it
+/// last did, and what is waiting.
+fn update_note(path: &std::path::Path) -> String {
+    use huedra_core::update::{self, UpdateState, Version};
+
+    if !update::is_available() {
+        return "This build has no release address, so no checks are made.".to_owned();
+    }
+    let state = UpdateState::load(path);
+    let mut note = if state.last_check == 0 {
+        "Not checked yet.".to_owned()
+    } else {
+        let now = update::unix_secs(std::time::SystemTime::now());
+        match now.saturating_sub(state.last_check) / 3600 {
+            0 => "Last checked less than an hour ago.".to_owned(),
+            1 => "Last checked an hour ago.".to_owned(),
+            hours => format!("Last checked {hours} hours ago."),
+        }
+    };
+    if let Some(version) = state.waiting(Version::current()) {
+        note.push_str(&format!(
+            " Huedra {version} is available: choose Install in the tray menu."
+        ));
+    }
+    note
 }

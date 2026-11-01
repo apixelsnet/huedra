@@ -55,3 +55,9 @@ Verified on this PC, 24 end-to-end checks against the release build: version, he
 - `launch` and `uninstall` added (see 06). `Request::Launch { pid, program }` is answered once HDR is on, or with the reason it stays off. `launch` passes the started program's exit code on.
 
 Status: done.
+
+## Result (2026-11-01) — phase 5
+- `huedra update [--check] [--from <folder>]`, `update --rollback`, and the tray's internal `update --auto` (see 11). `Request::UpdateAvailable { version }` puts a waiting release in the tray menu; `StatusReport::busy` (default false when absent) tells the updater that a game, video or launch uses HDR. Protocol version unchanged: the new field is optional and the new request is only sent to a tray of the same build.
+- `pipe::wait_closed` waits until no tray owns the pipe (`WaitNamedPipeW` reports the name missing), without connecting.
+
+Verified on this PC: unit tests for the command forms; `update --from` and `--rollback` closed and restarted a test tray through the pipe.
