@@ -139,9 +139,14 @@ Huedra is cross-compiled for Windows on a Linux machine with Docker, reached ove
 
 ### GitHub Actions
 
-`.github/workflows/ci.yml` runs the same checks on every push and pull request: `build/ci.sh` in the `build/Dockerfile` container, then `huedra.exe --version` on a Windows runner, the changelog check (`build/check-changelog.ps1`), and the release and extension packs. The run's artifacts hold `huedra.exe`, the release folder and the extension zip.
+`.github/workflows/ci.yml` runs the same checks on every push to `main` and every pull request: `build/ci.sh` in the `build/Dockerfile` container, then `huedra.exe --version` on a Windows runner, the changelog check (`build/check-changelog.ps1`), and the release and extension packs. The run's artifacts hold `huedra.exe`, the release folder and the extension zip. Nothing is published.
 
-To publish, add a `## <version>` section to [CHANGELOG.md](CHANGELOG.md) and push the tag `v<version>`. The workflow creates the GitHub release with that section as its notes. Optional settings:
+Only a tag publishes. `.github/workflows/release.yml` starts in either of two ways:
+
+- Actions > Release > Run workflow: pick patch, minor or major (or type a version). The workflow tags the tip of `main` and builds that tag.
+- Push a tag yourself: `git tag v0.2.0 && git push origin v0.2.0`.
+
+The version is the tag; `Cargo.toml` need not be edited first. The notes are that version's section of [CHANGELOG.md](CHANGELOG.md), or its Unreleased section, followed by GitHub's list of changes. After a release, rename `## Unreleased` to the version and start a new one. Optional settings:
 
 | Kind | Name | Use |
 | --- | --- | --- |

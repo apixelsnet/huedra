@@ -1,35 +1,45 @@
-# Builds, tests and packs Huedra and its browser extension.
+name: CI
+
+# Checks every push to the main branch and every pull request, and builds what a
+# release ships. The Release workflow calls it with the version to build.
 #
 # - build: the same container and script as build/remote-build.sh
 #   (build/Dockerfile, build/ci.sh): fmt, clippy for Linux and Windows,
 #   cargo deny, tests, docs, Windows release build, size limit.
 # - windows: runs the built huedra.exe on Windows, checks the changelogs and
-#   packs the release folder and the extension zip.
-# - release: on a tag vX.Y.Z, signs the release (when the MINISIGN_SECRET_KEY
-#   secret is set) and publishes a GitHub release whose notes are that
-#   version's section of CHANGELOG.md.
+#   packs the release folder and the browser extension's zip.
 #
 # Repository variables HUEDRA_UPDATE_KEY and HUEDRA_UPDATE_URL, when both are
 # set, build the update check in (docs/features/11-updates.md).
 # Feature doc: docs/features/12-packaging.md.
-name: CI
 
 on:
   push:
     branches: [main]
-    tags: ['v*']
   pull_request:
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      version:
+        description: Version to build, such as 0.2.0. Written into Cargo.toml for this build only.
+        type: string
+        required: true
+      ref:
+        description: Tag or commit to build.
+        type: string
+        required: true
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  # A release build is never cut short.
+  cancel-in-progress: ${{ inputs.version == '' }}
 
 permissions:
   contents: read
 
-concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
-
 env:
   TARGET: x86_64-pc-windows-msvc
+  VERSION: ${{ inputs.version }}
 
 jobs:
   build:
@@ -38,6 +48,16 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Nothing after the checkout pushes with git; the token is not left in the folder.
+          persist-credentials: false
+          ref: ${{ inputs.ref }}
+
+      - name: Set the version
+        if: env.VERSION != ''
+        run: |
+          sed -i "0,/^version = \".*\"$/s//version = \"$VERSION\"/" Cargo.toml
+          grep -x "version = \"$VERSION\"" Cargo.toml
 
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
 
@@ -83,7 +103,9 @@ jobs:
           sudo chown -R "$(id -u):$(id -g)" "$cache" "$PWD"
           exit "$status"
 
+      # A release build changes the version, and with it Cargo.lock.
       - name: Cargo.lock is up to date
+        if: env.VERSION == ''
         run: git diff --exit-code Cargo.lock
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -91,7 +113,7 @@ jobs:
           name: huedra-exe
           path: ${{ runner.temp }}/cache/target/${{ env.TARGET }}/release/huedra.exe
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 7
 
   windows:
     name: Run on Windows and pack
@@ -103,6 +125,9 @@ jobs:
         shell: pwsh
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.ref }}
 
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -111,17 +136,20 @@ jobs:
 
       - name: Run huedra.exe
         run: |
+          $expected = $env:VERSION
+          if (-not $expected) {
+            $expected = (Select-String -Path Cargo.toml -Pattern '^version = "(.+)"$' | Select-Object -First 1).Matches[0].Groups[1].Value
+          }
           $line = (& dist\huedra.exe --version | Out-String).Trim()
           if ($LASTEXITCODE -ne 0) { throw "--version exited with $LASTEXITCODE" }
-          $cargo = (Select-String -Path Cargo.toml -Pattern '^version = "(.+)"$' | Select-Object -First 1).Matches[0].Groups[1].Value
-          if ($line -ne "Huedra $cargo") { throw "--version printed '$line', expected 'Huedra $cargo'" }
+          if ($line -ne "Huedra $expected") { throw "--version printed '$line', expected 'Huedra $expected'" }
           & dist\huedra.exe --no-such-option 2>&1 | Out-Null
           if ($LASTEXITCODE -ne 2) { throw "an unknown option exited with $LASTEXITCODE, expected 2" }
           "$line runs on $((Get-CimInstance Win32_OperatingSystem).Caption)"
           $global:LASTEXITCODE = 0
 
       - name: Check changelogs
-        run: build/check-changelog.ps1
+        run: build/check-changelog.ps1 -Version $env:VERSION
 
       - name: Pack release
         run: build/pack-release.ps1 -Exe dist\huedra.exe -OutDir dist\release
@@ -134,75 +162,11 @@ jobs:
           name: huedra-release
           path: dist/release/
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 7
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: huedra-extension
           path: dist/huedra-extension-*.zip
           if-no-files-found: error
-          retention-days: 14
-
-  release:
-    name: Publish release
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: windows
-    runs-on: ubuntu-24.04
-    timeout-minutes: 10
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: huedra-release
-          path: release
-
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: huedra-extension
-          path: release
-
-      - name: Version matches the tag
-        id: version
-        run: |
-          version=$(sed -n 's/^version = "\(.*\)"$/\1/p' release/release.toml)
-          [ "v$version" = "$GITHUB_REF_NAME" ] || { echo "::error::tag $GITHUB_REF_NAME, program $version"; exit 1; }
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-
-      - name: Release notes from CHANGELOG.md
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          awk -v v="$VERSION" '
-            /^## / { if (found) exit; if ($2 == v) { found = 1; next } }
-            found { print }
-          ' CHANGELOG.md > notes.md
-          [ -s notes.md ] || { echo "::error::CHANGELOG.md has no section '## $VERSION'"; exit 1; }
-          cat notes.md
-
-      - name: Sign
-        env:
-          MINISIGN_SECRET_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
-          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          if [ -z "$MINISIGN_SECRET_KEY" ]; then
-            echo "::warning::MINISIGN_SECRET_KEY is not set: the release is not signed and the updater will refuse it."
-            exit 0
-          fi
-          sudo apt-get install -y --no-install-recommends minisign >/dev/null
-          key="$RUNNER_TEMP/huedra.key"
-          umask 077
-          printf '%s\n' "$MINISIGN_SECRET_KEY" > "$key"
-          printf '%s\n' "$MINISIGN_PASSWORD" | minisign -S -s "$key" -t "huedra $VERSION" \
-            -m release/release.toml "release/huedra-$VERSION-windows-x64.zip"
-          rm -f "$key"
-
-      - name: Publish
-        env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.version.outputs.version }}
-        run: |
-          gh release create "$GITHUB_REF_NAME" --title "Huedra $VERSION" --notes-file notes.md --verify-tag release/*
+          retention-days: 7

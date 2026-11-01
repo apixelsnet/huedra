@@ -10,7 +10,7 @@ All notable changes. Versions follow `MAJOR.MINOR.PATCH`; the updater installs o
 - `build/pack-release.ps1` packs the release zip, `release.toml` and signatures.
 - Timing lines in the log: start-up, game library scan, settings window, and switch requests.
 - README, SECURITY.md and this changelog; the browser extension has its own in `extras/browser/CHANGELOG.md`.
-- GitHub Actions: every push builds and tests in the same container as the local build, runs `huedra.exe` on Windows, and packs the release zip and the extension zip. A `v<version>` tag publishes a GitHub release with this file's section as its notes, signed when the signing key is set as a secret.
+- GitHub Actions: every push builds and tests in the same container as the local build, runs `huedra.exe` on Windows, and packs the release zip and the extension zip. Only a tag publishes: push `v<version>`, or run the Release workflow, which picks the next version and tags `main`. The release notes come from this file, and the release is signed when the signing key is set as a secret.
 
 ### Fixed
 - The tray menu, a click on the tray icon and display changes no longer wait for an unrelated event: Explorer sends these messages directly, and the tray now wakes itself for them.
