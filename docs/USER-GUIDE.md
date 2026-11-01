@@ -252,8 +252,11 @@ Huedra reads only the name and path of the program in front and waits for progra
 **Where is the log?**
 `%LOCALAPPDATA%\Huedra\huedra.log`, or `data\huedra.log` beside a portable copy. **General › About** shows the folder.
 
+**Huedra closed unexpectedly.**
+On the next start Huedra asks whether to copy the details. Choose **Yes**: the details are copied to the clipboard and the log folder opens. **General › About › Report a problem** does the same at any time. The details hold the Huedra and Windows versions, the last crash and the last 100 lines of the log, with your user folder shown as `%USERPROFILE%`. Huedra sends nothing itself; read them, then paste them into your problem report.
+
 **Still stuck?**
-Open an issue on the project's GitHub page and attach the relevant part of the log. Report security problems privately, as described in [SECURITY.md](../SECURITY.md).
+Open an issue on the project's GitHub page and paste the details from **Report a problem**, or attach the relevant part of the log. Report security problems privately, as described in [SECURITY.md](../SECURITY.md).
 
 ## 14. Portable use
 

@@ -208,6 +208,9 @@ export component SettingsWindow inherits Window {
     in property <string> update-status;
     callback open-changelog();
     callback open-support();
+    // Report a problem: copies the details and shows the log.
+    in property <string> report-status;
+    callback report-problem();
 
     // Disclaimer: shown until accepted; the tray does not run before that.
     in-out property <bool> show-disclaimer;
@@ -487,6 +490,10 @@ export component SettingsWindow inherits Window {
                 checking-updates: root.checking-updates;
                 install-version: root.install-version;
                 has-project-page: root.has-project-page;
+                report-status: root.report-status;
+                report-problem => {
+                    root.report-problem();
+                }
                 check-updates => {
                     root.check-updates();
                 }

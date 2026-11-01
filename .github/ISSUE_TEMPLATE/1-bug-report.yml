@@ -115,7 +115,9 @@ body:
     attributes:
       label: Log
       description: |
-        The lines of `huedra.log` around the time it happened. It is in
+        Paste the details from **General › About › Report a problem** (or the
+        dialog shown after a crash), or the lines of `huedra.log` around the time
+        it happened. It is in
         `%LOCALAPPDATA%\Huedra`, or in the `data` folder next to `huedra.exe` for a
         portable copy. Window titles are only in it when you turned that on; take
         out anything you would rather not share. This is formatted as code on its own.

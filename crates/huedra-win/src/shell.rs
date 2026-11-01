@@ -52,6 +52,24 @@ pub fn open_web_page(url: &str) -> bool {
     result.0 as usize > 32
 }
 
+/// Opens Explorer on the folder holding `file`, with the file selected.
+pub fn show_in_folder(file: &Path) -> bool {
+    let arguments = HSTRING::from(format!("/select,\"{}\"", file.display()));
+    // SAFETY: starts Explorer with one argument; strings outlive the call.
+    let result = unsafe {
+        ShellExecuteW(
+            None,
+            w!("open"),
+            w!("explorer.exe"),
+            &arguments,
+            PCWSTR::null(),
+            SW_SHOWNORMAL,
+        )
+    };
+    // Values above 32 mean success.
+    result.0 as usize > 32
+}
+
 /// Asks the user for a program (`.exe`). Returns its path.
 pub fn pick_program(title: &str) -> Option<String> {
     let mut file = vec![0_u16; 4096];

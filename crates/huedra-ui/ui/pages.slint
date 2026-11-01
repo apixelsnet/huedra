@@ -1321,10 +1321,12 @@ export component GeneralPage inherits Rectangle {
     in property <bool> checking-updates;
     in property <string> install-version;
     in property <bool> has-project-page;
+    in property <string> report-status;
     callback check-updates();
     callback install-update();
     callback open-project();
     callback open-support();
+    callback report-problem();
     callback show-disclaimer();
     callback set-start-with-windows(bool);
     callback set-context-menu(bool);
@@ -1478,6 +1480,15 @@ export component GeneralPage inherits Rectangle {
                                 root.show-disclaimer();
                             }
                         }
+                        ActionButton {
+                            text: "Report a problem";
+                            clicked => {
+                                root.report-problem();
+                            }
+                        }
+                    }
+                    if root.report-status != "": Caption {
+                        text: root.report-status;
                     }
                     Caption {
                         text: "If Huedra is useful to you, a star on GitHub or a coffee on Ko-fi helps the project continue. Supporters are thanked by name and get preview builds before each release.";

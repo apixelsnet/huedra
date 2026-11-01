@@ -1328,6 +1328,20 @@ fn wire_about(ui: &SettingsWindow) {
         shell::open_web_page(huedra_core::update::SUPPORT_URL);
     });
     let weak = ui.as_weak();
+    ui.on_report_problem(move || {
+        let Some(locations) = with_state(|s| s.locations.clone()) else {
+            return;
+        };
+        let status = if huedra_win::report::copy_details(&locations) {
+            "The details are copied to the clipboard and the log folder is open. Paste them into your problem report; Huedra sends nothing itself."
+        } else {
+            "The details could not be copied. The log folder is open; attach huedra.log to your problem report."
+        };
+        if let Some(ui) = weak.upgrade() {
+            ui.set_report_status(status.into());
+        }
+    });
+    let weak = ui.as_weak();
     ui.on_accept_disclaimer(move || {
         let Some(ui) = weak.upgrade() else {
             return;

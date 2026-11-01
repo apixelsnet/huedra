@@ -37,6 +37,8 @@ pub mod process;
 #[cfg(windows)]
 pub mod registry;
 #[cfg(windows)]
+pub mod report;
+#[cfg(windows)]
 pub mod shell;
 #[cfg(windows)]
 pub mod stores;

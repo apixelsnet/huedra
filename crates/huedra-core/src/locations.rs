@@ -22,6 +22,11 @@ pub struct Locations {
     pub icons: PathBuf,
     /// `update.toml`, the record of update checks (local).
     pub update: PathBuf,
+    /// `crash.txt`, written when Huedra stops after an error and not yet
+    /// offered for a problem report (local).
+    pub crash: PathBuf,
+    /// `crash.last.txt`, the newest crash already offered (local).
+    pub last_crash: PathBuf,
     /// Whether portable mode is on.
     pub portable: bool,
 }
@@ -69,6 +74,8 @@ impl Locations {
             window: local.join("window.toml"),
             icons: local.join("icons"),
             update: local.join("update.toml"),
+            crash: local.join("crash.txt"),
+            last_crash: local.join("crash.last.txt"),
             portable,
         }
     }
