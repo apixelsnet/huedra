@@ -4,6 +4,8 @@ The extension's version is separate from the program's; it is set in `manifest.j
 
 ## Unreleased
 
+## 0.3.1 — 2026-11-01
+
 ### Changed
 - New icons: the visible colour gamut with the BT.2020 triangle, matching the program.
 
