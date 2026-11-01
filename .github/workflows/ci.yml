@@ -126,7 +126,7 @@ jobs:
           name: extension-icons
           path: ${{ runner.temp }}/cache/target/extension-icons/
           if-no-files-found: ignore
-          retention-days: 7
+          retention-days: 1
 
       # A release build changes the version, and with it Cargo.lock.
       - name: Cargo.lock is up to date
@@ -138,7 +138,7 @@ jobs:
           name: huedra-exe
           path: ${{ runner.temp }}/cache/target/${{ env.TARGET }}/release/huedra.exe
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 1
 
       # Caches are written only from main, so pull requests and releases cannot
       # fill the repository's cache space; they read main's.
@@ -214,11 +214,11 @@ jobs:
           name: huedra-release
           path: dist/release/
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 1
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: huedra-extension
           path: dist/huedra-extension-*.zip
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 1

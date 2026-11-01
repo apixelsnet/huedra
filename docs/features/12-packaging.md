@@ -129,3 +129,6 @@ Code: `.github/ISSUE_TEMPLATE/`, `.github/labels.yml`, `.github/release.yml`, `.
 - 37 labels in `labels.yml`: kind, status, priority, area and changelog. The Labels workflow creates and updates them on a push to `main` that changes the file. The Triage workflow adds the area labels picked in a form (area names contain no commas, since several picks arrive joined by ", "). The Changelog workflow labels a pull request by its title (feat, fix, other), and `release.yml` sorts the generated release notes by those labels.
 - Branches are named `feat/`, `fix/`, `docs/`, `perf/`, `refactor/`, `test/`, `ci/` or `chore/`; commit messages and pull request titles follow Conventional Commits (CONTRIBUTING.md).
 - README disclaimer: a note that parts of the project were written with the help of AI tools and are reviewed and tested by the maintainer.
+
+## Result (2026-11-01) — artifact retention
+- Every artifact the CI workflow uploads (`huedra-exe`, `huedra-release`, `huedra-extension`, `extension-icons`) is kept for 1 day instead of 7. The Release workflow reads them within the same run, so it is unaffected. Logs keep the repository default.
