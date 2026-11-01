@@ -145,3 +145,12 @@ Owner: only the needed runs, and only essential steps (the repository is private
 - `docker/build-push-action` no longer uploads its build record or writes a job summary (`DOCKER_BUILD_RECORD_UPLOAD`, `DOCKER_BUILD_SUMMARY` false).
 - `changelog.yml` runs on an edit only when the title changed.
 - A documentation-only pull request from a fork gets no CI run; the required checks then wait, and an admin merges it with the bypass.
+
+## Result (2026-11-01) — third-party licences
+Code: `build/licences.sh`, `build/about.toml`, `build/about.hbs`, `build/Dockerfile` (cargo-about 0.9.2, `--features cli`), `build/ci.sh`, `build/remote-build.sh`, `build/pack-release.ps1`, `.github/workflows/ci.yml`; `THIRD-PARTY-LICENSES.md`.
+- `ci.sh` runs `licences.sh`, which writes `THIRD-PARTY-LICENSES.md` in the source tree with cargo-about (`--offline`: texts come from the crates, so every machine writes the same file), for the Windows target without build and dev dependencies. Like `Cargo.lock`, `remote-build.sh` copies it back and CI fails when the committed copy differs. `pack-release.ps1` puts it in the release zip.
+- Slint: cargo-about 0.9.2 and 0.9.3 drop the text of `LicenseRef-` licences even when clarified (the filter for them is inverted), so `licences.sh` appends the royalty-free licence from Slint's own crate, with the Slint crates in the Windows dependency tree (`cargo tree`). Its SHA-256 is pinned: a changed text fails the build until it has been read. cargo-about still warns "has no license file" for those crates.
+- The accepted licences match `deny.toml`.
+
+Verified: on the build server, `licences.sh` writes the file (MIT 189 crates, Unicode-3.0 26, Apache-2.0 7, BSD-3-Clause 2, BSL-1.0 2, Zlib 2, BSD-2-Clause 1, and 9 Slint crates).
+Not verified: the CI run on GitHub; the zip from `pack-release.ps1` with the file in it.
