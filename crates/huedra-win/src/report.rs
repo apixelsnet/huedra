@@ -19,7 +19,6 @@ use windows::Win32::UI::WindowsAndMessaging::{
 use windows::core::{HSTRING, PCWSTR, w};
 
 use crate::registry::{self, Hive};
-use crate::shell;
 
 /// `CF_UNICODETEXT`: UTF-16 text on the clipboard.
 const CLIPBOARD_TEXT: u32 = 13;
@@ -27,7 +26,7 @@ const VERSION_KEY: &str = r"SOFTWARE\Microsoft\Windows NT\CurrentVersion";
 
 const OFFER_TITLE: &str = "Huedra closed unexpectedly";
 const OFFER_TEXT: &str = "Huedra stopped after an error last time.\n\n\
-    Copy the details for a problem report and open the log folder? \
+    Copy the details for a problem report to the clipboard? \
     Huedra sends nothing itself.";
 
 /// When the last run crashed, asks once whether to copy the details. The
@@ -55,12 +54,12 @@ pub fn offer_after_crash(locations: &Locations) {
     });
 }
 
-/// Copies the problem report to the clipboard and shows the log in
-/// Explorer. Returns whether the copy worked.
+/// Copies the problem report to the clipboard. Returns whether it worked.
+/// It opens no Explorer window: the report already holds the newest log
+/// lines, and clipboard plus Explorer together made Defender's
+/// machine-learning check flag the exe.
 pub fn copy_details(locations: &Locations) -> bool {
-    let copied = copy_text(&details(locations));
-    shell::show_in_folder(&locations.log);
-    copied
+    copy_text(&details(locations))
 }
 
 /// The report: versions, the newest crash and the newest log lines, with

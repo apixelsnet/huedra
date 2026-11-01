@@ -80,7 +80,7 @@ Huedra lives in the notification area next to the clock. If you do not see it, o
 | Never for *game* | Shown while a game or player is active: Huedra stops changing HDR for it. |
 | Huedra *version* is available... | Shown when an update is waiting. Opens the update dialog. |
 | Open Huedra | Open the window. |
-| Report a problem... | Copy the details for a problem report to the clipboard and open the log folder (see [Troubleshooting](#13-troubleshooting)). |
+| Report a problem... | Copy the details for a problem report to the clipboard (see [Troubleshooting](#13-troubleshooting)). |
 | Support Huedra on Ko-fi... | Open the project's Ko-fi page in the browser. |
 | Exit | Close Huedra. Displays that Huedra switched to HDR return to SDR. |
 
@@ -254,7 +254,7 @@ Huedra reads only the name and path of the program in front and waits for progra
 `%LOCALAPPDATA%\Huedra\huedra.log`, or `data\huedra.log` beside a portable copy. **General › About** shows the folder.
 
 **Huedra closed unexpectedly.**
-On the next start Huedra asks whether to copy the details. Choose **Yes**: the details are copied to the clipboard and the log folder opens. **Report a problem...** in the tray menu does the same at any time. The details hold the Huedra and Windows versions, the last crash and the last 100 lines of the log, with your user folder shown as `%USERPROFILE%`. Huedra sends nothing itself; read them, then paste them into your problem report.
+On the next start Huedra asks whether to copy the details. Choose **Yes**: the details are copied to the clipboard. **Report a problem...** in the tray menu does the same at any time. The details hold the Huedra and Windows versions, the last crash and the last 100 lines of the log, with your user folder shown as `%USERPROFILE%`. Huedra sends nothing itself; read them, then paste them into your problem report.
 
 **Still stuck?**
 Open an issue on the project's GitHub page and paste the details from **Report a problem...** in the tray menu, or attach the relevant part of the log. Report security problems privately, as described in [SECURITY.md](../SECURITY.md).
