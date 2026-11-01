@@ -197,7 +197,7 @@ The **About** section shows the version, **Check for updates**, the disclaimer, 
 - With **Updates** set to **Install automatically**, there is no dialog: Huedra installs new versions on its own while no game or video is using HDR.
 - Every update must carry a valid signature from the project's key, and must match the size and SHA-256 digest that the signature covers. Anything else is refused. The list of changes is signed too.
 - **Check for updates** under **General › About** checks immediately and opens the dialog when a newer version is found.
-- The previous version is kept beside the program as `huedra.previous.exe`. To go back, run `huedra update --rollback` in a terminal opened in Huedra's folder. A version you rolled back from is not installed automatically again.
+- An update replaces only `huedra.exe`. Your settings, games and history are kept: they live in `%APPDATA%\Huedra` and `%LOCALAPPDATA%\Huedra` (or the `data` folder of a portable copy), which updates never touch. During the update the old program is set aside as `huedra.previous.exe`; the new version deletes it when it starts.
 
 ## 11. Keyboard shortcuts
 
@@ -228,7 +228,6 @@ huedra launch -- <program> [arguments]
 huedra hdr status            List the displays and their HDR state.
 huedra hdr on|off [--display N | all]
 huedra update [--check]      Install a newer signed release now, or only report it.
-huedra update --rollback     Go back to the version before the last update.
 huedra uninstall             Close Huedra and remove everything it added to the registry.
 huedra exit                  Close the running Huedra.
 huedra --version

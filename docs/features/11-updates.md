@@ -54,3 +54,12 @@ Not verified: a real update through the dialog. The update channel answers 404 w
 ## Result (2026-11-01) — first update through the channel
 Verified on this PC with the published releases, the repository now public: a portable copy of the downloaded 0.1.0 zip ran `huedra update --check` against the real release address ("Huedra 0.1.1 is available"), then `huedra update` installed 0.1.1 (its SHA-256 matches the signed `release.toml`) and kept 0.1.0 as `huedra.previous.exe`; `update --rollback` restored 0.1.0, `update` installed 0.1.1 again, and 0.1.1 then reported itself up to date. The update channel answers 200 for every file.
 Not verified: the daily check and the Update available dialog in a running tray (the test copy ran no tray); Install automatically.
+
+## Result (2026-11-02) — no rollback; settings kept
+Code: `remove_previous` and `install` in `crates/huedra/src/update.rs`; `run` in `crates/huedra/src/app.rs`; `verdict`, `UpdateState` in `crates/huedra-core/src/update.rs`; `parse_update` in `crates/huedra-core/src/command.rs`.
+- Owner's decision: an update leaves only the new program. Windows cannot delete a running program, so `install` still moves the old one aside as `huedra.previous.exe`; the tray of the new version deletes it on start, in the background, trying every 0.5 s for 30 s while the process that ran the update lets go of it, and again on the next start otherwise.
+- `huedra update --rollback`, `Verdict::Skipped` and `skipped` in `update.toml` are gone; an `update.toml` with `skipped` still loads.
+- Settings: an update writes only in the program folder. Settings (`%APPDATA%\Huedra`), the log, update record and game information (`%LOCALAPPDATA%\Huedra`), or a portable copy's `data` folder, are untouched. Checked on the owner's installed copy after 0.1.1 to 0.1.2: `config.toml` kept every choice (`on_close = "quit"`, `updates = "install"`).
+
+Verified on this PC (scratch portable copy, Always SDR): with a `huedra.previous.exe` beside it, the tray started with `--background` had deleted it within 3 s; `huedra update --rollback` is refused (exit code 2). Build green (109 tests), Defender clean.
+Not verified: deletion right after a real update (the updating process holds the file; covered by the retries).

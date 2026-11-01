@@ -35,7 +35,6 @@ Usage:
                                --check only report it. --from reads the
                                release files from a folder instead of the
                                release address.
-  huedra update --rollback     Go back to the version before the last update.
   huedra hdr status            List the displays and their HDR state.
   huedra hdr on  [--display N | all]
   huedra hdr off [--display N | all]
@@ -110,8 +109,6 @@ pub enum UpdateCommand {
         /// address.
         from: Option<String>,
     },
-    /// Restore the program kept from before the last update.
-    Rollback,
     /// The daily check started by the tray, which follows the Updates
     /// setting.
     Auto,
@@ -246,7 +243,6 @@ fn parse_launch(args: impl Iterator<Item = String>) -> Result<LaunchCommand, Usa
 fn parse_update(mut args: impl Iterator<Item = String>) -> Result<UpdateCommand, UsageError> {
     let first = args.next();
     let command = match first.as_deref() {
-        Some("--rollback") => UpdateCommand::Rollback,
         Some("--auto") => UpdateCommand::Auto,
         _ => return parse_update_run(first.into_iter().chain(args)),
     };
@@ -486,8 +482,8 @@ mod tests {
         );
         assert_eq!(
             update(&["update", "--rollback"]),
-            Ok(Command::Update(UpdateCommand::Rollback)),
-            "rollback"
+            Err(UsageError::UnexpectedArgument("--rollback".into())),
+            "no rollback"
         );
         assert_eq!(
             update(&["update", "--auto"]),
@@ -500,9 +496,9 @@ mod tests {
             "no folder"
         );
         assert_eq!(
-            update(&["update", "--rollback", "--check"]),
+            update(&["update", "--auto", "--check"]),
             Err(UsageError::UnexpectedArgument("--check".into())),
-            "rollback takes nothing"
+            "auto takes nothing"
         );
         assert_eq!(
             update(&["update", "--check", "--check"]),

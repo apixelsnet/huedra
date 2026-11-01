@@ -1389,7 +1389,7 @@ export component GeneralPage inherits Rectangle {
             }
             SettingRow {
                 title: "Updates";
-                description: "Checks once a day for a new signed release. Ask before installing shows what is new and installs when you choose Download and install; Install automatically installs while no game or video is running. The previous version is kept; huedra update --rollback restores it." + (root.update-note != "" ? " " + root.update-note : "");
+                description: "Checks once a day for a new signed release. Ask before installing shows what is new and installs when you choose Download and install; Install automatically installs while no game or video is running. Your settings are kept." + (root.update-note != "" ? " " + root.update-note : "");
                 Dropdown {
                     accessible-label: "Updates";
                     model: ["Install automatically", "Ask before installing", "Off"];

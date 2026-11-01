@@ -66,3 +66,8 @@ Verified on this PC: unit tests for the command forms; `update --from` and `--ro
 - `huedra` opens the window as well as the tray; `huedra --background` is the tray alone (see 07). The help text lists both.
 
 Verified: unit tests (`--background`, and `--background` with an extra argument refused).
+
+## Result (2026-11-02) — no `update --rollback`
+- `huedra update --rollback` is refused as an unexpected argument (see 11).
+
+Verified: unit tests.
