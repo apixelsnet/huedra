@@ -28,6 +28,11 @@ use huedra_win::{clock, hash, http, process};
 const USER_AGENT: &str = concat!("Huedra/", env!("CARGO_PKG_VERSION"));
 /// How long the closing tray may take to give up its channel.
 const TRAY_CLOSE_WAIT: Duration = Duration::from_secs(10);
+/// How often, and how far apart, the program an update moved aside is
+/// tried for removal: the process that ran the update still holds it for
+/// a moment after the new version starts.
+const REMOVE_ATTEMPTS: u32 = 60;
+const REMOVE_INTERVAL: Duration = Duration::from_millis(500);
 /// `CREATE_NO_WINDOW`: no console window for the version check.
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
@@ -40,7 +45,6 @@ pub fn run(command: &UpdateCommand) -> anyhow::Result<()> {
     };
     let result = match command {
         UpdateCommand::Run { check_only, from } => updater.run_now(*check_only, from.as_deref()),
-        UpdateCommand::Rollback => updater.rollback(),
         UpdateCommand::Auto => {
             huedra_win::console::release_own_console();
             if let Err(error) = updater.auto() {
@@ -55,6 +59,27 @@ pub fn run(command: &UpdateCommand) -> anyhow::Result<()> {
         updater.log(&format!("The update failed: {error:#}"));
     }
     result
+}
+
+/// Deletes the program an update moved aside (`huedra.previous.exe`), in
+/// the background, once the process that ran the update has let go of it.
+/// Called when the tray starts; a file still in use after half a minute is
+/// left for the next start.
+pub fn remove_previous() {
+    let Ok(files) = Files::of_running() else {
+        return;
+    };
+    if !files.previous.is_file() {
+        return;
+    }
+    std::thread::spawn(move || {
+        for _ in 0..REMOVE_ATTEMPTS {
+            if remove_if_present(&files.previous).is_ok() {
+                return;
+            }
+            std::thread::sleep(REMOVE_INTERVAL);
+        }
+    });
 }
 
 struct Updater {
@@ -78,7 +103,7 @@ impl Updater {
         if matches!(source, Source::Web(_)) {
             state.last_check = update::unix_secs(SystemTime::now());
         }
-        let Verdict::Newer(version) = update::verdict(release.version(), running, None) else {
+        let Verdict::Newer(version) = update::verdict(release.version(), running) else {
             state.available = None;
             self.save(&state);
             println!("Huedra {running} is up to date.");
@@ -103,13 +128,9 @@ impl Updater {
         let files = Files::of_running()?;
         self.install(&files, &program, version, tray == Tray::Running)?;
         state.available = None;
-        state.skipped = None;
         self.save(&state);
         self.log(&format!("Huedra was updated from {running} to {version}."));
-        println!(
-            "Huedra was updated from {running} to {version}. The previous version is kept as {}; `huedra update --rollback` restores it.",
-            files.previous.display()
-        );
+        println!("Huedra was updated from {running} to {version}.");
         Ok(())
     }
 
@@ -128,19 +149,12 @@ impl Updater {
         let running = Version::current();
         let mut state = UpdateState::load(&self.locations.update);
         state.last_check = update::unix_secs(SystemTime::now());
-        let version = match update::verdict(release.version(), running, state.skipped) {
+        let version = match update::verdict(release.version(), running) {
             Verdict::UpToDate => {
                 state.available = None;
                 self.save(&state);
                 self.log(&format!(
                     "Checked for updates: Huedra {running} is up to date."
-                ));
-                return Ok(());
-            }
-            Verdict::Skipped(version) => {
-                self.save(&state);
-                self.log(&format!(
-                    "Huedra {version} is available; it is not installed automatically because it was rolled back. `huedra update` installs it."
                 ));
                 return Ok(());
             }
@@ -246,51 +260,6 @@ impl Updater {
             process::spawn_detached(&files.current, &[BACKGROUND]);
         }
         swapped
-    }
-
-    /// `huedra update --rollback`.
-    fn rollback(&self) -> anyhow::Result<()> {
-        let files = Files::of_running()?;
-        if !files.previous.is_file() {
-            bail!("there is no previous version to go back to");
-        }
-        let tray = tray()?;
-        if tray == Tray::Busy {
-            bail!("a game or video is using HDR; roll back after it ends");
-        }
-        remove_if_present(&files.new)?;
-        if tray == Tray::Running {
-            stop_tray()?;
-        }
-        let running = Version::current();
-        // The current program becomes the previous one, so a second
-        // rollback returns to it.
-        let swapped = fs::rename(&files.current, &files.new)
-            .context("could not move the running program aside")
-            .and_then(|()| {
-                fs::rename(&files.previous, &files.current).or_else(|error| {
-                    let _ = fs::rename(&files.new, &files.current);
-                    Err(error).context("could not put the previous program in place")
-                })
-            })
-            .and_then(|()| {
-                fs::rename(&files.new, &files.previous).context("could not keep this version")
-            });
-        if tray == Tray::Running {
-            process::spawn_detached(&files.current, &[BACKGROUND]);
-        }
-        swapped?;
-        let mut state = UpdateState::load(&self.locations.update);
-        state.skipped = Some(running);
-        state.available = None;
-        self.save(&state);
-        self.log(&format!(
-            "Huedra {running} was rolled back to the previous version."
-        ));
-        println!(
-            "Huedra {running} was replaced by the previous version. {running} is not installed automatically again; `huedra update` installs it."
-        );
-        Ok(())
     }
 
     fn save(&self, state: &UpdateState) {

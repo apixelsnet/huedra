@@ -90,6 +90,9 @@ pub fn run(start: TrayStart) -> anyhow::Result<()> {
         return Ok(());
     }
     let mut app = App::start(&host, paths, pipe)?;
+    // After an update, the old program waits beside the new one until the
+    // process that installed it has ended.
+    crate::update::remove_previous();
     if start == TrayStart::Window {
         crate::open_settings();
     }

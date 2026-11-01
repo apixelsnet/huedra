@@ -474,33 +474,27 @@ fn parse_hex(text: &str) -> Option<[u8; 32]> {
     Some(out)
 }
 
-/// What a check found, given the running version and what the user chose
-/// to skip.
+/// What a check found, given the running version.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Verdict {
     /// The release is not newer than the running version.
     UpToDate,
-    /// A newer release the user rolled back from; only installed on
-    /// request.
-    Skipped(Version),
     /// A newer release.
     Newer(Version),
 }
 
 /// Compares a release with the running version. Older releases are never
 /// offered, so a replayed old manifest cannot downgrade Huedra.
-pub fn verdict(release: Version, running: Version, skipped: Option<Version>) -> Verdict {
+pub fn verdict(release: Version, running: Version) -> Verdict {
     if release <= running {
         Verdict::UpToDate
-    } else if skipped == Some(release) {
-        Verdict::Skipped(release)
     } else {
         Verdict::Newer(release)
     }
 }
 
-/// `update.toml`: when Huedra last checked, what it found, and a version
-/// the user rolled back from.
+/// `update.toml`: when Huedra last checked and what it found. A `skipped`
+/// key from versions with rollback is ignored.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct UpdateState {
@@ -509,9 +503,6 @@ pub struct UpdateState {
     /// A newer version found and not yet installed (Ask before installing).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub available: Option<Version>,
-    /// A version rolled back from; not installed automatically again.
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub skipped: Option<Version>,
 }
 
 impl UpdateState {
@@ -772,30 +763,16 @@ mod tests {
     #[test]
     fn only_newer_releases_are_offered() {
         let v = |s: &str| s.parse::<Version>().expect("version");
+        assert_eq!(verdict(v("0.2.0"), v("0.2.0")), Verdict::UpToDate, "same");
         assert_eq!(
-            verdict(v("0.2.0"), v("0.2.0"), None),
-            Verdict::UpToDate,
-            "same"
-        );
-        assert_eq!(
-            verdict(v("0.1.0"), v("0.2.0"), None),
+            verdict(v("0.1.0"), v("0.2.0")),
             Verdict::UpToDate,
             "older is never offered"
         );
         assert_eq!(
-            verdict(v("0.3.0"), v("0.2.0"), None),
+            verdict(v("0.3.0"), v("0.2.0")),
             Verdict::Newer(v("0.3.0")),
             "newer"
-        );
-        assert_eq!(
-            verdict(v("0.3.0"), v("0.2.0"), Some(v("0.3.0"))),
-            Verdict::Skipped(v("0.3.0")),
-            "rolled back from"
-        );
-        assert_eq!(
-            verdict(v("0.4.0"), v("0.2.0"), Some(v("0.3.0"))),
-            Verdict::Newer(v("0.4.0")),
-            "a later release is offered again"
         );
     }
 
@@ -825,6 +802,13 @@ mod tests {
     }
 
     #[test]
+    fn state_from_a_version_with_rollback() {
+        let text = "last_check = 7\nskipped = \"0.1.1\"\n";
+        let state: UpdateState = toml::from_str(text).expect("parse");
+        assert_eq!(state.last_check, 7, "the rest still reads");
+    }
+
+    #[test]
     fn state_round_trip() {
         let dir = std::env::temp_dir().join(format!("huedra-test-update-{}", std::process::id()));
         let path = dir.join("update.toml");
@@ -832,7 +816,6 @@ mod tests {
         let state = UpdateState {
             last_check: 42,
             available: Some("0.3.0".parse().expect("version")),
-            skipped: None,
         };
         state.save(&path).expect("save");
         assert_eq!(UpdateState::load(&path), state, "round trip");
