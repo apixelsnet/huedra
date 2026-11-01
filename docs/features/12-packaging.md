@@ -70,13 +70,13 @@ Performance targets, measured on this PC (Windows 11 build 26300):
 | Start-up to tray icon ≤ 100 ms | 20–46 ms from process creation (log line); 119 ms on the very first run of a newly copied exe (antivirus scan) |
 | Library scan ≤ 200 ms | 3–4 ms; 91 ms on that first run |
 | Settings window ≤ 300 ms | 38–51 ms to the first turn of its event loop (hidden desktop, 4 runs) |
-| Tray memory ≤ 4 MB | 1.5 MB private working set, 2 threads, about 12 minutes after start |
-| Idle wake-ups: none between events | not proven: about 995 context switches in 17 of 60 ten-second windows over 10 minutes, while other tests and the owner's own use produced foreground changes; a run with the PC untouched is still needed |
-| Switch request ≤ 50 ms | not measured: the log line exists ("Switch requested N ms after the event") but no real switch was made in this session |
+| Tray memory ≤ 4 MB | 1.5 MB private working set, 2 threads, about 12 minutes after start; 1.98 MB private working set (2.87 MB private bytes, 5 threads, 196 handles) after 8 h 17 min |
+| Idle wake-ups: none between events | PC untouched (2026-11-01, raw per-thread counters, read each minute): 12 context switches in 10 minutes, none in 6 of the 10 minutes, 0 ms CPU; 156 ms CPU in 8 h 17 min. The few switches are Windows thread-pool threads, not the message loop. (An earlier run during other tests saw about 995.) |
+| Switch request ≤ 50 ms | 2 ms (mode Always HDR, both displays on) and 0 ms (hold time over, both back to SDR); the `mode hdr` command returned after 700 ms, which includes Windows switching both displays |
 | Executable | 9,883,136 bytes without an update key, about 9.94 MB with one (limit 10,000,000) |
 
 Verified on this PC: a non-portable copy's first start wrote `HKCU\...\Run\Huedra` with its quoted path and logged "Huedra will start with Windows."; `huedra uninstall` closed it and left neither the Run value nor the `exefile` menu key; no Huedra process remained. `pack-release.ps1` without a key packed a test release (zip 5.2 MB, manifest read back by the updater after signing in the build container).
-Not verified: `pack-release.ps1 -SecretKey` with minisign on this PC; a clean idle measurement; tray memory after one hour; a release from a fresh clone.
+Not verified: `pack-release.ps1 -SecretKey` with minisign on this PC; a release from a fresh clone. (Idle, memory after an hour and switch timing were measured on 2026-11-01, above.)
 
 Note: `uninstall` and `update` act on whichever tray owns the per-user pipe, including a copy started from another folder.
 
@@ -94,3 +94,8 @@ Code: `.github/workflows/ci.yml`, `.github/workflows/release.yml`, `build/check-
 Verified on GitHub (run of commit cc3b1f2): `build` green in 22 min from empty caches (96 tests; every `ci.sh` step); `windows` green in 18 s (`--version` on Windows Server 2025, changelog check, both packs, artifacts uploaded). The cache save failed for lack of disk space, fixed as above: the next run (commit 59f7e76) was green in 17 min and saved both caches (build output 4.4 GB on disk, 1.04 GiB stored; downloads 299 MiB); the Docker image came from its layer cache.
 With warm caches (commit 94f6df5): `build` 5 min 46 s, `windows` 25 s, both green.
 Not verified: `release.yml` (no tag pushed yet); signing in Actions (no secret set).
+
+## Result (2026-11-01) — licence and signing key
+- Licence: MIT OR Apache-2.0 (`LICENSE-MIT`, `LICENSE-APACHE`, `license` in the Cargo metadata); both files and `PRIVACY.md` go into the release zip.
+- Release signing key made with minisign 0.12 on the owner's PC (password-protected, kept outside the repository). The repository variables `HUEDRA_UPDATE_KEY` (its public key) and `HUEDRA_UPDATE_URL` (the GitHub releases address) are set, so Actions builds check for updates. The secrets `MINISIGN_SECRET_KEY` and `MINISIGN_PASSWORD` are set by the owner.
+- minisign on Windows reads the password from a pipe (checked with a throwaway key), as the release job does on Linux.
