@@ -157,3 +157,6 @@ Not verified: the CI run on GitHub; the zip from `pack-release.ps1` with the fil
 
 ## Result (2026-11-01) — size limit 12 MB
 - Raised by the owner from 10 MB to 12 MB (12,000,000 bytes) in `build/ci.sh`: the Closing this window setting brought the exe to 9,990,144 bytes, 9,856 under the old limit, because Slint expands each Dropdown into its own code.
+
+## Result (2026-11-01) — run.ps1 removed
+- `build/run.ps1` is gone: it ended Huedra with `Stop-Process -Force`, which skips the shutdown that returns displays to SDR. To try a new build, `dist\huedra.exe exit` and then `dist\huedra.exe`; a second start of a running copy only opens its window.
