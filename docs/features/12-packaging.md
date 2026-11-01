@@ -137,3 +137,11 @@ Code: `.github/ISSUE_TEMPLATE/`, `.github/labels.yml`, `.github/release.yml`, `.
 - `SUPPORTERS.md` lists Ko-fi supporters who ask to be named; the README's Supporters section says what supporters get: their name there, thanks in release notes, preview builds through Ko-fi about a week before each public release, and the `sponsor` label on their issues. No votes or priority, and no feature is locked.
 - The Release workflow ends the GitHub release notes with a Thank you section linking `SUPPORTERS.md`; the signed notes for the update dialog are unchanged.
 - `.github/labels.yml`: `sponsor` label (pink). `.github/FUNDING.yml` already shows the Ko-fi button; no GitHub Sponsors entry yet.
+
+## Result (2026-11-01) — essential CI runs only
+Owner: only the needed runs, and only essential steps (the repository is private, so Actions minutes are paid; builds go through `build/remote-build.sh`).
+- `ci.yml` runs on a push to main or a pull request only when a build input changed (`crates/`, `extras/browser/`, Cargo files, `deny.toml`, `clippy.toml`, `.cargo/`, the build scripts, `ci.yml`). A push to main runs the build job alone: no Windows job, no `huedra-exe` upload.
+- Pull requests from branches of this repository skip both jobs (shown as skipped, which the branch rules accept); pull requests from forks run both. Releases (also when started by a tag push, told apart by the version) and manual runs run both.
+- `docker/build-push-action` no longer uploads its build record or writes a job summary (`DOCKER_BUILD_RECORD_UPLOAD`, `DOCKER_BUILD_SUMMARY` false).
+- `changelog.yml` runs on an edit only when the title changed.
+- A documentation-only pull request from a fork gets no CI run; the required checks then wait, and an admin merges it with the bypass.

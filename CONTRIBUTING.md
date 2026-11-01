@@ -31,7 +31,7 @@ Report security problems privately, as described in [SECURITY.md](SECURITY.md), 
 Huedra is cross-compiled for Windows from Linux in Docker (`build/Dockerfile`, with `cargo-xwin`). `build/ci.sh` runs every check: formatting, Clippy for Linux and Windows, `cargo deny`, tests, documentation and the Windows release build.
 
 - **With a Linux machine running Docker, reached over SSH:** put `HUEDRA_BUILD_HOST=<server>` in `build/local.env` (ignored by Git), then run `bash build/remote-build.sh`. It copies `huedra.exe` to `dist/`. `bash build/remote-fmt.sh` formats the sources.
-- **Without one:** open a pull request. GitHub Actions runs the same checks, and the run's artifacts contain `huedra.exe`, the release zip and the browser extension.
+- **Without one:** open a pull request from your fork. GitHub Actions runs the same checks when it changes code or the build (not for documentation only), and the run's artifacts contain `huedra.exe`, the release zip and the browser extension.
 
 ## Branches and commits
 
