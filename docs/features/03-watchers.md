@@ -35,4 +35,9 @@ Code: `find_game_window`, `place_game`, `game_target`, `retarget_all` in `crates
 Verified: build green (clippy for Windows with `-D warnings`).
 Not verified on this PC: any game; the owner tests it.
 
+## Result (2026-11-01) — first real game
+Verified by the owner on this PC (build cf4b7b9, Automatic mode, keep HDR on 3 s, "Only the display showing the content" on): Resident Evil 4 started from Steam without the launch option turned HDR on for Display 1, the display its window was on, in the same second ("Switch requested 3 ms after the event"); the log shows no switch on Display 2. Quitting the game returned Display 1 to SDR 3 s later, as the hold time says.
+
+Not verified: whether the game itself offered its HDR option; Alt+Tab while the game runs; the Steam launch option (see 06).
+
 Status: done for games; video titles in progress (phase 4).
