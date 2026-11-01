@@ -111,4 +111,10 @@ Not verified: `release.yml` (no tag pushed yet); signing in Actions (no secret s
 - A version's release holds only what people download: the program zip, its signature and `huedra-browser-extension-<version>.zip`. The notes start with a Downloads table (which file to take) and the minisign command with the public key, then the changelog section. `SHA256SUMS` is gone: GitHub shows each file's SHA-256.
 - The updater's files (`huedra.exe`, `release.toml`, `release.toml.minisig`) go to the fixed pre-release `update-channel`, program first and manifest last. `HUEDRA_UPDATE_URL` points there, because `releases/latest/download/` skips pre-releases.
 - 0.1.0, first published as a normal release with the `latest` address built in, was withdrawn and published again as a beta.
+- Release notes list only what matters to people using Huedra; the project's own build and workflow changes stay out of `CHANGELOG.md`.
+
+## Result (2026-11-01) — who may change what ships
+Code: `build/protect-repo.sh`.
+- Set now: workflows get a read-only token unless a job asks for more (only the Release workflow's `version` and `publish` jobs write). Running the Release workflow needs write access to the repository, which only its admins have; pull requests come from forks.
+- Waiting for a public repository (GitHub offers repository rules on a free organisation only for public repositories; the API answered "Upgrade to GitHub Pro or make this repository public"): `main` only through a pull request with one approval and both CI checks green (admins may push directly), no force push or deletion; tags `v*` and `update-channel` changed only by admins and the Release workflow; outside contributors' workflow runs wait for an admin. `bash build/protect-repo.sh` applies all of it once the repository is public.
 

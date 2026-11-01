@@ -142,6 +142,7 @@ Without a build server, open a pull request: GitHub Actions builds it, and the r
 - Add a line under `## Unreleased` in [CHANGELOG.md](CHANGELOG.md); changes to the browser extension go in [extras/browser/CHANGELOG.md](extras/browser/CHANGELOG.md).
 - Every pull request is checked by GitHub Actions: formatting, Clippy, dependency licences and advisories, tests, the Windows build and a start of `huedra.exe` on Windows. It must pass.
 - Report security problems privately, as described in [SECURITY.md](SECURITY.md).
+- The build and release setup (`.github/`, `build/`) is kept by the maintainers. Pull requests may suggest changes to it, but releases and the files that publish them are changed only by them.
 
 ## Roadmap
 

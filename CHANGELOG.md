@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes. Versions follow `MAJOR.MINOR.PATCH`; the updater installs only versions newer than the running one.
+Changes that matter to people using Huedra (not the project's own build and workflow changes). Versions follow `MAJOR.MINOR.PATCH`; the updater installs only versions newer than the running one.
 
 ## Unreleased
 
@@ -30,8 +30,6 @@ First release.
 - Starts with Windows (set up on first start); `huedra uninstall` removes every registry entry Huedra wrote.
 - Timing lines in the log: start-up, game library scan, settings window and switch requests.
 
-### Project
+### About this release
+- Beta: releases before 1.0.0 are pre-releases for testing.
 - Licensed under the Apache License 2.0.
-- Releases before 1.0.0 are betas, published as pre-releases.
-- README, SECURITY.md and changelogs for the program and the extension.
-- GitHub Actions: every push and pull request is built and tested; a `v<version>` tag publishes a release.
