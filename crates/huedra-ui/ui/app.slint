@@ -27,6 +27,9 @@ component NavItem inherits Rectangle {
     accessible-role: tab;
     accessible-label: label;
     accessible-item-selected: selected;
+    accessible-action-default => {
+        root.activate();
+    }
     Rectangle {
         x: 0;
         width: 3px;
