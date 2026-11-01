@@ -4,6 +4,8 @@ Changes that matter to people using Huedra (not the project's own build and work
 
 ## Unreleased
 
+## 0.1.3 — 2026-11-02
+
 ### Changed
 - An update replaces the program and leaves no copy of the old version: `huedra.previous.exe` is deleted when the new version starts, and `huedra update --rollback` is gone. Settings are kept, as before.
 
