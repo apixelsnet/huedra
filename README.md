@@ -18,6 +18,7 @@
 - [Usage](#usage)
 - [Questions](#questions)
 - [Building from source](#building-from-source)
+- [Contributing](#contributing)
 - [Roadmap](#roadmap)
 - [Licence](#licence)
 - [Acknowledgements](#acknowledgements)
@@ -122,7 +123,6 @@ Huedra is cross-compiled for Windows on a Linux machine with Docker, reached ove
    ```sh
    echo "HUEDRA_BUILD_HOST=<server>" > build/local.env
    ```
-   For a build that checks for updates, add `HUEDRA_UPDATE_KEY=<minisign public key>` and `HUEDRA_UPDATE_URL=https://<release folder>/`.
 2. Build and test on the server, and copy `huedra.exe` to `dist/`:
    ```sh
    bash build/remote-fmt.sh     # optional: format the sources with rustfmt
@@ -132,26 +132,15 @@ Huedra is cross-compiled for Windows on a Linux machine with Docker, reached ove
    ```powershell
    powershell -File build/run.ps1 --version
    ```
-4. Pack a release (zip, `release.toml`, signatures):
-   ```powershell
-   powershell -File build/pack-release.ps1 -SecretKey <path to minisign secret key>
-   ```
 
-### GitHub Actions
+Without a build server, open a pull request: GitHub Actions builds it, and the run's artifacts hold `huedra.exe`.
 
-`.github/workflows/ci.yml` runs the same checks on every push to `main` and every pull request: `build/ci.sh` in the `build/Dockerfile` container, then `huedra.exe --version` on a Windows runner, the changelog check (`build/check-changelog.ps1`), and the release and extension packs. The run's artifacts hold `huedra.exe`, the release folder and the extension zip. Nothing is published.
+## Contributing
 
-Only a tag publishes. `.github/workflows/release.yml` starts in either of two ways:
-
-- Actions > Release > Run workflow: pick patch, minor or major (or type a version). The workflow tags the tip of `main` and builds that tag.
-- Push a tag yourself: `git tag v0.2.0 && git push origin v0.2.0`.
-
-The version is the tag; `Cargo.toml` need not be edited first. The notes are that version's section of [CHANGELOG.md](CHANGELOG.md), or its Unreleased section, followed by GitHub's list of changes. After a release, rename `## Unreleased` to the version and start a new one. Optional settings:
-
-| Kind | Name | Use |
-| --- | --- | --- |
-| Variable | `HUEDRA_UPDATE_KEY`, `HUEDRA_UPDATE_URL` | Build the update check in |
-| Secret | `MINISIGN_SECRET_KEY`, `MINISIGN_PASSWORD` | Sign `release.toml` and the zip (contents of the key file, and its password) |
+- Read the feature's document in [`docs/features`](docs/features) before changing it, and add a dated Result section to it with what you changed and how you checked it.
+- Add a line under `## Unreleased` in [CHANGELOG.md](CHANGELOG.md); changes to the browser extension go in [extras/browser/CHANGELOG.md](extras/browser/CHANGELOG.md).
+- Every pull request is checked by GitHub Actions: formatting, Clippy, dependency licences and advisories, tests, the Windows build and a start of `huedra.exe` on Windows. It must pass.
+- Report security problems privately, as described in [SECURITY.md](SECURITY.md).
 
 ## Roadmap
 
