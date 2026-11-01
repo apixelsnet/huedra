@@ -7,6 +7,7 @@ use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 use std::time::{Duration, Instant, SystemTime};
 
 use anyhow::Context as _;
+use huedra_core::command::{TrayStart, startup_command, startup_program};
 use huedra_core::config::{Config, GameHdr, ManualDisplays, UpdatePolicy};
 use huedra_core::display::{Display, DisplayId, HdrState};
 use huedra_core::engine::{
@@ -61,17 +62,21 @@ const MENU_UPDATE: u32 = 32;
 const MENU_SUPPORT: u32 = 33;
 const MENU_REPORT: u32 = 34;
 
-/// Runs the tray process until it is told to exit.
-pub fn run() -> anyhow::Result<()> {
+/// Runs the tray process until it is told to exit, and opens the settings
+/// window when the user started it.
+pub fn run(start: TrayStart) -> anyhow::Result<()> {
     huedra_win::console::release_own_console();
     let paths = Locations::resolve()?;
     let mut host = EventLoop::new().context("could not create the tray window")?;
     let pipe = match PipeServer::start(host.waker()) {
         Ok(pipe) => pipe,
         Err(PipeError::AlreadyRunning) => {
-            // A second start opens the window of the running copy instead.
+            // A second start by the user opens the window of the running
+            // copy, or brings it to the front, instead.
             eprintln!("Huedra is already running.");
-            crate::open_settings();
+            if start == TrayStart::Window {
+                crate::open_settings();
+            }
             return Ok(());
         }
         Err(error) => return Err(error).context("could not open Huedra's channel"),
@@ -85,6 +90,9 @@ pub fn run() -> anyhow::Result<()> {
         return Ok(());
     }
     let mut app = App::start(&host, paths, pipe)?;
+    if start == TrayStart::Window {
+        crate::open_settings();
+    }
     host.run(|host, event| app.handle(host, event))?;
     Ok(())
 }
@@ -1015,8 +1023,9 @@ impl App {
 
     /// Adds the start-up entry on the first start, as Start with Windows is
     /// on by default, and points an entry at this program when the one it
-    /// names no longer exists (the folder was moved). Portable copies leave
-    /// the registry alone.
+    /// names no longer exists (the folder was moved). An entry for this
+    /// program from before `--background` gets it, so signing in does not
+    /// open the window. Portable copies leave the registry alone.
     fn startup_entry(&mut self, first_run: bool) {
         if self.paths.portable || !self.config.general.start_with_windows {
             return;
@@ -1024,13 +1033,17 @@ impl App {
         let Ok(exe) = std::env::current_exe() else {
             return;
         };
-        let missing = registry::startup_command().is_some_and(|command| {
-            !std::path::Path::new(command.trim().trim_matches('"')).is_file()
+        let command = startup_command(&exe);
+        let stale = registry::startup_command().is_some_and(|current| {
+            let program = startup_program(&current);
+            let missing = !std::path::Path::new(program).is_file();
+            let old_form = program.eq_ignore_ascii_case(&exe.display().to_string())
+                && current.trim() != command;
+            missing || old_form
         });
-        if !first_run && !missing {
+        if !first_run && !stale {
             return;
         }
-        let command = format!("\"{}\"", exe.display());
         match registry::set_startup(Some(&command)) {
             Ok(()) => self.log_line("Huedra will start with Windows."),
             Err(error) => self.log_line(&format!("Could not add the start-up entry: {error}")),

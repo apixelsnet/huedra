@@ -10,10 +10,10 @@ use windows::Win32::System::Threading::GetCurrentThreadId;
 use windows::Win32::UI::HiDpi::{GetDpiForWindow, GetSystemMetricsForDpi};
 use windows::Win32::UI::Shell::{DefSubclassProc, RemoveWindowSubclass, SetWindowSubclass};
 use windows::Win32::UI::WindowsAndMessaging::{
-    EnumThreadWindows, FindWindowW, ICON_BIG, ICON_SMALL, IMAGE_ICON, IsIconic, IsWindowVisible,
-    LR_DEFAULTCOLOR, LoadImageW, SM_CXICON, SM_CXSMICON, SW_RESTORE, SWP_NOSIZE,
-    SYSTEM_METRICS_INDEX, SendMessageW, SetForegroundWindow, ShowWindow, WINDOWPOS, WM_NCDESTROY,
-    WM_SETICON, WM_WINDOWPOSCHANGING,
+    ASFW_ANY, AllowSetForegroundWindow, EnumThreadWindows, FindWindowW, ICON_BIG, ICON_SMALL,
+    IMAGE_ICON, IsIconic, IsWindowVisible, LR_DEFAULTCOLOR, LoadImageW, SM_CXICON, SM_CXSMICON,
+    SW_RESTORE, SWP_NOSIZE, SYSTEM_METRICS_INDEX, SendMessageW, SetForegroundWindow, ShowWindow,
+    WINDOWPOS, WM_NCDESTROY, WM_SETICON, WM_WINDOWPOSCHANGING,
 };
 use windows::core::{BOOL, HSTRING, PCWSTR};
 
@@ -39,6 +39,18 @@ pub fn activate_window(title: &str) -> bool {
         let _ = SetForegroundWindow(hwnd);
     }
     true
+}
+
+/// Lets the next process that asks bring its window to the front. Windows
+/// gives that right to the program the user just started or clicked in the
+/// notification area, and passes it on to a program it starts only when
+/// asked. Called before the tray starts the settings window, so a window
+/// that is already open comes to the front instead of only flashing on the
+/// taskbar. Does nothing when this process holds no such right.
+pub fn pass_on_foreground() {
+    // SAFETY: a plain call without pointers; it fails harmlessly when this
+    // process may not set the foreground window itself.
+    let _ = unsafe { AllowSetForegroundWindow(ASFW_ANY) };
 }
 
 /// Whether a point (physical pixels) lies on a connected monitor.

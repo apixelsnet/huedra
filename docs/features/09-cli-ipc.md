@@ -61,3 +61,8 @@ Status: done.
 - `pipe::wait_closed` waits until no tray owns the pipe (`WaitNamedPipeW` reports the name missing), without connecting.
 
 Verified on this PC: unit tests for the command forms; `update --from` and `--rollback` closed and restarted a test tray through the pipe.
+
+## Result (2026-11-01) — `--background`
+- `huedra` opens the window as well as the tray; `huedra --background` is the tray alone (see 07). The help text lists both.
+
+Verified: unit tests (`--background`, and `--background` with an extra argument refused).

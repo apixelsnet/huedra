@@ -107,3 +107,11 @@ Not verified: display scales other than this PC's, and the light theme with HDR 
 - About: the support caption adds that supporters are thanked by name and get preview builds before each release. Every feature stays free; nothing is locked behind support (owner's decision).
 
 Verified by the owner on this PC (2026-11-01, build a84f210): About shows the new caption.
+
+## Result (2026-11-01) — Closing this window
+Code: `on_close_requested` and `wire_general` in `crates/huedra-ui/src/app.rs`; General page in `crates/huedra-ui/ui/pages.slint`, `app.slint`.
+- General › Closing this window: Keep Huedra running (default) or Quit Huedra. With Quit, closing the window sends `Exit` to the tray, which returns the displays it turned to HDR to SDR and closes. Exit in the tray menu always quits.
+- The Dropdown adds about 49 KB to the exe (Slint expands each instance): 9,990,144 bytes; the limit was raised to 12 MB for it (see 12).
+
+Verified on this PC: with `on_close = "quit"`, closing the window closed the tray as well ("Huedra closed." in the log); with the default, the tray kept running.
+Verified by the owner on this PC (2026-11-01): the new row and choosing it in the Dropdown.

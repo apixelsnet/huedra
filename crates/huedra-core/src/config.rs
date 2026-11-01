@@ -59,6 +59,17 @@ pub enum UpdatePolicy {
     Off,
 }
 
+/// What closing the settings window does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CloseAction {
+    /// Close the window; Huedra keeps running in the notification area.
+    #[default]
+    KeepRunning,
+    /// Close the window and quit Huedra.
+    Quit,
+}
+
 /// What Huedra does while a game runs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -110,6 +121,8 @@ pub struct General {
     pub start_with_windows: bool,
     /// Update policy.
     pub updates: UpdatePolicy,
+    /// What closing the settings window does.
+    pub on_close: CloseAction,
     /// Look up games on PCGamingWiki.
     pub game_info: bool,
     /// Default start delay.
@@ -134,6 +147,7 @@ impl Default for General {
         Self {
             start_with_windows: true,
             updates: UpdatePolicy::Ask,
+            on_close: CloseAction::KeepRunning,
             game_info: true,
             start_delay: Seconds(0),
             hold: Seconds(10),
@@ -529,7 +543,20 @@ mod tests {
         assert_eq!(config.general.hold, Seconds(10), "default hold");
         assert!(config.general.game_info, "game info on by default");
         assert_eq!(config.general.updates, UpdatePolicy::Ask, "updates");
+        assert_eq!(
+            config.general.on_close,
+            CloseAction::KeepRunning,
+            "closing the window keeps Huedra running"
+        );
         assert_eq!(config.attempts(), 3, "one try plus two retries");
+    }
+
+    #[test]
+    fn close_action() {
+        let config = Config::parse("[general]\non_close = \"quit\"\n").expect("parse");
+        assert_eq!(config.general.on_close, CloseAction::Quit, "quit");
+        let text = config.to_toml().expect("serialise");
+        assert!(text.contains("on_close = \"quit\""), "written as {text}");
     }
 
     #[test]

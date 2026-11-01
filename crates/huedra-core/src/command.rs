@@ -9,7 +9,11 @@ use crate::launch::{self, LaunchCommand};
 /// Help text printed by `huedra --help` and after a usage error.
 pub const USAGE: &str = "\
 Usage:
-  huedra                       Start Huedra in the notification area.
+  huedra                       Start Huedra and open its window. When Huedra
+                               is running already, its window comes to the
+                               front.
+  huedra --background          Start Huedra in the notification area without
+                               opening the window, as Start with Windows does.
   huedra settings [page]       Open the settings window, optionally on a page:
                                status, games, video, displays or general.
   huedra status                Show what the running Huedra is doing.
@@ -43,8 +47,8 @@ Usage:
 /// What the executable was asked to do.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
-    /// No arguments: run in the notification area.
-    Tray,
+    /// No arguments, or `--background`: run in the notification area.
+    Tray(TrayStart),
     /// Open the settings window, optionally on a named page.
     Settings(Option<String>),
     /// Print the version.
@@ -63,6 +67,36 @@ pub enum Command {
     Uninstall,
     /// Check for, install or roll back an update.
     Update(UpdateCommand),
+}
+
+/// Whether the tray opens the settings window when it starts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TrayStart {
+    /// Started by the user: open the window too.
+    Window,
+    /// Started by Windows, an update or `launch`: the notification area only.
+    Background,
+}
+
+/// The argument that starts the tray without opening the window.
+pub const BACKGROUND: &str = "--background";
+
+/// The command the start-up entry holds for this program: the quoted path
+/// and [`BACKGROUND`], so signing in to Windows does not open the window.
+#[must_use]
+pub fn startup_command(exe: &std::path::Path) -> String {
+    format!("\"{}\" {BACKGROUND}", exe.display())
+}
+
+/// The program a start-up entry names: the quoted path, or everything up
+/// to the first space when the path is not quoted.
+#[must_use]
+pub fn startup_program(command: &str) -> &str {
+    let command = command.trim();
+    match command.strip_prefix('"') {
+        Some(rest) => rest.split('"').next().unwrap_or(rest),
+        None => command.split(' ').next().unwrap_or(command),
+    }
 }
 
 /// The `update` forms.
@@ -142,9 +176,10 @@ where
 {
     let mut args = args.into_iter();
     let Some(first) = args.next() else {
-        return Ok(Command::Tray);
+        return Ok(Command::Tray(TrayStart::Window));
     };
     let command = match first.as_str() {
+        BACKGROUND => Command::Tray(TrayStart::Background),
         "--version" | "-V" => Command::Version,
         "--help" | "-h" | "help" | "/?" => Command::Help,
         "settings" => Command::Settings(args.next()),
@@ -275,7 +310,21 @@ mod tests {
 
     #[test]
     fn plain_commands() {
-        assert_eq!(run(""), Ok(Command::Tray), "no arguments");
+        assert_eq!(
+            run(""),
+            Ok(Command::Tray(TrayStart::Window)),
+            "no arguments"
+        );
+        assert_eq!(
+            run("--background"),
+            Ok(Command::Tray(TrayStart::Background)),
+            "background"
+        );
+        assert_eq!(
+            run("--background now"),
+            Err(UsageError::UnexpectedArgument("now".into())),
+            "background takes nothing"
+        );
         assert_eq!(run("--version"), Ok(Command::Version), "version");
         assert_eq!(run("-h"), Ok(Command::Help), "help");
         assert_eq!(run("settings"), Ok(Command::Settings(None)), "settings");
@@ -283,6 +332,31 @@ mod tests {
             run("settings games"),
             Ok(Command::Settings(Some("games".into()))),
             "settings page"
+        );
+    }
+
+    #[test]
+    fn startup_entry_command() {
+        let exe = std::path::Path::new(r"C:\Program Files\Huedra\huedra.exe");
+        let command = startup_command(exe);
+        assert_eq!(
+            command, r#""C:\Program Files\Huedra\huedra.exe" --background"#,
+            "quoted path and the background argument"
+        );
+        assert_eq!(
+            startup_program(&command),
+            r"C:\Program Files\Huedra\huedra.exe",
+            "program of a new entry"
+        );
+        assert_eq!(
+            startup_program(r#" "D:\Huedra\huedra.exe" "#),
+            r"D:\Huedra\huedra.exe",
+            "program of an entry from before the argument"
+        );
+        assert_eq!(
+            startup_program(r"D:\Huedra\huedra.exe --background"),
+            r"D:\Huedra\huedra.exe",
+            "unquoted path"
         );
     }
 

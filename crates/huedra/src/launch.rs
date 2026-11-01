@@ -73,7 +73,7 @@ fn ask_tray(request: &Request) -> Result<Response, PipeError> {
 /// that waits for a game's processes (Steam) does not wait for Huedra too.
 fn start_tray() {
     if let Ok(exe) = std::env::current_exe() {
-        process::spawn_detached(&exe, &[]);
+        process::spawn_detached(&exe, &[huedra_core::command::BACKGROUND]);
     }
 }
 

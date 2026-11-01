@@ -50,3 +50,13 @@ Code: `crates/huedra/src/app.rs` (`MENU_SUPPORT`).
 - Menu item **Support Huedra on Ko-fi...** between Open Huedra and Exit; opens `update::SUPPORT_URL` with `shell::open_web_page` (https only) and logs a line if the browser cannot be started.
 
 Verified: CI green (a84f210). Verified by the owner on this PC (2026-11-01): the item opens the Ko-fi page in the browser. Not verified: the log line when no browser can be started.
+
+## Result (2026-11-01) — the window on start
+Code: `TrayStart`, `BACKGROUND`, `startup_command`, `startup_program` in `crates/huedra-core/src/command.rs`; `run`, `startup_entry` in `crates/huedra/src/app.rs`; `open_settings` in `crates/huedra/src/main.rs`; `pass_on_foreground` in `crates/huedra-win/src/instance.rs`.
+- `huedra` without arguments starts the tray and opens the settings window. `huedra --background` starts the tray only; the start-up entry (`"<exe>" --background`), an update's restart, a rollback, `launch` and the disclaimer's Accept use it.
+- A second start of `huedra` opens the window of the running copy, or brings the open one to the front (restored when minimised); a second `--background` start does nothing. Before it starts the window process, the tray passes on its right to come to the front (`AllowSetForegroundWindow(ASFW_ANY)`), which it holds when the user started it or clicked its icon.
+- The tray rewrites a start-up entry for its own program that lacks `--background` (entries from 0.1.0), so signing in does not open the window. Copies that update from 0.1.0 are restarted by 0.1.0's updater without the argument and open the window once.
+
+Verified on this PC with the build of this change (portable copy): a plain start ran the tray and opened the window; a second start with the window minimised restored it, with one tray and one window process; closing the window kept the tray; a `--background` start while it ran opened nothing. Unit tests for the arguments and the start-up command.
+Verified by the owner on this PC (2026-11-01): with the window minimised, starting `huedra.exe` again from File Explorer brought it to the front.
+Not verified: the start-up entry and its rewrite (the copy here is portable and writes no entry); sign-in with the entry.
