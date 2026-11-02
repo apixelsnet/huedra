@@ -195,6 +195,12 @@ pub fn run(locations: Locations, page: Page) -> Result<(), slint::PlatformError>
     let weak = ui.as_weak();
     ui.window().on_close_requested(move || {
         if let Some(ui) = weak.upgrade() {
+            // While Download and install runs, the updater closes the tray,
+            // which closes this window too; it stays, because it opens Huedra
+            // again on the new version when the install is done.
+            if ui.get_installing_update() {
+                return CloseRequestResponse::KeepWindowShown;
+            }
             save_geometry(&ui);
         }
         // "Closing this window: Quit Huedra" closes the tray as well, which
