@@ -36,9 +36,14 @@ use crate::ui::{
     UpdateNote, VideoAppRow,
 };
 
-/// The window's title; also used to find an open window.
 /// The window title; the tray closes the window by it (Exit in its menu).
 const TITLE: &str = huedra_core::APP_NAME;
+/// Held by the process showing the settings window, so only one opens.
+const WINDOW_CLAIM: &str = "Huedra-settings-window";
+/// How long a second start waits for the first one's window to appear
+/// before bringing it to the front: a while after sign-in, when the PC is
+/// busy and the first window is slow to open.
+const WAIT_FOR_WINDOW: Duration = Duration::from_secs(10);
 /// How often the Status page asks the tray process for its state.
 const STATUS_POLL: Duration = Duration::from_secs(1);
 const SPECTRUM_W: u32 = 640;
@@ -116,6 +121,11 @@ fn with_state<R>(f: impl FnOnce(&mut State) -> R) -> Option<R> {
 /// # Errors
 /// Slint platform errors (no graphics or window system).
 pub fn run(locations: Locations, page: Page) -> Result<(), slint::PlatformError> {
+    let Some(claim) = instance::claim_window(WINDOW_CLAIM) else {
+        // Another process shows the window, or is opening it.
+        bring_forward_when_open();
+        return Ok(());
+    };
     if instance::activate_window(TITLE) {
         return Ok(());
     }
@@ -215,6 +225,9 @@ pub fn run(locations: Locations, page: Page) -> Result<(), slint::PlatformError>
     offer_update(&ui, false);
     ui.run()?;
     drop(ui);
+    // The window is gone: a new one may open from here on, the reopened one
+    // below too.
+    drop(claim);
     // After an update the old window is gone, so the new version opens its
     // own instead of bringing this one to the front.
     if REOPEN.get()
@@ -223,6 +236,27 @@ pub fn run(locations: Locations, page: Page) -> Result<(), slint::PlatformError>
         huedra_win::process::spawn_detached(&exe, &["settings"]);
     }
     Ok(())
+}
+
+/// Brings the window another process opens to the front once it exists.
+fn bring_forward_when_open() {
+    let deadline = std::time::Instant::now() + WAIT_FOR_WINDOW;
+    while !instance::activate_window(TITLE) && std::time::Instant::now() < deadline {
+        thread::sleep(Duration::from_millis(100));
+    }
+}
+
+/// Closes the window because the tray process has ended: Exit in the tray
+/// menu, `huedra exit`, the updater, or a crash. Nothing of Huedra stays
+/// open without the tray behind it. The window running Download and install
+/// stays, as it opens Huedra again on the new version.
+fn close_with_tray(ui: &SettingsWindow) {
+    if ui.get_installing_update() {
+        return;
+    }
+    save_geometry(ui);
+    let _ = ui.hide();
+    let _ = slint::quit_event_loop();
 }
 
 /// Logs how long the window took to open, measured from the process's
@@ -329,12 +363,26 @@ fn start_status_polling(ui: &SettingsWindow) {
     let _ = thread::Builder::new()
         .name("huedra-status".into())
         .spawn(move || {
+            // Whether the tray process has answered since the window opened.
+            // A window opened while Huedra was not running stays open, so
+            // Start Huedra can be pressed; once the tray has run, the window
+            // closes when it ends.
+            let mut tray_seen = false;
             loop {
-                let report = match pipe::call(&Request::Status) {
+                let answer = pipe::call(&Request::Status);
+                // Only a missing pipe means the tray has ended; a busy or
+                // failed call does not.
+                let tray_gone = matches!(answer, Err(pipe::PipeError::NotRunning));
+                let report = match answer {
                     Ok(Response::Status(report)) => Some(report),
                     _ => None,
                 };
+                tray_seen |= report.is_some();
+                let close = tray_seen && tray_gone;
                 let delivered = weak.upgrade_in_event_loop(move |ui| {
+                    if close {
+                        close_with_tray(&ui);
+                    }
                     with_state(|s| show_status(&ui, s, report.as_ref()));
                     offer_update(&ui, false);
                 });

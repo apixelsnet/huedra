@@ -1,35 +1,38 @@
 //! Keeps the settings window single: a second request brings the open
-//! window to the front instead. Also checks remembered positions against the
-//! connected monitors and limits how large the window can be made, and
-//! gives it the program's icon.
+//! window to the front instead, and Exit closes every one. Also checks
+//! remembered positions against the connected monitors and limits how large
+//! the window can be made, and gives it the program's icon.
 
-use windows::Win32::Foundation::{HANDLE, HWND, LPARAM, LRESULT, POINT, WPARAM};
+use std::path::Path;
+
+use windows::Win32::Foundation::{
+    ERROR_ALREADY_EXISTS, HANDLE, HWND, LPARAM, LRESULT, POINT, WPARAM,
+};
 use windows::Win32::Graphics::Gdi::{MONITOR_DEFAULTTONULL, MonitorFromPoint};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
-use windows::Win32::System::Threading::GetCurrentThreadId;
+use windows::Win32::System::Threading::{CreateMutexW, GetCurrentThreadId};
 use windows::Win32::UI::HiDpi::{GetDpiForWindow, GetSystemMetricsForDpi};
 use windows::Win32::UI::Shell::{DefSubclassProc, RemoveWindowSubclass, SetWindowSubclass};
 use windows::Win32::UI::WindowsAndMessaging::{
-    ASFW_ANY, AllowSetForegroundWindow, EnumThreadWindows, FindWindowW, ICON_BIG, ICON_SMALL,
-    IMAGE_ICON, IsIconic, IsWindowVisible, LR_DEFAULTCOLOR, LoadImageW, PostMessageW, SM_CXICON,
-    SM_CXSMICON, SW_RESTORE, SWP_NOSIZE, SYSTEM_METRICS_INDEX, SendMessageW, SetForegroundWindow,
-    ShowWindow, WINDOWPOS, WM_CLOSE, WM_NCDESTROY, WM_SETICON, WM_WINDOWPOSCHANGING,
+    ASFW_ANY, AllowSetForegroundWindow, EnumThreadWindows, EnumWindows, GetWindowTextW,
+    GetWindowThreadProcessId, ICON_BIG, ICON_SMALL, IMAGE_ICON, IsIconic, IsWindowVisible,
+    LR_DEFAULTCOLOR, LoadImageW, PostMessageW, SM_CXICON, SM_CXSMICON, SW_RESTORE, SWP_NOSIZE,
+    SYSTEM_METRICS_INDEX, SendMessageW, SetForegroundWindow, ShowWindow, WINDOWPOS, WM_CLOSE,
+    WM_NCDESTROY, WM_SETICON, WM_WINDOWPOSCHANGING,
 };
-use windows::core::{BOOL, HSTRING, PCWSTR};
+use windows::core::{BOOL, HSTRING};
+
+use crate::handle::OwnedHandle;
 
 /// Identifies the size limit among a window's subclass procedures.
 const LIMIT_SUBCLASS: usize = 0x4855_4544;
 
-/// Brings the top-level window with this exact title to the front. Returns
-/// `false` when there is none.
+/// Brings the settings window (a top-level window of a Huedra process with
+/// this exact title) to the front. Returns `false` when there is none.
 pub fn activate_window(title: &str) -> bool {
-    // SAFETY: looks up a top-level window by title; strings outlive the call.
-    let Ok(hwnd) = (unsafe { FindWindowW(PCWSTR::null(), &HSTRING::from(title)) }) else {
+    let Some(&hwnd) = own_windows(title).first() else {
         return false;
     };
-    if hwnd.0.is_null() {
-        return false;
-    }
     // SAFETY: `hwnd` is a window handle just returned by Windows; a window
     // that closed meanwhile only makes the calls fail.
     unsafe {
@@ -41,19 +44,92 @@ pub fn activate_window(title: &str) -> bool {
     true
 }
 
-/// Closes the top-level window with this exact title, as its close button
-/// would. Does nothing when there is none.
+/// Closes every top-level window of a Huedra process with this exact title,
+/// as its close button would. Does nothing when there is none.
 pub fn close_window(title: &str) {
-    // SAFETY: looks up a top-level window by title; strings outlive the call.
-    let Ok(hwnd) = (unsafe { FindWindowW(PCWSTR::null(), &HSTRING::from(title)) }) else {
-        return;
-    };
-    if hwnd.0.is_null() {
-        return;
+    for hwnd in own_windows(title) {
+        // SAFETY: posts a message to a window handle just returned by
+        // Windows; a window that closed meanwhile only makes the call fail.
+        let _ = unsafe { PostMessageW(Some(hwnd), WM_CLOSE, WPARAM(0), LPARAM(0)) };
     }
-    // SAFETY: posts a message to a window handle just returned by Windows; a
-    // window that closed meanwhile only makes the call fail.
-    let _ = unsafe { PostMessageW(Some(hwnd), WM_CLOSE, WPARAM(0), LPARAM(0)) };
+}
+
+/// Held while this process shows the settings window; dropping it lets
+/// another process show one.
+#[derive(Debug)]
+pub struct WindowClaim {
+    _mutex: OwnedHandle,
+}
+
+/// Claims the right to show the settings window, so two quick starts (a
+/// double click on the tray icon while the PC is still busy after sign-in)
+/// cannot both open one before either window exists. `None` when another
+/// process holds it.
+pub fn claim_window(name: &str) -> Option<WindowClaim> {
+    // SAFETY: creates or opens a named mutex; the name outlives the call.
+    let handle = unsafe { CreateMutexW(None, false, &HSTRING::from(format!(r"Local\{name}"))) };
+    // The thread's last error, as the call just above left it.
+    let existed = windows::core::Error::from_thread().code() == ERROR_ALREADY_EXISTS.to_hresult();
+    let claim = WindowClaim {
+        _mutex: OwnedHandle(handle.ok()?),
+    };
+    (!existed).then_some(claim)
+}
+
+/// Top-level windows with this exact title that belong to a Huedra process:
+/// one whose program is named as this one (`huedra.exe`, or
+/// `huedra.previous.exe` while an update finishes), in any folder. A File
+/// Explorer window open on a folder called "Huedra" has the same title but
+/// is not ours.
+fn own_windows(title: &str) -> Vec<HWND> {
+    let prefix = std::env::current_exe().ok().and_then(|exe| {
+        exe.file_stem()
+            .map(|stem| format!("{}.", stem.to_string_lossy().to_lowercase()))
+    });
+    let mut search = Search {
+        title: title.encode_utf16().collect(),
+        found: Vec::new(),
+    };
+    // SAFETY: `matching` only reads and pushes into `search`, which
+    // outlives the enumeration.
+    unsafe {
+        let _ = EnumWindows(Some(matching), LPARAM((&raw mut search) as isize));
+    }
+    let Some(prefix) = prefix else {
+        // Nothing to compare with: the title alone decides.
+        return search.found;
+    };
+    search.found.retain(|&hwnd| {
+        let mut pid = 0_u32;
+        // SAFETY: a plain query on a window handle Windows just gave us.
+        unsafe { GetWindowThreadProcessId(hwnd, Some(&raw mut pid)) };
+        crate::process::image_path(pid).is_some_and(|image| {
+            Path::new(&image)
+                .file_name()
+                .is_some_and(|name| name.to_string_lossy().to_lowercase().starts_with(&prefix))
+        })
+    });
+    search.found
+}
+
+struct Search {
+    title: Vec<u16>,
+    found: Vec<HWND>,
+}
+
+unsafe extern "system" fn matching(hwnd: HWND, search: LPARAM) -> BOOL {
+    // SAFETY: `search` is the value passed by `own_windows`, alive and not
+    // otherwise borrowed while the enumeration runs.
+    let search = unsafe { &mut *(search.0 as *mut Search) };
+    // One more than the title, so a longer title shows as longer.
+    let mut text = vec![0_u16; search.title.len() + 2];
+    // SAFETY: `text` holds `text.len()` characters; Windows writes at most
+    // that many, including the closing zero.
+    let len = unsafe { GetWindowTextW(hwnd, &mut text) };
+    if usize::try_from(len).is_ok_and(|len| text[..len] == search.title[..]) {
+        search.found.push(hwnd);
+    }
+    BOOL(1)
 }
 
 /// Lets the next process that asks bring its window to the front. Windows
