@@ -78,4 +78,4 @@ Not verified: Windows 10 (no detached console policy; the same path applies).
 - `build/check-child-start.ps1`, run by CI's Windows job (every release): starts `huedra launch -- cmd.exe /c exit 7` with `CREATE_NO_WINDOW` from a portable copy in Always SDR mode and expects exit code 7. The same path as the window's update buttons: release the console, then start a program with inherited handles.
 
 Verified on this PC: the check fails on the 0.1.3 channel exe (exit 1, the program never started) and passes on 0.1.4.
-Not verified: the check on GitHub's Windows runner (it runs with the next release or manual CI run).
+Passes on GitHub's Windows runner too (manual CI run on this branch).
