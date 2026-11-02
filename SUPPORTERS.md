@@ -6,4 +6,4 @@ To be listed, mention it in your Buy Me a Coffee message, with the name (and opt
 
 ## Thank you
 
-*Be the first.*
+- palindrome person ❤️
