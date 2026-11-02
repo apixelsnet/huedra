@@ -145,3 +145,11 @@ Code: the disclaimer text in `crates/huedra-ui/ui/app.slint`; `README.md`, `docs
 ## Result (2026-11-02) — Buy Me a Coffee
 Code: About in `crates/huedra-ui/ui/pages.slint`.
 - About's support button reads **Buy me a coffee** and opens the same page as the tray item (`update::SUPPORT_URL`); the caption above it names Buy Me a Coffee. `.github/FUNDING.yml` uses `buy_me_a_coffee`, so the repository's Sponsor button links there too.
+
+## Result (2026-11-02) — Closing closes everything
+Code: `close_with_tray`, `start_status_polling` and the window claim in `crates/huedra-ui/src/app.rs`; `own_windows`, `close_window`, `claim_window` in `crates/huedra-win/src/instance.rs`.
+- Once the window has seen the tray answer, it closes itself when the tray's pipe is gone (`PipeError::NotRunning`; a busy or failed call does not count), whatever ended the tray: Exit, `huedra exit`, the updater, a crash or Task Manager. The window running Download and install stays. A window opened while the tray was not running stays open for Start Huedra.
+- One window only: the process showing it holds the named mutex `Local\Huedra-settings-window`; a second start waits up to 10 s for that window and brings it to the front. The claim is released before the window reopens after an update.
+- Windows are found by title and by program name (`huedra.exe`, `huedra.*.exe`, any folder), not by title alone, so an Explorer window on a folder named Huedra is neither closed nor brought forward. Exit closes every match, not the first.
+
+Verified: build green (fmt, clippy, tests, release), Defender scan clean. On this PC with the test build: three `huedra settings` started at once gave one window; `huedra exit` left no Huedra process; killing the tray process closed the window within 3 s; a window opened with no tray stayed, and closed on `huedra exit` after Start Huedra.

@@ -4,6 +4,11 @@ Changes that matter to people using Huedra (not the project's own build and work
 
 ## Unreleased
 
+### Fixed
+- Closing Huedra closes all of it. When the tray process ends for any reason (Exit in the tray menu, `huedra exit`, an update, or a crash), the Huedra window closes too instead of staying open with "Huedra is not running". A window opened while Huedra was not running still stays, so **Start Huedra** can be pressed.
+- Only one Huedra window opens. Clicking the tray icon again while the window was still opening (right after signing in, for example) could open a second one, and Exit closed only one of them.
+- Exit no longer closes a File Explorer window that is open on a folder named Huedra, and Open Huedra no longer brings such a window to the front instead of opening Huedra's.
+
 ## 1.0.1 — 2026-11-02
 
 ### Fixed
