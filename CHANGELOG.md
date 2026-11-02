@@ -4,6 +4,12 @@ Changes that matter to people using Huedra (not the project's own build and work
 
 ## Unreleased
 
+### Fixed
+- `huedra exit` and `huedra uninstall` close the Huedra window too, as Exit in the tray menu does. Before, a window that was open stayed open with no Huedra running behind it.
+
+### Changed
+- Support for the project moved from Ko-fi to Buy Me a Coffee: **Buy me a coffee** under General › About and **Support Huedra on Buy Me a Coffee...** in the tray menu open https://buymeacoffee.com/pixelsthecoder.
+
 ## 1.0.0 — 2026-11-02
 
 The first stable release. Every feature was tested end to end before it.

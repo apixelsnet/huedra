@@ -66,3 +66,7 @@ Code: `MENU_EXIT` in `crates/huedra/src/app.rs`; `close_window` in `crates/huedr
 - Exit in the tray menu closes the settings window as well (`WM_CLOSE` to the window titled `APP_NAME`, as its close button does), then the tray. `huedra exit` and the updater's restart leave the window open, so the window that started an update can show its result.
 
 Verified: build green. Verified by the owner on this PC (2026-11-02, test build): with the window open, Exit in the tray menu closed the window and the tray.
+
+## Result (2026-11-02) — Buy Me a Coffee
+Code: `update::SUPPORT_URL` in `crates/huedra-core/src/update.rs`, `MENU_SUPPORT` in `crates/huedra/src/app.rs`.
+- The support item is now **Support Huedra on Buy Me a Coffee...** and opens https://buymeacoffee.com/pixelsthecoder (owner's choice, 2026-11-02), replacing Ko-fi.

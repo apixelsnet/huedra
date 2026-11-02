@@ -6,7 +6,7 @@
     <a href="../../releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/apixelsnet/huedra?label=release&color=3341E6"></a>
     <img alt="Windows 10 and 11" src="https://img.shields.io/badge/Windows-10%20%7C%2011-9B3DFF">
     <a href="LICENSE"><img alt="Licence: Apache 2.0" src="https://img.shields.io/badge/licence-Apache%202.0-00C8F0"></a>
-    <a href="https://ko-fi.com/pixelsthecoder"><img alt="Support on Ko-fi" src="https://img.shields.io/badge/Ko--fi-support-FF2D6F?logo=kofi&logoColor=white"></a>
+    <a href="https://buymeacoffee.com/pixelsthecoder"><img alt="Buy me a coffee" src="https://img.shields.io/badge/Buy%20me%20a%20coffee-support-FF2D6F?logo=buymeacoffee&logoColor=white"></a>
   </p>
   <p>
     <a href="../../releases"><strong>Download</strong></a> ·
@@ -74,17 +74,17 @@ Windows 11 with an NVIDIA graphics card and two HDR displays. Reports from AMD a
 If Huedra is useful to you:
 
 - **Star the repository** on GitHub, so that others can find it.
-- **Support development** on [Ko-fi](https://ko-fi.com/pixelsthecoder).
+- **Support development** on [Buy Me a Coffee](https://buymeacoffee.com/pixelsthecoder).
 - **Report problems and test** on hardware the project has not seen yet.
 
-Both links are also in the app, under **General › About**, and Ko-fi is in the tray menu.
+Both links are also in the app, under **General › About**, and Buy Me a Coffee is in the tray menu.
 
 ### Supporters
 
-Every feature of Huedra is free for everyone; nothing is locked behind support. As a thank-you, supporters on Ko-fi:
+Every feature of Huedra is free for everyone; nothing is locked behind support. As a thank-you, supporters on Buy Me a Coffee:
 
 - are named in [SUPPORTERS.md](SUPPORTERS.md), if they wish, and thanked in every release's notes;
-- get preview builds through Ko-fi about a week before each public release (signed release builds, like every download);
+- get preview builds through Buy Me a Coffee about a week before each public release (signed release builds, like every download);
 - have their issues marked with the `sponsor` label.
 
 Thank you to everyone in [SUPPORTERS.md](SUPPORTERS.md).

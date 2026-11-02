@@ -71,3 +71,9 @@ Verified: unit tests (`--background`, and `--background` with an extra argument 
 - `huedra update --rollback` is refused as an unexpected argument (see 11).
 
 Verified: unit tests.
+
+## Result (2026-11-02) — `exit` closes the window
+Code: `Request::Exit` in `crates/huedra/src/app.rs`.
+- Found while testing on this PC: after an update the new settings window was open; `huedra exit` closed the tray but left that window running, with nothing behind it, and a second copy's window could not open (one window per user). The `exit` request (used by `huedra exit`, `uninstall` and the updater) now closes the settings window as Exit in the tray menu does.
+- The one exception is the window running Download and install: the updater closes the tray, and that window stays (`on_close_requested` keeps it while `installing-update` is set) because it opens Huedra again on the new version when the install is done.
+- Asked by the owner (2026-11-02): with Closing this window set to Quit Huedra, closing the window by its close button or by Close window on the taskbar ends every Huedra process, as Exit in the tray menu and `huedra exit` do.

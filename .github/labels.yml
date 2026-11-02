@@ -49,7 +49,7 @@
   description: Good for newcomers
 - name: sponsor
   color: "ff2d6f"
-  description: Opened by someone who supports the project on Ko-fi
+  description: Opened by someone who supports the project on Buy Me a Coffee
 - name: help wanted
   color: "008672"
   description: Extra attention is needed

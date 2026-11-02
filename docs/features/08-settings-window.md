@@ -141,3 +141,7 @@ Not verified: the Copy button's clipboard text, the GitHub and Ko-fi buttons ope
 ## Result (2026-11-02) — 1.0.0: not a beta
 Code: the disclaimer text in `crates/huedra-ui/ui/app.slint`; `README.md`, `docs/USER-GUIDE.md`.
 - The disclaimer no longer calls Huedra beta software ("Huedra is provided "as is", ..."); the README drops its beta note and the pre-release badge filter, and the guide points to the release marked Latest.
+
+## Result (2026-11-02) — Buy Me a Coffee
+Code: About in `crates/huedra-ui/ui/pages.slint`.
+- About's support button reads **Buy me a coffee** and opens the same page as the tray item (`update::SUPPORT_URL`); the caption above it names Buy Me a Coffee. `.github/FUNDING.yml` uses `buy_me_a_coffee`, so the repository's Sponsor button links there too.

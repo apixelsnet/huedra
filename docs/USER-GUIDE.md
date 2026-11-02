@@ -83,7 +83,7 @@ Huedra lives in the notification area next to the clock. If you do not see it, o
 | Huedra *version* is available... | Shown when an update is waiting. Opens the update dialog. |
 | Open Huedra | Open the window. |
 | Report a problem... | Copy the details for a problem report to the clipboard (see [Troubleshooting](#13-troubleshooting)). |
-| Support Huedra on Ko-fi... | Open the project's Ko-fi page in the browser. |
+| Support Huedra on Buy Me a Coffee... | Open the project's Buy Me a Coffee page in the browser. |
 | Exit | Close Huedra. Displays that Huedra switched to HDR return to SDR. |
 
 ## 5. Modes
@@ -188,7 +188,7 @@ With NVIDIA RTX Video HDR turned on in the NVIDIA app, ordinary SDR video in a b
 | **Keyboard shortcuts** | Turns the shortcuts in [Keyboard shortcuts](#11-keyboard-shortcuts) on or off. |
 | **Record window titles in the log** | Off by default, so tab names and file names stay out of the log. |
 
-The **About** section shows the version, **Check for updates**, the disclaimer, and links to star the project on GitHub or support it on Ko-fi. Every feature is free; supporters are thanked in `SUPPORTERS.md` and get preview builds before each release.
+The **About** section shows the version, **Check for updates**, the disclaimer, and links to star the project on GitHub or support it on Buy Me a Coffee. Every feature is free; supporters are thanked in `SUPPORTERS.md` and get preview builds before each release.
 
 ## 10. Updates
 

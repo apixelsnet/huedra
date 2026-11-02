@@ -821,7 +821,7 @@ impl App {
         }
         entries.push(item(MENU_OPEN, "Open Huedra"));
         entries.push(item(MENU_REPORT, "Report a problem..."));
-        entries.push(item(MENU_SUPPORT, "Support Huedra on Ko-fi..."));
+        entries.push(item(MENU_SUPPORT, "Support Huedra on Buy Me a Coffee..."));
         entries.push(item(MENU_EXIT, "Exit"));
 
         let now = Instant::now(); // the menu may have been open a while
@@ -848,7 +848,7 @@ impl App {
             }
             Some(MENU_SUPPORT) => {
                 if !huedra_win::shell::open_web_page(update::SUPPORT_URL) {
-                    self.log_line("Could not open the Ko-fi page in the browser.");
+                    self.log_line("Could not open the Buy Me a Coffee page in the browser.");
                 }
             }
             Some(MENU_EXIT) => {
@@ -909,7 +909,12 @@ impl App {
                     message: "That is not a newer version.".to_owned(),
                 },
             },
-            Request::Exit => return (done("Huedra has closed."), Flow::Exit),
+            Request::Exit => {
+                // As Exit in the menu: all of Huedra closes, the settings
+                // window too, so none is left without a tray behind it.
+                huedra_win::instance::close_window(huedra_core::APP_NAME);
+                return (done("Huedra has closed."), Flow::Exit);
+            }
         };
         (response, Flow::Continue)
     }

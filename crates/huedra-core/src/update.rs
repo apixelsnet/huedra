@@ -82,7 +82,7 @@ pub fn project_page() -> Option<String> {
 }
 
 /// Where people can support the project.
-pub const SUPPORT_URL: &str = "https://ko-fi.com/pixelsthecoder";
+pub const SUPPORT_URL: &str = "https://buymeacoffee.com/pixelsthecoder";
 
 /// Whether this build checks for updates: both the key and the address were
 /// set when it was built.
