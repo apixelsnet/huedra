@@ -98,6 +98,14 @@ pub fn startup_program(command: &str) -> &str {
     }
 }
 
+/// Whether a start-up entry starts `exe` (ignoring case and the form of
+/// the path), rather than another copy of Huedra.
+#[must_use]
+pub fn startup_starts(command: &str, exe: &std::path::Path) -> bool {
+    crate::paths::NormPath::new(startup_program(command))
+        == crate::paths::NormPath::new(&exe.display().to_string())
+}
+
 /// The `update` forms.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UpdateCommand {
@@ -353,6 +361,17 @@ mod tests {
             startup_program(r"D:\Huedra\huedra.exe --background"),
             r"D:\Huedra\huedra.exe",
             "unquoted path"
+        );
+        assert!(
+            startup_starts(
+                &command,
+                std::path::Path::new(r"c:\program files\huedra\HUEDRA.EXE")
+            ),
+            "same program, other case"
+        );
+        assert!(
+            !startup_starts(&command, std::path::Path::new(r"D:\Portable\huedra.exe")),
+            "another copy"
         );
     }
 

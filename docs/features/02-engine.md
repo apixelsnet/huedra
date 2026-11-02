@@ -44,3 +44,10 @@ Code: `Engine::set_manual_target` and `manual_covers` in `crates/huedra-core/src
 
 Verified: unit test (shortcut and Always HDR switch only the main display, a game on display 2 still switches it, every display when set to all, changing the setting switches nothing, fallback when the main display is gone). Build green, 99 core tests. On this PC with two HDR displays: Always HDR turned on Display 1 (MO27Q3) only, Display 2 (LG ULTRAGEAR) stayed in SDR, and Automatic returned Display 1 to SDR after the hold time (log, twice).
 Not verified on this PC: the shortcut (same engine path as Always HDR), and a primary display that is not managed.
+
+## Result (2026-11-02) — excluding a display that is in HDR
+Code: `reload` in `crates/huedra/src/app.rs`.
+- Found in the end-to-end pass: with HDR on (or holding) on Display 2 by Huedra, turning off Displays › Manage for it removed the display from the engine, so nothing ever turned it off, not even Exit.
+- On reload, a display Huedra owned that is no longer managed and is still connected is returned to SDR, with the reason "Huedra no longer manages this display". A display that was unplugged is left out (switching it would fail).
+
+Verified on this PC through the settings window: Always HDR with every display, then Automatic (display 2 holding), then Display 2 not managed: Display 2 went to SDR; Always HDR afterwards turned on Display 1 only.

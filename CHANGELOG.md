@@ -4,6 +4,12 @@ Changes that matter to people using Huedra (not the project's own build and work
 
 ## Unreleased
 
+### Fixed
+- `huedra launch` with a program that cannot be started (a wrong path, for example) no longer turns HDR on and off again; it reports the problem and exits with code 2, and HDR stays as it was.
+- Setting a display to not managed under Displays while Huedra has HDR on there returns it to SDR. Before, it stayed in HDR until it was turned off by hand.
+- General › Start with Windows shows whether this copy of Huedra starts with Windows. A second or portable copy showed the other copy's entry as its own, and turning the switch off there removed it.
+- Screen readers name the HDR setting and the two times on a game's page under Games.
+
 ## 0.1.4 — 2026-11-02
 
 ### Fixed
