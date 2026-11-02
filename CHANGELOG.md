@@ -4,6 +4,8 @@ Changes that matter to people using Huedra (not the project's own build and work
 
 ## Unreleased
 
+## 1.0.1 — 2026-11-02
+
 ### Fixed
 - `huedra exit` and `huedra uninstall` close the Huedra window too, as Exit in the tray menu does. Before, a window that was open stayed open with no Huedra running behind it.
 
