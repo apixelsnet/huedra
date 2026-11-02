@@ -72,3 +72,10 @@ Code: `release_own_console` in `crates/huedra-win/src/console.rs`; `run_program`
 
 Verified on this PC, with a portable copy started through Explorer as a double-click does: 0.1.2 reproduced the fault (no log line, no `update.toml`); this build said "Checking for updates...", then "Huedra 0.1.3 is available.", and Download and install updated it to 0.1.3, restarted it and left only `huedra.exe` in the folder. Build green, Defender clean.
 Not verified: Windows 10 (no detached console policy; the same path applies).
+
+## Result (2026-11-02) — 0.1.4 published; regression check in CI
+- 0.1.4 published by the Release workflow; zip, `release.toml` and release notes signatures verified, the channel's `huedra.exe` matches the signed SHA-256, Defender clean. The owner's 0.1.2 started from Explorer still failed in the window, as expected, and was updated with `huedra update` in a terminal; settings kept (`on_close = "quit"`, `updates = "install"`). Started again from Explorer, 0.1.4 checked for updates from the window ("up to date") and deleted `huedra.previous.exe`.
+- `build/check-child-start.ps1`, run by CI's Windows job (every release): starts `huedra launch -- cmd.exe /c exit 7` with `CREATE_NO_WINDOW` from a portable copy in Always SDR mode and expects exit code 7. The same path as the window's update buttons: release the console, then start a program with inherited handles.
+
+Verified on this PC: the check fails on the 0.1.3 channel exe (exit 1, the program never started) and passes on 0.1.4.
+Passes on GitHub's Windows runner too (manual CI run on this branch).
