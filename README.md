@@ -3,7 +3,7 @@
   <h1>Huedra</h1>
   <p><strong>Automatic HDR for Windows.</strong><br>HDR turns on when a game or HDR video starts, and off again when it ends.</p>
   <p>
-    <a href="../../releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/apixelsnet/huedra?include_prereleases&label=release&color=3341E6"></a>
+    <a href="../../releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/apixelsnet/huedra?label=release&color=3341E6"></a>
     <img alt="Windows 10 and 11" src="https://img.shields.io/badge/Windows-10%20%7C%2011-9B3DFF">
     <a href="LICENSE"><img alt="Licence: Apache 2.0" src="https://img.shields.io/badge/licence-Apache%202.0-00C8F0"></a>
     <a href="https://ko-fi.com/pixelsthecoder"><img alt="Support on Ko-fi" src="https://img.shields.io/badge/Ko--fi-support-FF2D6F?logo=kofi&logoColor=white"></a>
@@ -17,7 +17,7 @@
 </div>
 
 > [!NOTE]
-> **Huedra is in beta.** Releases before 1.0.0 are pre-releases for testing. Huedra changes a Windows display setting; please read the [disclaimer](#disclaimer) before using it.
+> Huedra changes a Windows display setting; please read the [disclaimer](#disclaimer) before using it.
 
 <p align="center">
   <img src="docs/assets/huedra-tour.gif" width="820" alt="The Huedra window: status, games, video players, displays and general settings">
@@ -99,7 +99,7 @@ Huedra is licensed under the [Apache License, Version 2.0](LICENSE). The setting
 
 ## Disclaimer
 
-- **Beta software.** Huedra may contain bugs, and its behaviour and settings may change between releases.
+- **Software changes.** Huedra may contain bugs, and its behaviour and settings may change between releases.
 - **No warranty.** Huedra is provided "as is", without warranty of any kind, as set out in sections 7 and 8 of the [licence](LICENSE). You use it at your own risk. Its authors and contributors are not liable for any damage, data loss or other problem with your computer, displays, games or other software that may result from using it.
 - **Display settings.** Huedra changes only the HDR setting that Windows offers. An interrupted switch can leave a display in HDR or SDR until it is changed back under **Settings › System › Display**, or with `huedra hdr off --display all`.
 - **Not affiliated.** Huedra is an independent project, not affiliated with, endorsed by or sponsored by Microsoft, NVIDIA, AMD, Intel, Valve, Epic Games, GOG, Ubisoft, Electronic Arts, Rockstar Games, Google, Mozilla, PCGamingWiki, Discord, any streaming service, or the SmartHdrManager project. Product names and trademarks belong to their owners.

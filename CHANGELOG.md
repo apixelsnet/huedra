@@ -4,6 +4,13 @@ Changes that matter to people using Huedra (not the project's own build and work
 
 ## Unreleased
 
+## 1.0.0 — 2026-11-02
+
+The first stable release. Every feature was tested end to end before it.
+
+### Changed
+- Huedra is no longer a beta: the disclaimer and the README no longer call it beta software, and the release is not marked Pre-release.
+
 ### Fixed
 - `huedra launch` with a program that cannot be started (a wrong path, for example) no longer turns HDR on and off again; it reports the problem and exits with code 2, and HDR stays as it was.
 - Setting a display to not managed under Displays while Huedra has HDR on there returns it to SDR. Before, it stayed in HDR until it was turned off by hand.

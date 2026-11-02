@@ -137,3 +137,7 @@ Verified on this PC, every page driven through UI Automation on a portable copy 
 - General: Start with Windows (Off in the portable copy), the Start with HDR menu entry written and removed, Updates, Game information, hold and delay, Keyboard shortcuts, window titles, the version, the disclaimer, Closing this window: Quit closes Huedra, Keep running leaves the tray.
 - About › Check for updates in a window started through Explorer (build reporting 0.1.0): the Update available dialog names 0.1.4 and lists the changes; Download and install replaced the program, the window opened again on 0.1.4 and `huedra.previous.exe` was gone.
 Not verified: the Copy button's clipboard text, the GitHub and Ko-fi buttons opening the browser, the light theme, other display scales, a screen reader speaking.
+
+## Result (2026-11-02) — 1.0.0: not a beta
+Code: the disclaimer text in `crates/huedra-ui/ui/app.slint`; `README.md`, `docs/USER-GUIDE.md`.
+- The disclaimer no longer calls Huedra beta software ("Huedra is provided "as is", ..."); the README drops its beta note and the pre-release badge filter, and the guide points to the release marked Latest.
