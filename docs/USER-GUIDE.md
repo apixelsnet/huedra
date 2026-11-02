@@ -1,6 +1,6 @@
 # Huedra user guide
 
-This guide covers installing Huedra, the everyday controls, every setting, and what to do when something does not work as expected.
+This guide covers installing Huedra, the everyday controls, every setting, and what to do when something does not work as expected. For a step-by-step walkthrough of the first setup, the browser extension and troubleshooting, see the [setup guide](SETUP.md).
 
 **Contents**
 
@@ -207,7 +207,7 @@ The **About** section shows the version, **Check for updates**, the disclaimer, 
 | Win+Alt+O | Change the mode |
 | Win+Alt+P | Pause or resume automatic switching |
 
-If another program already uses one of these, the **Keyboard shortcuts** setting says which.
+If another program already uses one of these, Huedra's log says which (see [Troubleshooting](#13-troubleshooting)).
 
 ## 12. Command line
 
