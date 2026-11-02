@@ -182,3 +182,8 @@ A scripted pass on this PC (two HDR displays) with portable copies of a main bui
 - Release > Run workflow (version 1.0.0): every job green. "Huedra 1.0.0" is a normal release marked Latest (not a pre-release), with `huedra-1.0.0-windows-x64.zip` (5,524,096 bytes), its signature and the extension 0.3.1 zip; the update channel's `huedra.exe` is 10,057,728 bytes.
 - Verified on this PC from the downloads: the zip, `release.toml` and `release-notes.md` signatures verify (trusted comment "huedra 1.0.0"); the exe's size and SHA-256 match `release.toml`; `--version` prints 1.0.0; Defender finds nothing.
 - The owner's installed copy, started as a double-click starts it, updated from 0.1.4 to 1.0.0 through General › Check for updates and the Update available dialog (log: "Huedra was updated from 0.1.4 to 1.0.0."); the window opened again on 1.0.0, the tray answered, `huedra.previous.exe` was gone and the settings were kept.
+
+## Result (2026-11-02) — 1.0.1
+- Release > Run workflow (version 1.0.1): every job green; "Huedra 1.0.1" marked Latest, with the zip, its signature and the extension 0.3.1 zip; the update channel's `huedra.exe` is 10,057,728 bytes.
+- Verified on this PC from the downloads: the zip, `release.toml` and `release-notes.md` signatures verify (trusted comment "huedra 1.0.1"); the exe's size and SHA-256 match `release.toml`; Defender finds nothing.
+- The owner's installed copy updated from 1.0.0 to 1.0.1 through Check for updates and the Update available dialog; the window opened again on 1.0.1 and `huedra.previous.exe` was gone.
