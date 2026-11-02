@@ -53,7 +53,7 @@ Huedra opens its window, runs in the notification area in Automatic mode, adds i
 
 **Requirements:** Windows 10 (version 1903 or later) or Windows 11, 64-bit, and a display that supports HDR.
 
-The [user guide](docs/USER-GUIDE.md) covers every setting, the browser extension, keyboard shortcuts, the command line, troubleshooting and removal.
+The [setup guide](docs/SETUP.md) walks through installing, testing, the browser extension and troubleshooting step by step. The [user guide](docs/USER-GUIDE.md) covers every setting, the browser extension, keyboard shortcuts, the command line, troubleshooting and removal.
 
 ## Frequently asked questions
 
