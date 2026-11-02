@@ -29,7 +29,7 @@ This guide covers installing Huedra, the everyday controls, every setting, and w
 
 ## 2. Install
 
-1. Open the [releases page](../../../releases) and choose the newest release. Releases before 1.0.0 are betas and are marked **Pre-release**.
+1. Open the [releases page](../../../releases) and choose the newest release, marked **Latest**. Releases before 1.0.0 were betas and are marked **Pre-release**.
 2. Under **Assets**, download `huedra-<version>-windows-x64.zip`. The other files are optional; the table in the release notes says what each one is.
 3. Create a folder of your own for Huedra, for example `%LOCALAPPDATA%\Programs\Huedra`, and unpack the zip into it. Keep the folder writable: updates replace `huedra.exe` there.
 4. Start `huedra.exe`.
