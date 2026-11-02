@@ -122,3 +122,18 @@ Code: `wire_about` in `crates/huedra-ui/src/app.rs`; `update-check-status` in `p
 
 Verified on this PC through UI Automation, with a test build carrying the update key (it reports 0.1.0): during the check the button read "Checking..." and the line "Checking for updates..."; after it, "Huedra 0.1.1 is available." and the update dialog was open.
 Not verified: the up-to-date and failed messages (they need a build of the newest version, and no network).
+
+## Result (2026-11-02) — end-to-end pass of the window
+Code: `starts_with_windows` in `crates/huedra-ui/src/app.rs`, `startup_starts` in `crates/huedra-core/src/command.rs`, labels in `pages.slint`.
+- Start with Windows showed On whenever any Huedra start-up entry existed, so a portable or second copy showed the installed copy's entry as its own, and turning the switch off there deleted it. The switch now shows On only when the entry starts this program (path compared without case).
+- The HDR setting box and the two seconds boxes on a game's page had no accessible name (UI Automation showed them as unnamed); they now carry their labels.
+
+Verified on this PC, every page driven through UI Automation on a portable copy (the owner's settings and registry untouched, their start-up entry checked before and after):
+- Disclaimer: shown first, no HDR change before Accept (even with Always HDR in the file), Accept writes the flag and applies the mode, Exit closes Huedra.
+- Status: the three mode buttons switch HDR, Pause and Resume, the navigation status and the colour-chart caption follow HDR, Recent changes lists the switches, a mode set with `huedra mode` shows in the window, starting Huedra again keeps one window.
+- Games: library with store filters, search, Added filter, a game's HDR setting (Do not change then applied by the tray), delay and Use the default times, Create a desktop shortcut (target `huedra.exe launch -- "<program>"`, removed afterwards), the Steam launch option and Copy, PCGamingWiki results arriving, Scan again, Remove this game, Add game opening its file dialog (cancelled).
+- Video players: Only in full screen, keywords (Enter), a player set to While open (then applied by the tray), hold time, a streaming site.
+- Displays: Only the display showing the content, Always HDR on the main display only (then both displays in Always HDR), Manage, Retry attempts.
+- General: Start with Windows (Off in the portable copy), the Start with HDR menu entry written and removed, Updates, Game information, hold and delay, Keyboard shortcuts, window titles, the version, the disclaimer, Closing this window: Quit closes Huedra, Keep running leaves the tray.
+- About › Check for updates in a window started through Explorer (build reporting 0.1.0): the Update available dialog names 0.1.4 and lists the changes; Download and install replaced the program, the window opened again on 0.1.4 and `huedra.previous.exe` was gone.
+Not verified: the Copy button's clipboard text, the GitHub and Ko-fi buttons opening the browser, the light theme, other display scales, a screen reader speaking.

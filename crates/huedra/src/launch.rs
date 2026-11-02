@@ -8,7 +8,7 @@ use anyhow::Context as _;
 use huedra_core::ipc::{Request, Response};
 use huedra_core::launch::{self, LaunchCommand};
 use huedra_core::locations::Locations;
-use huedra_win::job::Launched;
+use huedra_win::job::Suspended;
 use huedra_win::pipe::{self, PipeError};
 use huedra_win::{process, registry};
 
@@ -16,12 +16,22 @@ use huedra_win::{process, registry};
 const TRAY_START_WAIT: Duration = Duration::from_secs(15);
 const TRAY_POLL: Duration = Duration::from_millis(250);
 
-/// Turns HDR on through the tray process, starts the program, and waits
-/// until it and the programs it started from its folder have ended. The tray
-/// keeps HDR on while this process lives. The program starts even when HDR
-/// could not be turned on; the reason is printed.
+/// Creates the program suspended, turns HDR on through the tray process,
+/// lets the program run, and waits until it and the programs it started
+/// from its folder have ended. The tray keeps HDR on while this process
+/// lives. The program runs even when HDR could not be turned on; the reason
+/// is printed. A program that cannot be started leaves HDR alone (exit 2).
 pub fn run(command: &LaunchCommand) -> anyhow::Result<ExitCode> {
     huedra_win::console::release_own_console();
+    // Created suspended first: a program that cannot be started is
+    // reported before HDR changes for it.
+    let suspended = match Suspended::create(&command.program, &command.args) {
+        Ok(suspended) => suspended,
+        Err(error) => {
+            eprintln!("huedra: could not start {}: {error}", command.program);
+            return Ok(ExitCode::from(2));
+        }
+    };
     let program = std::path::absolute(&command.program)
         .map_or_else(|_| command.program.clone(), |p| p.display().to_string());
     let request = Request::Launch {
@@ -34,7 +44,8 @@ pub fn run(command: &LaunchCommand) -> anyhow::Result<ExitCode> {
         Ok(Response::Status(_)) => {}
         Err(error) => eprintln!("huedra: HDR was not turned on: {error}"),
     }
-    let launched = Launched::start(&command.program, &command.args)
+    let launched = suspended
+        .resume()
         .with_context(|| format!("could not start {}", command.program))?;
     // The path Windows started, which differs from the one given when the
     // program was found through PATH.

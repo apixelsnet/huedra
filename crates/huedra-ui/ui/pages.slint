@@ -541,6 +541,7 @@ component GameDetailPanel inherits Card {
                     color: Theme.text;
                 }
                 Dropdown {
+                    accessible-label: "HDR setting";
                     model: ["Enable while running", "Do not change", "Game controls HDR"];
                     current-index: root.detail.setting-index;
                     selected(value) => {
@@ -559,6 +560,7 @@ component GameDetailPanel inherits Card {
                         wrap: word-wrap;
                     }
                     NumberBox {
+                        accessible-label: "Delay before enabling HDR (seconds)";
                         minimum: 0;
                         maximum: 120;
                         value: root.detail.delay;
@@ -576,6 +578,7 @@ component GameDetailPanel inherits Card {
                         wrap: word-wrap;
                     }
                     NumberBox {
+                        accessible-label: "Keep HDR on after the game closes (seconds)";
                         minimum: 0;
                         maximum: 600;
                         value: root.detail.hold;

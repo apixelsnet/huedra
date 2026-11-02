@@ -35,6 +35,67 @@ const POLL: Duration = Duration::from_secs(1);
 /// Most process ids read from the job at once.
 const MAX_IDS: usize = 256;
 
+/// A program created for `huedra launch` that has not run yet. It stays
+/// suspended until [`Suspended::resume`], so a program that cannot be
+/// started is found before HDR is turned on for it. Dropped without being
+/// resumed, it is ended.
+pub struct Suspended {
+    child: Option<Child>,
+    job: Option<OwnedHandle>,
+}
+
+impl Suspended {
+    /// Creates `program` with `args`, suspended and inside a new job (so
+    /// nothing it starts escapes). When the job cannot be created, only the
+    /// program itself is waited for later.
+    ///
+    /// # Errors
+    /// The error from creating the program, such as a missing file.
+    pub fn create(program: &str, args: &[String]) -> std::io::Result<Self> {
+        let job = new_job();
+        let mut command = std::process::Command::new(program);
+        command.args(args).creation_flags(CREATE_SUSPENDED.0);
+        let child = command.spawn()?;
+        let process = HANDLE(child.as_raw_handle());
+        let assigned = job.as_ref().is_some_and(|job| {
+            // SAFETY: both handles are open; the child's stays valid while
+            // `child` lives.
+            unsafe { AssignProcessToJobObject(job.0, process) }.is_ok()
+        });
+        Ok(Self {
+            child: Some(child),
+            job: job.filter(|_| assigned),
+        })
+    }
+
+    /// Lets the program run.
+    ///
+    /// # Errors
+    /// The program could not be resumed; it has been ended.
+    pub fn resume(mut self) -> std::io::Result<Launched> {
+        let Some(mut child) = self.child.take() else {
+            return Err(std::io::Error::other("the program has already run"));
+        };
+        if !resume(child.id()) {
+            let _ = child.kill();
+            return Err(std::io::Error::other("the program could not be resumed"));
+        }
+        Ok(Launched {
+            child,
+            job: self.job.take(),
+        })
+    }
+}
+
+impl Drop for Suspended {
+    fn drop(&mut self) {
+        if let Some(mut child) = self.child.take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
+}
+
 /// A program started by `huedra launch`.
 pub struct Launched {
     child: Child,
@@ -42,37 +103,6 @@ pub struct Launched {
 }
 
 impl Launched {
-    /// Starts `program` with `args`. The job is created first; when it
-    /// cannot be, the program still starts and only it is waited for.
-    ///
-    /// # Errors
-    /// The error from starting the program.
-    pub fn start(program: &str, args: &[String]) -> std::io::Result<Self> {
-        let job = new_job();
-        let mut command = std::process::Command::new(program);
-        command.args(args);
-        if job.is_some() {
-            // Suspended until it is in the job, so nothing it starts escapes.
-            command.creation_flags(CREATE_SUSPENDED.0);
-        }
-        let mut child = command.spawn()?;
-        let Some(job) = job else {
-            return Ok(Self { child, job: None });
-        };
-        let process = HANDLE(child.as_raw_handle());
-        // SAFETY: both handles are open; the child's stays valid while
-        // `child` lives.
-        let assigned = unsafe { AssignProcessToJobObject(job.0, process) }.is_ok();
-        if !resume(child.id()) {
-            let _ = child.kill();
-            return Err(std::io::Error::other("the program could not be resumed"));
-        }
-        Ok(Self {
-            child,
-            job: assigned.then_some(job),
-        })
-    }
-
     /// The full path of the program Windows started.
     pub fn path(&self) -> Option<String> {
         process::image_path(self.child.id())

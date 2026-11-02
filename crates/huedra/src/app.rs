@@ -11,7 +11,7 @@ use huedra_core::command::{TrayStart, startup_command, startup_program};
 use huedra_core::config::{Config, GameHdr, ManualDisplays, UpdatePolicy};
 use huedra_core::display::{Display, DisplayId, HdrState};
 use huedra_core::engine::{
-    Engine, Mode, Note, NoteKind, Outcome, Phase, Status, Target, Trigger, TriggerId,
+    Action, Engine, Mode, Note, NoteKind, Outcome, Phase, Status, Target, Trigger, TriggerId,
 };
 use huedra_core::files;
 use huedra_core::icon::TrayIcon;
@@ -927,9 +927,26 @@ impl App {
             .set_default_hold(self.config.general.hold.duration());
         self.register_hotkeys(host);
         self.schedule_update(host);
-        let mut outcome = self
-            .engine
-            .set_displays(now, &managed(&self.config, &self.displays));
+        let owned_before = self.engine.owned();
+        let managed_now = managed(&self.config, &self.displays);
+        let mut outcome = self.engine.set_displays(now, &managed_now);
+        // HDR that Huedra turned on for a display the user has just excluded
+        // goes back to SDR; the engine no longer follows that display, so
+        // nothing else would ever turn it off.
+        for id in owned_before {
+            let excluded = !managed_now.iter().any(|(d, _)| *d == id);
+            if excluded && self.displays.iter().any(|d| d.id == id) {
+                outcome.actions.push(Action {
+                    display: id.clone(),
+                    state: HdrState::Off,
+                });
+                outcome.notes.push(Note {
+                    display: id,
+                    kind: NoteKind::Disabled,
+                    reason: "Huedra no longer manages this display".into(),
+                });
+            }
+        }
         let more = self
             .engine
             .set_manual_target(now, manual_target(&self.config, &self.displays));

@@ -33,3 +33,10 @@ Code: `launch` in `crates/huedra/src/app.rs`.
 Not verified on this PC: a real launch.
 
 Status: done except the checks above (phase 4).
+
+## Result (2026-11-02) — a program that cannot start leaves HDR alone
+Code: `Suspended` in `crates/huedra-win/src/job.rs`, `run` in `crates/huedra/src/launch.rs`.
+- Found in the end-to-end pass: `huedra launch -- C:\nope\missing.exe` asked the tray for HDR first, then failed to start the program, so the display switched on and back off after the hold time, and the exit code was 1.
+- `launch` now creates the program suspended (inside its job) before asking the tray; a program that cannot be created is reported with exit code 2 and HDR is not touched. The program is resumed once the tray has answered, so it still starts with HDR on. A suspended program that is never resumed is ended (drop guard).
+
+Verified on this PC with a portable copy: a missing program exits 2 and both displays stay in SDR; a fake game started through `launch` gets HDR on Display 1 before its window appears (0.7 s) and SDR after it closes and the hold time ends; `launch -- cmd.exe /c "exit 5"` with no tray running starts the tray and passes 5 on; `.bat` still exits 2.

@@ -1092,9 +1092,18 @@ fn wire_video(ui: &SettingsWindow) {
 
 // ---- General ----------------------------------------------------------
 
+/// Whether the start-up entry starts this program. An entry for another
+/// copy of Huedra (an installed one, seen from a portable copy) does not
+/// count, so turning the switch off never removes that copy's entry.
+fn starts_with_windows() -> bool {
+    registry::startup_command().is_some_and(|entry| {
+        std::env::current_exe().is_ok_and(|exe| command::startup_starts(&entry, &exe))
+    })
+}
+
 fn show_general(ui: &SettingsWindow, state: &State) {
     let g = &state.config.general;
-    ui.set_start_with_windows(registry::startup_command().is_some());
+    ui.set_start_with_windows(starts_with_windows());
     ui.set_context_menu(registry::context_menu_command().is_some());
     ui.set_updates(match g.updates {
         UpdatePolicy::Install => 0,
@@ -1123,7 +1132,7 @@ fn wire_general(ui: &SettingsWindow) {
             edit(s, |c| c.general.start_with_windows = on && result.is_ok());
         });
         if let Some(ui) = weak.upgrade() {
-            ui.set_start_with_windows(registry::startup_command().is_some());
+            ui.set_start_with_windows(starts_with_windows());
         }
     });
     let weak = ui.as_weak();
@@ -1399,7 +1408,7 @@ fn wire_about(ui: &SettingsWindow) {
             && let Ok(exe) = std::env::current_exe()
         {
             let _ = registry::set_startup(Some(&command::startup_command(&exe)));
-            ui.set_start_with_windows(registry::startup_command().is_some());
+            ui.set_start_with_windows(starts_with_windows());
         }
         if !matches!(pipe::call(&Request::Status), Ok(Response::Status(_)))
             && let Ok(exe) = std::env::current_exe()
