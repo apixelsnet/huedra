@@ -6,7 +6,8 @@ name: CI
 # - build: the same container and script as build/remote-build.sh
 #   (build/Dockerfile, build/ci.sh): fmt, clippy for Linux and Windows,
 #   cargo deny, tests, docs, Windows release build, size limit.
-# - windows: runs the built huedra.exe on Windows, checks the changelogs and
+# - windows: runs the built huedra.exe on Windows (including starting a program
+#   with no console, build/check-child-start.ps1), checks the changelogs and
 #   packs the release folder and the browser extension's zip.
 #
 # Repository variables HUEDRA_UPDATE_KEY and HUEDRA_UPDATE_URL, when both are
@@ -36,6 +37,7 @@ on:
       - build/Dockerfile
       - build/ci.sh
       - build/check-changelog.ps1
+      - build/check-child-start.ps1
       - build/pack-release.ps1
       - build/pack-extension.ps1
       - build/about.toml
@@ -55,6 +57,7 @@ on:
       - build/Dockerfile
       - build/ci.sh
       - build/check-changelog.ps1
+      - build/check-child-start.ps1
       - build/pack-release.ps1
       - build/pack-extension.ps1
       - build/about.toml
@@ -261,6 +264,11 @@ jobs:
           if ($LASTEXITCODE -ne 2) { throw "an unknown option exited with $LASTEXITCODE, expected 2" }
           "$line runs on $((Get-CimInstance Win32_OperatingSystem).Caption)"
           $global:LASTEXITCODE = 0
+
+      # Huedra started with no window must still start programs after it
+      # releases its console (Check for updates, Install, launch; fixed in 0.1.4).
+      - name: Start programs with no console
+        run: build/check-child-start.ps1 -Exe dist\huedra.exe
 
       - name: Check changelogs
         run: build/check-changelog.ps1 -Version $env:VERSION
