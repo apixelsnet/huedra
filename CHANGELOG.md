@@ -5,7 +5,12 @@ Changes that matter to people using Huedra (not the project's own build and work
 ## Unreleased
 
 ### Added
+- More games are found automatically: the libraries of **Battle.net**, **Riot Games** (VALORANT, League of Legends, Teamfight Tactics…), **HoYoPlay** (Genshin Impact, Honkai: Star Rail, Zenless Zone Zero…), **Amazon Games**, the **itch.io** app and **Heroic Games Launcher** (its Epic, GOG and Amazon games). The Games page has a filter for each. Riot's PBE and Battle.net's test realms and betas are left out, and for League of Legends only the game counts, not its client.
+- Games that no launcher lists but that the Xbox Game Bar recognized while they ran (a standalone install, for example) appear under **Game Bar**, named after their folder. A program inside a game already listed is not added again.
 - The Huedra browser extension is on the Chrome Web Store. **Get the extension** on the **Video players** page, under Browsers, opens its store page, for Chrome, Edge, Brave, Opera and Vivaldi. The setup guide now installs it from the store; Firefox still loads it from the release's extension zip.
+
+### Changed
+- Huedra's text uses US English spelling (color, gray, license).
 
 ## 1.0.2 — 2026-11-02
 

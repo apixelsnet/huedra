@@ -102,7 +102,11 @@ Huedra only ever turns off HDR that it turned on itself. If you switched HDR on 
 
 ### Found automatically
 
-Huedra reads the libraries of Steam, Epic Games, GOG, Xbox (Microsoft Store), Ubisoft Connect, EA app and Rockstar Games. Installed games appear on the **Games** page. Choose **Scan again** after installing a game while Huedra is open.
+Huedra reads the libraries of Steam, Epic Games, GOG, Xbox (Microsoft Store), Ubisoft Connect, EA app, Rockstar Games, Battle.net, Riot Games, HoYoPlay, Amazon Games, itch.io and Heroic Games Launcher (its Epic, GOG and Amazon games). Installed games appear on the **Games** page. Choose **Scan again** after installing a game while Huedra is open.
+
+Games that no launcher lists but that the Xbox Game Bar recognized as games while they ran are listed too, under **Game Bar**, named after their folder. A program the Game Bar took for a game by mistake can be set to **Do not change**.
+
+For League of Legends, only the game itself counts, not the League client that stays open between matches. Test servers (Riot's PBE, Battle.net's test realms and betas) are not listed.
 
 A game that is not listed, for example one installed without a store, can be added with **Add game**: choose its program file.
 

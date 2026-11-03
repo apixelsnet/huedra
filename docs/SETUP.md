@@ -106,7 +106,7 @@ This happens only once.
 Huedra then does the following on its own:
 
 - adds itself to Windows start-up, so it runs every time you sign in;
-- finds the games installed through Steam, Epic Games, GOG, Xbox, Ubisoft Connect, EA app and Rockstar Games;
+- finds the games installed through Steam, Epic Games, GOG, Xbox, Ubisoft Connect, EA app, Rockstar Games, Battle.net, Riot Games, HoYoPlay, Amazon Games, itch.io and Heroic Games Launcher, and the games the Xbox Game Bar recognized;
 - starts in **Automatic** mode;
 - places its icon in the notification area, next to the clock.
 

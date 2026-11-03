@@ -4,6 +4,7 @@
 use std::time::Instant;
 
 use huedra_core::config::{Config, GameHdr};
+use huedra_core::library;
 use huedra_core::locations::Locations;
 use huedra_win::stores;
 
@@ -12,9 +13,10 @@ pub fn run() -> anyhow::Result<()> {
     let locations = Locations::resolve()?;
     let config = Config::load(&locations.config).unwrap_or_default();
     let started = Instant::now();
-    let mut games = stores::scan();
+    let mut games = config.manual_games();
+    games.extend(stores::scan());
     let elapsed = started.elapsed();
-    games.extend(config.manual_games());
+    let mut games = library::without_repeats(games);
     games.sort_by_key(|g| g.name.to_lowercase());
     let width = games
         .iter()

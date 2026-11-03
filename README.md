@@ -32,7 +32,7 @@ Windows HDR makes HDR games and video look as intended, but it makes the desktop
 
 | | |
 | --- | --- |
-| **Games, found automatically** | Reads the libraries of Steam, Epic Games, GOG, Xbox, Ubisoft Connect, EA app and Rockstar Games. HDR turns on while a game runs, with an optional delay per game and a time to keep HDR on after it closes. |
+| **Games, found automatically** | Reads the libraries of Steam, Epic Games, GOG, Xbox, Ubisoft Connect, EA app, Rockstar Games, Battle.net, Riot Games, HoYoPlay, Amazon Games, itch.io and Heroic Games Launcher, plus the games the Xbox Game Bar recognized. HDR turns on while a game runs, with an optional delay per game and a time to keep HDR on after it closes. |
 | **HDR video** | VLC, mpv, MPC-HC, MPC-BE and PotPlayer, by the title of the file playing. YouTube and streaming sites through the Huedra browser extension. RTX Video HDR aware. |
 | **The right display** | Only the display showing the game or video switches, and HDR follows the window to another display. Always HDR mode and the shortcut switch only the main display, unless you choose every display. |
 | **Start with HDR** | For games that misbehave when HDR changes while they start: a Steam launch option, a desktop shortcut, or a File Explorer menu entry turns HDR on first. |
@@ -103,7 +103,7 @@ Huedra is licensed under the [Apache License, Version 2.0](LICENSE). The setting
 - **Software changes.** Huedra may contain bugs, and its behavior and settings may change between releases.
 - **No warranty.** Huedra is provided "as is", without warranty of any kind, as set out in sections 7 and 8 of the [license](LICENSE). You use it at your own risk. Its authors and contributors are not liable for any damage, data loss or other problem with your computer, displays, games or other software that may result from using it.
 - **Display settings.** Huedra changes only the HDR setting that Windows offers. An interrupted switch can leave a display in HDR or SDR until it is changed back under **Settings › System › Display**, or with `huedra hdr off --display all`.
-- **Not affiliated.** Huedra is an independent project, not affiliated with, endorsed by or sponsored by Microsoft, NVIDIA, AMD, Intel, Valve, Epic Games, GOG, Ubisoft, Electronic Arts, Rockstar Games, Google, Mozilla, PCGamingWiki, Discord, any streaming service, or the SmartHdrManager project. Product names and trademarks belong to their owners.
+- **Not affiliated.** Huedra is an independent project, not affiliated with, endorsed by or sponsored by Microsoft, NVIDIA, AMD, Intel, Valve, Epic Games, GOG, Ubisoft, Electronic Arts, Rockstar Games, Blizzard Entertainment, Riot Games, HoYoverse, Amazon, itch.io, the Heroic Games Launcher project, Google, Mozilla, PCGamingWiki, Discord, any streaming service, or the SmartHdrManager project. Product names and trademarks belong to their owners.
 - **Game information.** Details about games come from PCGamingWiki and Discord and may be incomplete or inaccurate.
 - **AI-assisted development.** Parts of Huedra's source code, documentation and artwork were written with the help of AI tools. Every change is reviewed and tested by the maintainer and must pass the project's automated checks, but, as with any software, mistakes can remain. Please report anything that looks wrong.
 
