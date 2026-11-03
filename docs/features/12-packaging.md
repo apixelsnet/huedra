@@ -144,7 +144,7 @@ Owner: only the needed runs, and only essential steps (the repository is private
 - Pull requests from branches of this repository skip both jobs (shown as skipped, which the branch rules accept); pull requests from forks run both. Releases (also when started by a tag push, told apart by the version) and manual runs run both.
 - `docker/build-push-action` no longer uploads its build record or writes a job summary (`DOCKER_BUILD_RECORD_UPLOAD`, `DOCKER_BUILD_SUMMARY` false).
 - `changelog.yml` runs on an edit only when the title changed.
-- A documentation-only pull request from a fork gets no CI run; the required checks then wait, and an admin merges it with the bypass.
+- Every pull request starts CI, so the required checks always report (2026-11-03, see below); before, a documentation-only pull request got no CI run and needed the bypass.
 
 ## Result (2026-11-01) — third-party licences
 Code: `build/licences.sh`, `build/about.toml`, `build/about.hbs`, `build/Dockerfile` (cargo-about 0.9.2, `--features cli`), `build/ci.sh`, `build/remote-build.sh`, `build/pack-release.ps1`, `.github/workflows/ci.yml`; `THIRD-PARTY-LICENSES.md`.
@@ -194,3 +194,4 @@ A scripted pass on this PC (two HDR displays) with portable copies of a main bui
 
 ## Result (2026-11-03) — merging without the bypass
 - "Protect main" no longer asks for an approval (`required_approving_review_count` 0, no last-push approval, as in the Mango repository). With one maintainer, who cannot approve their own pull request, every merge needed the admin bypass (`gh pr merge --admin`, or "Merge without waiting for requirements"). A pull request and the two CI checks are still required, force pushes and deletion still refused, and only people with write access can merge, so pull requests from forks still wait for the owner.
+- CI's `pull_request` trigger has no path list any more. A pull request that changed nothing on it (only docs or `build/protect-repo.sh`) never started CI, so the two required checks never reported and the merge stayed blocked; skipped jobs count as passed, missing ones do not. Now every pull request starts the workflow: the maintainers' branches skip both jobs, and pull requests from forks run both (free on a public repository). Pushes to `main` keep their path list.

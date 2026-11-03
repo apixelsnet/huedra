@@ -17,11 +17,12 @@ name: CI
 # Runs only what is needed, to save Actions minutes:
 # - Push to main: only when something that goes into the build changed
 #   (paths below), and only the build job (no Windows run, packs or uploads).
-# - Pull requests: only from forks (outside contributors), with both jobs.
-#   The maintainers' own branches are built with build/remote-build.sh; their
-#   jobs show as skipped, which branch rules count as passed.
+# - Pull requests: every one starts the workflow, so the required checks
+#   always report (a check that never starts blocks the merge). Only those
+#   from forks (outside contributors) run both jobs. The maintainers' own
+#   branches are built with build/remote-build.sh; their jobs show as
+#   skipped, which branch rules count as passed.
 # - Releases (workflow_call) and manual runs: both jobs, always.
-# Keep the two path lists the same.
 on:
   push:
     branches: [main]
@@ -45,25 +46,6 @@ on:
       - THIRD-PARTY-LICENSES.md
       - .github/workflows/ci.yml
   pull_request:
-    paths:
-      - crates/**
-      - extras/browser/**
-      - Cargo.toml
-      - Cargo.lock
-      - rust-toolchain.toml
-      - deny.toml
-      - clippy.toml
-      - .cargo/**
-      - build/Dockerfile
-      - build/ci.sh
-      - build/check-changelog.ps1
-      - build/check-child-start.ps1
-      - build/pack-release.ps1
-      - build/pack-extension.ps1
-      - build/about.toml
-      - build/about.hbs
-      - THIRD-PARTY-LICENSES.md
-      - .github/workflows/ci.yml
   workflow_dispatch:
   workflow_call:
     inputs:
