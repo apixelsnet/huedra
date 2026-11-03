@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # Locks the GitHub repository down so only its admins change what ships:
 # - main: no deletion or force push; changes come through a pull request
-#   with one approval and both CI checks green. Admins may push directly.
+#   with both CI checks green. No approval is required: only people with
+#   write access (the admins) can merge, so a sole maintainer merges their
+#   own pull requests without the bypass. Admins may push directly.
 # - Tags v* and update-channel: only admins may move or delete them. Creating
 #   one stays open to anyone with write access, because the Release workflow
 #   tags each version itself and GitHub does not accept GitHub Actions as a
@@ -38,10 +40,10 @@ ruleset "Protect main" '{
     { "type": "deletion" },
     { "type": "non_fast_forward" },
     { "type": "pull_request", "parameters": {
-        "required_approving_review_count": 1,
-        "dismiss_stale_reviews_on_push": true,
+        "required_approving_review_count": 0,
+        "dismiss_stale_reviews_on_push": false,
         "require_code_owner_review": false,
-        "require_last_push_approval": true,
+        "require_last_push_approval": false,
         "required_review_thread_resolution": false } },
     { "type": "required_status_checks", "parameters": {
         "strict_required_status_checks_policy": false,

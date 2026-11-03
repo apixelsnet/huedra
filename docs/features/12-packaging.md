@@ -191,3 +191,6 @@ A scripted pass on this PC (two HDR displays) with portable copies of a main bui
 ## Result (2026-11-02) — 1.0.2
 - Release > Run workflow (version 1.0.2): every job green; "Huedra 1.0.2" marked Latest, with `huedra-1.0.2-windows-x64.zip` (5,526,010 bytes), its signature and the extension 0.3.1 zip; the update channel's `huedra.exe` is 10,058,240 bytes.
 - Verified on this PC from the downloads: the zip, `release.toml` and `release-notes.md` signatures verify (trusted comment "huedra 1.0.2"); the exe's size and SHA-256 match `release.toml`; `--version` prints 1.0.2; the notes carry the 1.0.2 fixes; Defender finds nothing.
+
+## Result (2026-11-03) — merging without the bypass
+- "Protect main" no longer asks for an approval (`required_approving_review_count` 0, no last-push approval, as in the Mango repository). With one maintainer, who cannot approve their own pull request, every merge needed the admin bypass (`gh pr merge --admin`, or "Merge without waiting for requirements"). A pull request and the two CI checks are still required, force pushes and deletion still refused, and only people with write access can merge, so pull requests from forks still wait for the owner.
