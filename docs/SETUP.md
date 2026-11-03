@@ -48,7 +48,7 @@ The other files are optional:
 | File | What it is |
 | --- | --- |
 | `huedra-<version>-windows-x64.zip.minisig` | The signature of the zip, to check the download (see step 2). |
-| `huedra-browser-extension-<version>.zip` | The browser extension, for HDR video on YouTube and streaming sites (see [section 7](#7-set-up-the-browser-extension)). |
+| `huedra-browser-extension-<version>.zip` | The browser extension, for HDR video on YouTube and streaming sites, for Firefox or installing by hand. Chrome, Edge and similar get it from the Chrome Web Store instead (see [section 7](#7-set-up-the-browser-extension)). |
 
 ### Step 2: Check the download (optional)
 
@@ -229,22 +229,18 @@ Browsers do not tell Windows when a video is in HDR. The **Huedra browser extens
 
 The extension has no settings, no buttons and no permissions. It sends nothing over the network and stores nothing. It works by adding a short marker to the start of the tab title (`⟦HDR⟧` on YouTube, `⟦Video netflix⟧` and similar on streaming sites), which Huedra reads on your PC.
 
-### Step 1: Get the extension
-
-The extension has been submitted to the browser stores. Until it appears there, install it by hand:
-
-1. From the newest [release](../../../releases), download **`huedra-browser-extension-<version>.zip`**.
-2. Create a folder you will keep, for example `%LOCALAPPDATA%\Programs\Huedra\extension`.
-3. Extract the zip into that folder. The folder must contain `manifest.json` directly, not inside another folder.
-
-> [!IMPORTANT]
-> Do not delete or move this folder afterwards. The browser loads the extension from it every time it starts.
-
-### Step 2: Install it in your browser
+### Step 1: Install the extension
 
 #### Chrome, Edge, Brave, Opera, Vivaldi
 
-1. Open the browser's extensions page by typing its address into the address bar:
+Install it from the Chrome Web Store. Version 111 or later of the browser is needed.
+
+1. In the browser you watch videos in, open **[Huedra on the Chrome Web Store](https://chromewebstore.google.com/detail/huedra/kilkdlcbhddpigcdffdnmdknjhlddlod)**. In Huedra, **Get the extension** on the **Video players** page, under Browsers, opens the same page in your default browser.
+2. **Edge only:** a bar at the top of the page offers to allow extensions from other stores. Choose **Allow extensions from other stores**, then **Allow**.
+   **Opera only:** first install Opera's **Install Chrome Extensions** add-on from Opera's own add-ons site (addons.opera.com), then open the Huedra page again.
+3. Choose **Add to Chrome**. In other browsers the button is named after them, for example **Get** in Edge or **Add to Brave** in Brave.
+4. Confirm with **Add extension**.
+5. Check that it is on: open the browser's extensions page by typing its address into the address bar, and make sure **Huedra** is listed with its switch on.
 
    | Browser | Address |
    | --- | --- |
@@ -254,30 +250,40 @@ The extension has been submitted to the browser stores. Until it appears there, 
    | Opera | `opera://extensions` |
    | Vivaldi | `vivaldi://extensions` |
 
-2. Turn on **Developer mode**. In Chrome, Brave, Opera and Vivaldi it is at the top right; in Edge it is in the left-hand panel.
-3. Choose **Load unpacked**.
-4. Select the folder from step 1 (the one containing `manifest.json`) and choose **Select Folder**.
-5. **Huedra** appears in the list of extensions. Make sure its switch is on.
-
-Chrome may show a reminder about developer-mode extensions when it starts. That is expected for extensions loaded this way; keep the extension enabled.
+The browser updates the extension from the store by itself. To use it in more than one browser, install it in each.
 
 #### Firefox
 
-Firefox 128 or later is needed.
+The extension is not yet on Firefox Add-ons, so Firefox loads it by hand, and only until Firefox closes. Firefox 128 or later is needed.
 
-1. Type `about:debugging#/runtime/this-firefox` into the address bar.
-2. Choose **Load Temporary Add-on...**.
-3. Open the extension folder and select **`manifest.json`**.
+1. From the newest [release](../../../releases), download **`huedra-browser-extension-<version>.zip`**.
+2. Create a folder you will keep, for example `%LOCALAPPDATA%\Programs\Huedra\extension`, and extract the zip into it. The folder must contain `manifest.json` directly, not inside another folder.
+3. Type `about:debugging#/runtime/this-firefox` into the address bar.
+4. Choose **Load Temporary Add-on...**.
+5. Open the extension folder and select **`manifest.json`**.
 
 > [!NOTE]
-> Firefox removes temporary add-ons when it closes, so these steps must be repeated after each restart until the extension is available from Firefox Add-ons.
+> Firefox removes temporary add-ons when it closes, so steps 3 to 5 must be repeated after each restart.
 
-### Step 3: Check the browser in Huedra
+#### Without the store (Chrome and others)
+
+Use this only if the Chrome Web Store is not available to you, for example on a PC where it is blocked. The store install above is simpler and updates itself.
+
+1. Download and extract the extension zip as in steps 1 and 2 for Firefox.
+2. Open the browser's extensions page (see the table above).
+3. Turn on **Developer mode**. In Chrome, Brave, Opera and Vivaldi it is at the top right; in Edge it is in the left-hand panel.
+4. Choose **Load unpacked**, select the folder (the one containing `manifest.json`) and choose **Select Folder**.
+5. **Huedra** appears in the list of extensions. Make sure its switch is on.
+
+> [!IMPORTANT]
+> Do not delete or move the folder afterwards. The browser loads the extension from it every time it starts. Chrome may also show a reminder about developer-mode extensions when it starts; that is expected for extensions loaded this way.
+
+### Step 2: Check the browser in Huedra
 
 1. Open Huedra's **Video players** page.
 2. Under **Browsers**, make sure your browser is set to **When HDR video plays** (the default), not **Never**.
 
-### Step 4: Turn on streaming sites (optional)
+### Step 3: Turn on streaming sites (optional)
 
 Netflix, Disney+, Prime Video, HBO Max and Apple TV do not reveal whether a video is in HDR, so Huedra cannot tell. You decide which of them count:
 
@@ -286,7 +292,7 @@ Netflix, Disney+, Prime Video, HBO Max and Apple TV do not reveal whether a vide
 
 On a site turned on here, a video playing in **full screen** turns HDR on, and leaving full screen turns it off again. Pausing does not switch the display.
 
-### Step 5: Test it
+### Step 4: Test it
 
 1. Open an HDR video on YouTube. Searching for "4K HDR" finds many.
 2. Look at the browser tab: its title starts with **`⟦HDR⟧`**. That shows the extension is working.
@@ -295,15 +301,12 @@ On a site turned on here, a video playing in **full screen** turns HDR on, and l
 
 ### Updating the extension
 
-When a new release brings a new extension version:
-
-1. Extract the new zip over the same folder, replacing the old files.
-2. **Chrome, Edge and others:** on the extensions page, choose the **reload** arrow on the Huedra card.
-   **Firefox:** load it again as in step 2.
+- **Installed from the Chrome Web Store:** nothing to do. The browser installs new versions by itself, usually within a day of their release.
+- **Firefox, or loaded by hand:** when a new release brings a new extension version, extract the new zip over the same folder, replacing the old files. Then, in Chrome and others, choose the **reload** arrow on the Huedra card on the extensions page; in Firefox, load it again as in [Firefox](#firefox).
 
 ### Removing the extension
 
-On the browser's extensions page, choose **Remove** on the Huedra card, then delete the extension folder.
+On the browser's extensions page, choose **Remove** on the Huedra card. If you loaded it by hand, also delete the extension folder.
 
 ---
 
@@ -445,7 +448,7 @@ Raise **Keep HDR on after the video ends** on the **Video players** page.
 3. **The video is in HDR:** YouTube marks only videos it offers in HDR. Try a video with "HDR" in its name.
 4. **Reload the YouTube tab** after installing or reloading the extension.
 5. **Browser version:** Chrome, Edge and similar need version 111 or later; Firefox needs 128 or later.
-6. **Folder moved or deleted:** the extensions page shows an error on the Huedra card. Extract the zip again into a folder you keep and load it again.
+6. **Loaded by hand, folder moved or deleted:** the extensions page shows an error on the Huedra card. Extract the zip again into a folder you keep and load it again, or install it from the [Chrome Web Store](https://chromewebstore.google.com/detail/huedra/kilkdlcbhddpigcdffdnmdknjhlddlod) instead.
 
 #### The tab shows `⟦HDR⟧`, but HDR does not turn on
 
@@ -469,7 +472,7 @@ Raise **Keep HDR on after the video ends** on the **Video players** page.
 
 #### Chrome warns about developer-mode extensions
 
-This is expected while the extension is loaded unpacked. Keep it enabled. The warning goes away once the extension is installed from the Chrome Web Store.
+This happens only when the extension was loaded by hand (**Load unpacked**). To get rid of it, remove that copy on the extensions page and install Huedra from the [Chrome Web Store](https://chromewebstore.google.com/detail/huedra/kilkdlcbhddpigcdffdnmdknjhlddlod) instead.
 
 ### Updates
 

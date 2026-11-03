@@ -210,6 +210,8 @@ export component SettingsWindow inherits Window {
     in property <string> update-status;
     callback open-changelog();
     callback open-support();
+    // Video players › Browsers: the extension's store page.
+    callback open-extension();
 
     // Disclaimer: shown until accepted; the tray does not run before that.
     in-out property <bool> show-disclaimer;
@@ -437,6 +439,9 @@ export component SettingsWindow inherits Window {
                 }
                 set-site(key, on) => {
                     root.set-video-site(key, on);
+                }
+                open-extension => {
+                    root.open-extension();
                 }
                 set-hold(v) => {
                     root.set-video-hold(v);

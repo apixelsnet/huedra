@@ -90,3 +90,8 @@ Status: in progress (phase 4).
 
 ## Result (2026-11-01) — extension 0.3.1
 - `manifest.json` 0.3.1 for the new icons, so the extension zip of the 0.1.1 release is not a second, different 0.3.0. Store listing history in `extras/browser/CHROMEWEBSTORE.md`.
+
+## Result (2026-11-03) — on the Chrome Web Store
+Code: `EXTENSION_STORE_URL` in `crates/huedra-core/src/video.rs`, `open-extension` in `crates/huedra-ui/ui/pages.slint` (Video players › Browsers, **Get the extension**) and `crates/huedra-ui/src/app.rs`.
+- 0.3.1 is published on the Chrome Web Store (`kilkdlcbhddpigcdffdnmdknjhlddlod`). The README carries its shields.io version badge, linked to the store page; the users and rating badges answer "not found" until the store has figures.
+- `docs/SETUP.md` and `docs/USER-GUIDE.md` install it from the store for Chrome, Edge, Brave, Opera and Vivaldi; Load unpacked stays as the way without the store. Firefox still loads the release zip as a temporary add-on until it is on AMO.

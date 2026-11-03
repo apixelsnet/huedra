@@ -1440,6 +1440,9 @@ fn wire_about(ui: &SettingsWindow) {
     ui.on_open_support(|| {
         shell::open_web_page(huedra_core::update::SUPPORT_URL);
     });
+    ui.on_open_extension(|| {
+        shell::open_web_page(huedra_core::video::EXTENSION_STORE_URL);
+    });
     let weak = ui.as_weak();
     ui.on_accept_disclaimer(move || {
         let Some(ui) = weak.upgrade() else {

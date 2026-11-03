@@ -8,6 +8,11 @@ use serde::{Deserialize, Serialize};
 use crate::engine::TriggerId;
 use crate::paths::NormPath;
 
+/// The browser extension's page on the Chrome Web Store, for Chrome, Edge
+/// and the other browsers built on Chromium.
+pub const EXTENSION_STORE_URL: &str =
+    "https://chromewebstore.google.com/detail/huedra/kilkdlcbhddpigcdffdnmdknjhlddlod";
+
 /// The marker the browser extension puts in a tab's title while an HDR video
 /// is open in it. Must match `MARKER` in `extras/browser/youtube.js`.
 pub const MARKER: &str = "\u{27E6}HDR\u{27E7}";
