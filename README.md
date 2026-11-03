@@ -1,12 +1,12 @@
 <div align="center">
-  <img src="docs/assets/huedra-logo.svg" width="148" alt="Huedra logo: the visible colour gamut with the BT.2020 triangle">
+  <img src="docs/assets/huedra-logo.svg" width="148" alt="Huedra logo: the visible color gamut with the BT.2020 triangle">
   <h1>Huedra</h1>
   <p><strong>Automatic HDR for Windows.</strong><br>HDR turns on when a game or HDR video starts, and off again when it ends.</p>
   <p>
     <a href="../../releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/apixelsnet/huedra?label=release&color=3341E6"></a>
     <a href="https://chromewebstore.google.com/detail/huedra/kilkdlcbhddpigcdffdnmdknjhlddlod"><img alt="Chrome Web Store" src="https://img.shields.io/chrome-web-store/v/kilkdlcbhddpigcdffdnmdknjhlddlod?label=Chrome%20Web%20Store&logo=googlechrome&logoColor=white&color=4285F4"></a>
     <img alt="Windows 10 and 11" src="https://img.shields.io/badge/Windows-10%20%7C%2011-9B3DFF">
-    <a href="LICENSE"><img alt="Licence: Apache 2.0" src="https://img.shields.io/badge/licence-Apache%202.0-00C8F0"></a>
+    <a href="LICENSE"><img alt="License: Apache 2.0" src="https://img.shields.io/badge/license-Apache%202.0-00C8F0"></a>
     <a href="https://buymeacoffee.com/pixelsthecoder"><img alt="Buy me a coffee" src="https://img.shields.io/badge/Buy%20me%20a%20coffee-support-FF2D6F?logo=buymeacoffee&logoColor=white"></a>
   </p>
   <p>
@@ -94,14 +94,14 @@ Thank you to everyone in [SUPPORTERS.md](SUPPORTERS.md).
 
 Contributions are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) explains how to build Huedra, the project layout and what a pull request needs. Changes are listed in [CHANGELOG.md](CHANGELOG.md).
 
-## Licence
+## License
 
 Huedra is licensed under the [Apache License, Version 2.0](LICENSE). The settings window uses [Slint](https://slint.dev) under the Slint Royalty-free Desktop, Mobile, and Web Applications License 2.0.
 
 ## Disclaimer
 
-- **Software changes.** Huedra may contain bugs, and its behaviour and settings may change between releases.
-- **No warranty.** Huedra is provided "as is", without warranty of any kind, as set out in sections 7 and 8 of the [licence](LICENSE). You use it at your own risk. Its authors and contributors are not liable for any damage, data loss or other problem with your computer, displays, games or other software that may result from using it.
+- **Software changes.** Huedra may contain bugs, and its behavior and settings may change between releases.
+- **No warranty.** Huedra is provided "as is", without warranty of any kind, as set out in sections 7 and 8 of the [license](LICENSE). You use it at your own risk. Its authors and contributors are not liable for any damage, data loss or other problem with your computer, displays, games or other software that may result from using it.
 - **Display settings.** Huedra changes only the HDR setting that Windows offers. An interrupted switch can leave a display in HDR or SDR until it is changed back under **Settings › System › Display**, or with `huedra hdr off --display all`.
 - **Not affiliated.** Huedra is an independent project, not affiliated with, endorsed by or sponsored by Microsoft, NVIDIA, AMD, Intel, Valve, Epic Games, GOG, Ubisoft, Electronic Arts, Rockstar Games, Google, Mozilla, PCGamingWiki, Discord, any streaming service, or the SmartHdrManager project. Product names and trademarks belong to their owners.
 - **Game information.** Details about games come from PCGamingWiki and Discord and may be incomplete or inaccurate.

@@ -76,7 +76,7 @@ impl VideoApp {
         Self::Vivaldi,
     ];
 
-    /// Recognises a program by the file name of its path.
+    /// Recognizes a program by the file name of its path.
     pub fn from_exe(path: &str) -> Option<Self> {
         let path = NormPath::new(path);
         let app = match path.file_name() {
@@ -223,7 +223,7 @@ impl StreamingSite {
         }
     }
 
-    /// Recognises a site by its key.
+    /// Recognizes a site by its key.
     pub fn from_key(key: &str) -> Option<Self> {
         Self::ALL.into_iter().find(|site| site.key() == key)
     }
@@ -467,7 +467,7 @@ mod tests {
     }
 
     #[test]
-    fn recognises_programs() {
+    fn recognizes_programs() {
         assert_eq!(
             VideoApp::from_exe(r"C:\Program Files\mpv\MPV.exe"),
             Some(VideoApp::Mpv),

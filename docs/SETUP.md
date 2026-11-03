@@ -114,8 +114,8 @@ Huedra then does the following on its own:
 
 | Icon | Meaning |
 | --- | --- |
-| Coloured gamut shape | HDR is on |
-| Grey outline | SDR (HDR off) |
+| Colored gamut shape | HDR is on |
+| Gray outline | SDR (HDR off) |
 
 **Closing the window keeps Huedra running** in the notification area. To bring the window back, left-click the tray icon, or start `huedra.exe` again. To close Huedra completely, right-click the tray icon and choose **Exit**.
 
@@ -126,8 +126,8 @@ Huedra then does the following on its own:
 A quick test, without starting a game:
 
 1. Open the Huedra window and go to the **Status** page.
-2. Press **Win+Alt+H**. The screen goes black for a second or two, and the main display switches to HDR. The tray icon turns coloured.
-3. Press **Win+Alt+H** again. The display returns to SDR and the icon turns grey.
+2. Press **Win+Alt+H**. The screen goes black for a second or two, and the main display switches to HDR. The tray icon turns colored.
+3. Press **Win+Alt+H** again. The display returns to SDR and the icon turns gray.
 
 If that worked, Huedra can switch your display. Automatic switching for games and video works the same way.
 
@@ -199,19 +199,19 @@ HDR stays on until the game, and every program it started, has closed.
 
 ## 6. Set up video players
 
-Huedra watches **VLC, mpv, mpv.net, MPC-HC, MPC-BE and PotPlayer**. It recognises HDR video by words in the player's window title, which normally shows the file name.
+Huedra watches **VLC, mpv, mpv.net, MPC-HC, MPC-BE and PotPlayer**. It recognizes HDR video by words in the player's window title, which normally shows the file name.
 
 1. Open the **Video players** page.
 2. Under **Players**, choose for each player:
 
-   | Choice | Behaviour |
+   | Choice | Behavior |
    | --- | --- |
    | **When HDR video plays** | HDR turns on when the title shows an HDR file. The recommended choice. |
    | **While open** | HDR is on whenever the player is open. |
    | **Never** | The player is ignored. |
 
 3. Check **Words that mark HDR video**. The defaults are `HDR`, `HDR10`, `Dolby Vision`, `DoVi` and `BT.2020`. Add any word your files use, separated by commas, and press **Enter**.
-4. **Only in full screen** (on by default): HDR turns on only while the player fills the screen. A maximised window does not count; use the player's full-screen mode (usually **F** or a double-click).
+4. **Only in full screen** (on by default): HDR turns on only while the player fills the screen. A maximized window does not count; use the player's full-screen mode (usually **F** or a double-click).
 
 **Test it:** play a file whose name contains `HDR` (for example `Film.2160p.HDR10.mkv`) in full screen. The display switches to HDR. Leave full screen or close the player, and it returns to SDR after a few seconds.
 
@@ -366,7 +366,7 @@ Open the small arrow (**^**) beside the clock. To keep the icon visible, drag it
 Huedra uses the same switch as Windows, so fix this first:
 
 1. Update the graphics driver from NVIDIA, AMD or Intel.
-2. Check that HDR is enabled in the display's own on-screen menu (often called HDR, HDMI Ultra HD Deep Colour, or Enhanced format).
+2. Check that HDR is enabled in the display's own on-screen menu (often called HDR, HDMI Ultra HD Deep Color, or Enhanced format).
 3. Use a cable and port that support HDR: DisplayPort 1.4, or HDMI 2.0 or later.
 4. On laptops, plug in the charger: some laptops do not allow HDR on battery. See **Settings › System › Display › HDR › Battery options**.
 
@@ -412,7 +412,7 @@ Work through these in order:
 4. **Launcher:** if the game starts through a launcher, the launcher may be what Huedra sees first. Set a **Delay before enabling HDR** of 5 to 10 seconds. If the game's real program has a different name from the one listed, add it with **Add game**.
 5. **Display:** the display the game is on must be **Managed** on the **Displays** page.
 
-#### A game crashes, shows wrong colours, or starts in SDR when HDR turns on
+#### A game crashes, shows wrong colors, or starts in SDR when HDR turns on
 
 The game does not cope with HDR changing while it starts. Either:
 
@@ -433,7 +433,7 @@ Huedra reads only the name and path of the program in front and waits for progra
 
 1. The player must be set to **When HDR video plays** (or **While open**) on the **Video players** page.
 2. The player's title bar must show the file name, and the file name must contain one of the **Words that mark HDR video**. Whole words count: `Film.HDR10.mkv` matches, `HDRezka.mkv` does not match `HDR`. Add the word your files use.
-3. With **Only in full screen** on, the player must be in true full-screen mode. A maximised window does not count.
+3. With **Only in full screen** on, the player must be in true full-screen mode. A maximized window does not count.
 
 #### HDR turns off between episodes
 
@@ -466,7 +466,7 @@ Raise **Keep HDR on after the video ends** on the **Video players** page.
 #### Netflix, Disney+, Prime Video, HBO Max or Apple TV does not turn HDR on
 
 1. On Huedra's **Video players** page, under **Streaming sites**, the site must be turned on. All are off by default.
-2. The video must be in **full screen**, using the site's own full-screen button. A maximised browser window does not count.
+2. The video must be in **full screen**, using the site's own full-screen button. A maximized browser window does not count.
 3. Check that the tab title starts with `⟦Video ...⟧` while the video is in full screen. If not, check that the extension is installed and on, and reload the page.
 4. The site itself may not stream HDR to your browser or subscription. Huedra only switches the display; it cannot make the site send HDR.
 

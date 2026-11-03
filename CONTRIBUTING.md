@@ -11,7 +11,7 @@ Thank you for helping. Bug reports, testing on hardware the project has not seen
 - what happened and what you expected;
 - the relevant lines of the log (`%LOCALAPPDATA%\Huedra\huedra.log`).
 
-Issues are labelled by kind (`bug`, `enhancement`, `compatibility`…), area (`area: games`, `area: video`…), status and priority. A maintainer confirms new issues; `good first issue` marks ones suited to a first contribution.
+Issues are labeled by kind (`bug`, `enhancement`, `compatibility`…), area (`area: games`, `area: video`…), status and priority. A maintainer confirms new issues; `good first issue` marks ones suited to a first contribution.
 
 Report security problems privately, as described in [SECURITY.md](SECURITY.md), not in a public issue.
 
@@ -43,7 +43,7 @@ Work on a branch named after the kind of change, in lower case with hyphens:
 | `fix/` | A bug fix, for example `fix/hdr-stays-on-after-exit` |
 | `docs/` | Documentation only |
 | `perf/` | Size, memory or speed |
-| `refactor/` | Code changes that do not change behaviour |
+| `refactor/` | Code changes that do not change behavior |
 | `test/` | Tests only |
 | `ci/` | Workflows and the build |
 | `chore/` | Dependencies and housekeeping |
@@ -59,6 +59,6 @@ Commit messages and pull request titles follow [Conventional Commits](https://ww
 - Huedra runs without administrator rights, admits only the current user to its command channel, installs only signed updates, and never reads or writes other programs' memory. Changes must keep it that way.
 - The build and release setup (`.github/` and `build/`) is maintained by the project's maintainers. Pull requests may suggest changes to it; releases are made only by the maintainers.
 
-## Licence
+## License
 
-By submitting a contribution, you agree that it is licensed under the [Apache License 2.0](LICENSE), as section 5 of the licence describes.
+By submitting a contribution, you agree that it is licensed under the [Apache License 2.0](LICENSE), as section 5 of the license describes.

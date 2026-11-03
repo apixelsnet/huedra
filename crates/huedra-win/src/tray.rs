@@ -70,7 +70,7 @@ impl Tray {
         }
         let mut data = self.data(icon, tip);
         if self.added {
-            // SAFETY: `data` is fully initialised for this window and id.
+            // SAFETY: `data` is fully initialized for this window and id.
             let _ = unsafe { Shell_NotifyIconW(NIM_MODIFY, &data) };
         } else {
             // SAFETY: as above. Fails while Explorer is not running; the icon

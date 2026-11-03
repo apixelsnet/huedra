@@ -11,10 +11,10 @@ How Huedra is built, run, installed and removed.
 
 ## Notes
 - The server name is read from `HUEDRA_BUILD_HOST` or the git-ignored `build/local.env`; it never appears in committed files.
-- `cargo-xwin` downloads the Microsoft CRT and SDK files. Their free terms are accepted in the image (`XWIN_ACCEPT_LICENSE=1`); no paid licence is involved.
+- `cargo-xwin` downloads the Microsoft CRT and SDK files. Their free terms are accepted in the image (`XWIN_ACCEPT_LICENSE=1`); no paid license is involved.
 - The C runtime is linked statically (`.cargo/config.toml`), so no Visual C++ redistributable is needed.
 - Cache: Docker volumes `huedra-cargo`, `huedra-advisory`, `huedra-xwin` and the `build/huedra/target` folder on the server. Clear only these, and only before a release or measured build, after a toolchain bump, or when a build looks stale. Never a global Docker prune.
-- Dependency checks use `cargo deny` (advisories, licences, bans, sources); a separate `cargo audit` would only repeat its advisory check.
+- Dependency checks use `cargo deny` (advisories, licenses, bans, sources); a separate `cargo audit` would only repeat its advisory check.
 
 ## Done when
 A clean clone builds with one command, and the release zip installs, starts with Windows and uninstalls without leftovers.
@@ -22,7 +22,7 @@ A clean clone builds with one command, and the release zip installs, starts with
 ## Result (2026-10-31) — phase 0
 Code: `build/Dockerfile`, `build/ci.sh`, `build/remote-build.sh`, `build/run.ps1`, `.cargo/config.toml`, workspace `Cargo.toml`.
 - Image `huedra-build`: Rust 1.99.1 (bookworm), clang, lld, llvm, cargo-xwin 0.23.1, cargo-deny 0.20.2.
-- `ci.sh` passes: fmt, clippy for Linux and for Windows with `-D warnings`, cargo deny (advisories, bans, licences, sources), tests (1), docs with `-D warnings`, Windows release build.
+- `ci.sh` passes: fmt, clippy for Linux and for Windows with `-D warnings`, cargo deny (advisories, bans, licenses, sources), tests (1), docs with `-D warnings`, Windows release build.
 - `huedra.exe` is 214 016 bytes. It imports KERNEL32 but not `VCRUNTIME140.dll`, so the static C runtime works.
 - `/IGNORE:4099` hides the linker's "no PDB for libcmt.lib" warnings; Microsoft does not ship those symbols.
 - First run downloaded the Microsoft CRT and SDK files in 52 s; later builds reuse the `huedra-xwin` volume.
@@ -30,7 +30,7 @@ Code: `build/Dockerfile`, `build/ci.sh`, `build/remote-build.sh`, `build/run.ps1
 Verified on this PC: `build/run.ps1 --version` prints `Huedra 0.1.0` and exits 0; an unknown argument exits 2.
 Not verified: a build from a fresh clone on another machine; the image build time from an empty Docker cache was not measured.
 
-Open: cargo deny warns that allow-listed licences are unused, because there are no dependencies yet.
+Open: cargo deny warns that allow-listed licenses are unused, because there are no dependencies yet.
 
 ## Result (2026-10-31) — phases 1 and 2
 - `build/remote-fmt.sh` runs `cargo fmt` on the server and copies the formatted crates back (Rust is not installed on this PC).
@@ -40,7 +40,7 @@ Open: cargo deny warns that allow-listed licences are unused, because there are 
 - Executable size: 1.13 MB (the 256 px icon is about 260 KB of it).
 
 ## Result (2026-10-31) — phase 3
-- `deny.toml` checks only the shipped target (`x86_64-pc-windows-msvc`); with both targets, Linux-only dependencies of Windows-only crates (zbus through Slint's winit backend) entered the graph. Newly allowed licences: BSD-2-Clause, BSL-1.0 and `LicenseRef-Slint-Royalty-free-2.0` (attribution shown in General > About). `RUSTSEC-2026-0192` (ttf-parser unmaintained, used by Slint) is ignored with a note.
+- `deny.toml` checks only the shipped target (`x86_64-pc-windows-msvc`); with both targets, Linux-only dependencies of Windows-only crates (zbus through Slint's winit backend) entered the graph. Newly allowed licenses: BSD-2-Clause, BSL-1.0 and `LicenseRef-Slint-Royalty-free-2.0` (attribution shown in General > About). `RUSTSEC-2026-0192` (ttf-parser unmaintained, used by Slint) is ignored with a note.
 - Release profile now `opt-level = "z"`: 10.2 MB with `"s"`, 9.3 MB with `"z"`. That is above the 8 MB target; most of the size is Slint's text and accessibility stack. Executable packers were ruled out because they trigger antivirus false positives.
 
 ## Result (2026-10-31) — open items
@@ -80,7 +80,7 @@ Not verified: `pack-release.ps1 -SecretKey` with minisign on this PC; a release 
 
 Note: `uninstall` and `update` act on whichever tray owns the per-user pipe, including a copy started from another folder.
 
-Status: done except the open measurements above; publishing waits for licence and hosting.
+Status: done except the open measurements above; publishing waits for license and hosting.
 
 ## Result (2026-11-01) — GitHub Actions
 Code: `.github/workflows/ci.yml`, `.github/workflows/release.yml`, `build/check-changelog.ps1`, `extras/browser/CHANGELOG.md`.
@@ -95,8 +95,8 @@ Verified on GitHub (run of commit cc3b1f2): `build` green in 22 min from empty c
 With warm caches (commit 94f6df5): `build` 5 min 46 s, `windows` 25 s, both green.
 Not verified: `release.yml` (no tag pushed yet); signing in Actions (no secret set).
 
-## Result (2026-11-01) — licence and signing key
-- Licence: MIT OR Apache-2.0 (`LICENSE-MIT`, `LICENSE-APACHE`, `license` in the Cargo metadata); both files and `PRIVACY.md` go into the release zip.
+## Result (2026-11-01) — license and signing key
+- License: MIT OR Apache-2.0 (`LICENSE-MIT`, `LICENSE-APACHE`, `license` in the Cargo metadata); both files and `PRIVACY.md` go into the release zip.
 - Release signing key made with minisign 0.12 on the owner's PC (password-protected, kept outside the repository). The repository variables `HUEDRA_UPDATE_KEY` (its public key) and `HUEDRA_UPDATE_URL` (the GitHub releases address) are set, so Actions builds check for updates. The secrets `MINISIGN_SECRET_KEY` and `MINISIGN_PASSWORD` are set by the owner.
 - minisign on Windows reads the password from a pipe (checked with a throwaway key), as the release job does on Linux.
 
@@ -105,8 +105,8 @@ Not verified: `release.yml` (no tag pushed yet); signing in Actions (no secret s
 - Verified on this PC from the downloaded files: both signatures verify with the release public key (trusted comment "huedra 0.1.0"); every SHA-256 in `SHA256SUMS` matches; `release.toml` names the exe's size and digest; `huedra.exe --version` prints 0.1.0; a portable copy of the release ran `huedra update --check --from` on the release files and answered "Huedra 0.1.0 is up to date", so the program's own signature check accepts the signature made in Actions.
 - Not verified: a download through the release address (the repository is private, so the address answers "not found" to the program); an update from 0.1.0 to a later release.
 
-## Result (2026-11-01) — one licence, betas, fewer downloads
-- Licence: Apache-2.0 only, chosen by the owner over the MIT/Apache pair (`LICENSE`; `license = "Apache-2.0"`). README: licence, contribution terms (section 5) and a Disclaimer section (beta, no warranty, display settings, anti-cheat, no affiliation, game information).
+## Result (2026-11-01) — one license, betas, fewer downloads
+- License: Apache-2.0 only, chosen by the owner over the MIT/Apache pair (`LICENSE`; `license = "Apache-2.0"`). README: license, contribution terms (section 5) and a Disclaimer section (beta, no warranty, display settings, anti-cheat, no affiliation, game information).
 - Releases before 1.0.0 are GitHub pre-releases titled "Huedra x.y.z beta"; 1.0.0 and later are normal releases.
 - A version's release holds only what people download: the program zip, its signature and `huedra-browser-extension-<version>.zip`. The notes start with a Downloads table (which file to take) and the minisign command with the public key, then the changelog section. `SHA256SUMS` is gone: GitHub shows each file's SHA-256.
 - The updater's files (`huedra.exe`, `release.toml`, `release.toml.minisig`) go to the fixed pre-release `update-channel`, program first and manifest last. `HUEDRA_UPDATE_URL` points there, because `releases/latest/download/` skips pre-releases.
@@ -116,12 +116,12 @@ Not verified: `release.yml` (no tag pushed yet); signing in Actions (no secret s
 ## Result (2026-11-01) — who may change what ships
 Code: `build/protect-repo.sh`.
 - Set now: workflows get a read-only token unless a job asks for more (only the Release workflow's `version` and `publish` jobs write). Running the Release workflow needs write access to the repository, which only its admins have; pull requests come from forks.
-- Waiting for a public repository (GitHub offers repository rules on a free organisation only for public repositories; the API answered "Upgrade to GitHub Pro or make this repository public"): `main` only through a pull request with one approval and both CI checks green (admins may push directly), no force push or deletion; tags `v*` and `update-channel` changed only by admins and the Release workflow; outside contributors' workflow runs wait for an admin. `bash build/protect-repo.sh` applies all of it once the repository is public.
+- Waiting for a public repository (GitHub offers repository rules on a free organization only for public repositories; the API answered "Upgrade to GitHub Pro or make this repository public"): `main` only through a pull request with one approval and both CI checks green (admins may push directly), no force push or deletion; tags `v*` and `update-channel` changed only by admins and the Release workflow; outside contributors' workflow runs wait for an admin. `bash build/protect-repo.sh` applies all of it once the repository is public.
 
 ## Result (2026-11-01) — program icon as PNG, extension icons from CI
 - `build.rs` stores the 256-pixel image of the program icon as PNG (Windows reads PNG at that size) instead of a 262 KB bitmap; `png` 0.18 was already in the dependency tree. The build with the disclaimer, the About actions and the update key had reached 10,064,384 bytes; with the PNG it is 9,838,080.
 - When the committed extension icons differ from what the code draws, `ci.sh` keeps the new ones and CI uploads them as the artifact `extension-icons`, so icons can be updated without a local build.
-- README rewritten for users (logo, tour, features, quick start, questions, support, licence, disclaimer); build and contribution notes moved to `CONTRIBUTING.md`; `docs/USER-GUIDE.md` for every setting and task; `.github/FUNDING.yml` shows the Sponsor button (Ko-fi). The README's animated logo (`docs/assets/huedra-logo.svg`) is drawn from the icon's own colours and animates with CSS, and stays still for viewers who ask for reduced motion; the tour (`docs/assets/huedra-tour.gif`, 1.7 MB) and the Games screenshot were taken on a hidden desktop from a portable test copy with default settings.
+- README rewritten for users (logo, tour, features, quick start, questions, support, license, disclaimer); build and contribution notes moved to `CONTRIBUTING.md`; `docs/USER-GUIDE.md` for every setting and task; `.github/FUNDING.yml` shows the Sponsor button (Ko-fi). The README's animated logo (`docs/assets/huedra-logo.svg`) is drawn from the icon's own colors and animates with CSS, and stays still for viewers who ask for reduced motion; the tour (`docs/assets/huedra-tour.gif`, 1.7 MB) and the Games screenshot were taken on a hidden desktop from a portable test copy with default settings.
 
 ## Result (2026-11-01) — issues, labels and branches
 Code: `.github/ISSUE_TEMPLATE/`, `.github/labels.yml`, `.github/release.yml`, `.github/workflows/labels.yml`, `changelog.yml`, `triage.yml`; CONTRIBUTING.md.
@@ -146,13 +146,13 @@ Owner: only the needed runs, and only essential steps (the repository is private
 - `changelog.yml` runs on an edit only when the title changed.
 - Every pull request starts CI, so the required checks always report (2026-11-03, see below); before, a documentation-only pull request got no CI run and needed the bypass.
 
-## Result (2026-11-01) — third-party licences
-Code: `build/licences.sh`, `build/about.toml`, `build/about.hbs`, `build/Dockerfile` (cargo-about 0.9.2, `--features cli`), `build/ci.sh`, `build/remote-build.sh`, `build/pack-release.ps1`, `.github/workflows/ci.yml`; `THIRD-PARTY-LICENSES.md`.
-- `ci.sh` runs `licences.sh`, which writes `THIRD-PARTY-LICENSES.md` in the source tree with cargo-about (`--offline`: texts come from the crates, so every machine writes the same file), for the Windows target without build and dev dependencies. Like `Cargo.lock`, `remote-build.sh` copies it back and CI fails when the committed copy differs. `pack-release.ps1` puts it in the release zip.
-- Slint: cargo-about 0.9.2 and 0.9.3 drop the text of `LicenseRef-` licences even when clarified (the filter for them is inverted), so `licences.sh` appends the royalty-free licence from Slint's own crate, with the Slint crates in the Windows dependency tree (`cargo tree`). Its SHA-256 is pinned: a changed text fails the build until it has been read. cargo-about still warns "has no license file" for those crates.
-- The accepted licences match `deny.toml`.
+## Result (2026-11-01) — third-party licenses
+Code: `build/licenses.sh`, `build/about.toml`, `build/about.hbs`, `build/Dockerfile` (cargo-about 0.9.2, `--features cli`), `build/ci.sh`, `build/remote-build.sh`, `build/pack-release.ps1`, `.github/workflows/ci.yml`; `THIRD-PARTY-LICENSES.md`.
+- `ci.sh` runs `licenses.sh`, which writes `THIRD-PARTY-LICENSES.md` in the source tree with cargo-about (`--offline`: texts come from the crates, so every machine writes the same file), for the Windows target without build and dev dependencies. Like `Cargo.lock`, `remote-build.sh` copies it back and CI fails when the committed copy differs. `pack-release.ps1` puts it in the release zip.
+- Slint: cargo-about 0.9.2 and 0.9.3 drop the text of `LicenseRef-` licenses even when clarified (the filter for them is inverted), so `licenses.sh` appends the royalty-free license from Slint's own crate, with the Slint crates in the Windows dependency tree (`cargo tree`). Its SHA-256 is pinned: a changed text fails the build until it has been read. cargo-about still warns "has no license file" for those crates.
+- The accepted licenses match `deny.toml`.
 
-Verified: on the build server, `licences.sh` writes the file (MIT 189 crates, Unicode-3.0 26, Apache-2.0 7, BSD-3-Clause 2, BSL-1.0 2, Zlib 2, BSD-2-Clause 1, and 9 Slint crates).
+Verified: on the build server, `licenses.sh` writes the file (MIT 189 crates, Unicode-3.0 26, Apache-2.0 7, BSD-3-Clause 2, BSL-1.0 2, Zlib 2, BSD-2-Clause 1, and 9 Slint crates).
 Not verified: the CI run on GitHub; the zip from `pack-release.ps1` with the file in it.
 
 ## Result (2026-11-01) — size limit 12 MB

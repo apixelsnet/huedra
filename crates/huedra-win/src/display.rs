@@ -140,12 +140,12 @@ struct Device {
     id: u32,
 }
 
-/// Which advanced-colour interface the system offers.
+/// Which advanced-color interface the system offers.
 #[derive(Clone, Copy)]
 enum ColorApi {
-    /// Windows 11 24H2 and later: separate HDR and wide-colour switches.
+    /// Windows 11 24H2 and later: separate HDR and wide-color switches.
     V2,
-    /// Earlier versions: one advanced-colour switch.
+    /// Earlier versions: one advanced-color switch.
     V1,
 }
 

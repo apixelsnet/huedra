@@ -29,7 +29,7 @@ Not verified: detection latency (no measurement yet); 10 idle minutes (60 s meas
 
 ## Result (2026-10-31) — Game window display
 Code: `find_game_window`, `place_game`, `game_target`, `retarget_all` in `crates/huedra/src/app.rs`; `main_monitor` in `crates/huedra-win/src/window.rs`; `Tracker::trigger_of`.
-- With Displays, "Only the display showing the content" on (the default), a game turns HDR on only for the display of its largest visible window; until it has a window, nothing switches (owner's choice: games that read HDR state only at startup may miss it). The display is read again when the game comes to the front and on its window moves (a per-process hook), and kept while the window is minimised. A launcher's successor takes over its display when its window appears.
+- With Displays, "Only the display showing the content" on (the default), a game turns HDR on only for the display of its largest visible window; until it has a window, nothing switches (owner's choice: games that read HDR state only at startup may miss it). The display is read again when the game comes to the front and on its window moves (a per-process hook), and kept while the window is minimized. A launcher's successor takes over its display when its window appears.
 - Changing the setting applies to running games and video at once.
 
 Verified: build green (clippy for Windows with `-D warnings`).

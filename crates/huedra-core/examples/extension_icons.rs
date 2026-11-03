@@ -19,7 +19,7 @@ fn main() -> std::io::Result<()> {
         .map_or_else(|| PathBuf::from("extras/browser/icons"), PathBuf::from);
     std::fs::create_dir_all(&dir)?;
     for (size, art) in ICONS {
-        let pixels = centred(&icon::render(TrayIcon::Hdr, art), art, size);
+        let pixels = centered(&icon::render(TrayIcon::Hdr, art), art, size);
         std::fs::write(dir.join(format!("icon-{size}.png")), png(size, &pixels)?)?;
     }
     Ok(())
@@ -27,7 +27,7 @@ fn main() -> std::io::Result<()> {
 
 /// Places a square RGBA image of `art` pixels in the middle of a clear
 /// square of `size` pixels.
-fn centred(art_pixels: &[u8], art: u32, size: u32) -> Vec<u8> {
+fn centered(art_pixels: &[u8], art: u32, size: u32) -> Vec<u8> {
     let (art, size) = (art as usize, size as usize);
     let offset = (size - art) / 2;
     let mut pixels = vec![0_u8; size * size * 4];

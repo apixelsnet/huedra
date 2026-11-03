@@ -87,7 +87,7 @@ mod tests {
     fn trigger_ids() {
         let id = trigger_id(4242);
         assert_eq!(id.as_str(), "launch:4242", "key");
-        assert!(is_launch(&id), "recognised");
+        assert!(is_launch(&id), "recognized");
         assert!(!is_launch(&TriggerId::new("steam:1091500")), "a game");
     }
 

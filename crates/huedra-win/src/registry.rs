@@ -305,7 +305,7 @@ fn delete_tree(path: &str) -> windows::core::Result<()> {
 }
 
 /// Whether Windows asks apps for their light appearance (Settings >
-/// Personalisation > Colours). Light when the value is missing, as Windows
+/// Personalization > Colors). Light when the value is missing, as Windows
 /// itself assumes.
 pub fn apps_use_light_theme() -> bool {
     let Some(key) = open(Hive::CurrentUser, THEME_KEY) else {

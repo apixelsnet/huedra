@@ -488,7 +488,7 @@ fn set_running(ui: &SettingsWindow, state: &mut State, running: Vec<String>) {
 
 fn caption(state: &State, hdr_on: bool) -> String {
     if !hdr_on {
-        return "sRGB colour · standard brightness".to_owned();
+        return "sRGB color · standard brightness".to_owned();
     }
     let peak = state
         .displays
@@ -498,9 +498,9 @@ fn caption(state: &State, hdr_on: bool) -> String {
         .map(|n| n.get())
         .fold(0.0_f32, f32::max);
     if peak > 0.0 {
-        format!("BT.2020 colour · up to {peak:.0} nits")
+        format!("BT.2020 color · up to {peak:.0} nits")
     } else {
-        "BT.2020 colour".to_owned()
+        "BT.2020 color".to_owned()
     }
 }
 

@@ -17,11 +17,11 @@ export global Theme {
     // Drawn in Rust (huedra_core::icon) so every renderer shows it without seams.
     in property <image> spectrum-image;
     // The program icon as vector images, drawn sharp at any display scale:
-    // the colour gamut while HDR is on, a grey outline of it in SDR.
+    // the color gamut while HDR is on, a gray outline of it in SDR.
     out property <image> logo-hdr: @image-url("assets/logo-hdr.svg");
     out property <image> logo-sdr: @image-url("assets/logo-sdr.svg");
-    // The Status card's colour chart: the BT.2020 triangle around the sRGB
-    // triangle, in colour while HDR is on and grey in SDR.
+    // The Status card's color chart: the BT.2020 triangle around the sRGB
+    // triangle, in color while HDR is on and gray in SDR.
     out property <image> chart-hdr: @image-url("assets/chart-hdr.svg");
     out property <image> chart-sdr: @image-url("assets/chart-sdr.svg");
 

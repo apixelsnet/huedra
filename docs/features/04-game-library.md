@@ -21,7 +21,7 @@ Code: `crates/huedra-core/src/library/{mod,vdf,steam,epic,xbox,registry}.rs` (pa
 - Games whose folder no longer exists are dropped. A running program matches the game with the exact program path, otherwise the deepest install folder containing it; uninstallers, crash reporters and redistributable installers never match.
 - The tray scans at start and on reload; games added by hand come first and win over a store entry with the same id.
 
-Verified on this PC: `huedra games` lists 22 games (20 Steam across two libraries, 2 Xbox) plus one added by hand, in 67 ms on the first run and 2 ms when cached by Windows; the tray recognised Dispatch (Steam) as a running game.
+Verified on this PC: `huedra games` lists 22 games (20 Steam across two libraries, 2 Xbox) plus one added by hand, in 67 ms on the first run and 2 ms when cached by Windows; the tray recognized Dispatch (Steam) as a running game.
 Not verified: Epic, GOG, EA and Rockstar (none installed here; covered by parser tests with sample data); Ubisoft entries here have no folder and are skipped as designed.
 
 Status: done.

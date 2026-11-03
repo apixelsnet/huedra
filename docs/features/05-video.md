@@ -21,10 +21,10 @@ An HDR10 file played full screen in mpv turns HDR on, and closing it returns to 
 
 ## Result (2026-10-31) — phase 4, first part
 Code: `crates/huedra-core/src/video.rs`, `[video]` in `crates/huedra-core/src/config.rs`, `crates/huedra-win/src/window.rs`, video section of `crates/huedra/src/app.rs`, `extras/browser/`.
-- Programs: VLC, mpv, mpv.net, MPC-HC, MPC-BE, PotPlayer, and the browsers Chrome, Edge, Firefox, Brave, Opera, Vivaldi, recognised by program file name. A program is watched from the first time it comes to the front until it exits; programs set to Never are not watched.
+- Programs: VLC, mpv, mpv.net, MPC-HC, MPC-BE, PotPlayer, and the browsers Chrome, Edge, Firefox, Brave, Opera, Vivaldi, recognized by program file name. A program is watched from the first time it comes to the front until it exits; programs set to Never are not watched.
 - Watching uses two out-of-context WinEvent hooks limited to that one process: title changes always, window moves only while an HDR title waits for full screen. Other programs' changes never reach Huedra. Each event re-reads the process's visible top-level windows.
 - Players: a keyword must appear as whole words; case, dots, dashes and underscores are ignored (`Movie.Dolby.Vision.mkv` matches `Dolby Vision`, `HDRezka` does not match `HDR`). Browsers count only the extension's marker `⟦HDR⟧`, never keywords.
-- Full screen: the window covers its monitor and has no title bar (a maximised window does not count). On by default.
+- Full screen: the window covers its monitor and has no title bar (a maximized window does not count). On by default.
 - Modes per program: When HDR video plays (default), While open (players only), Never. The tray's "Never for HDR video in mpv" sets that program to Never.
 - One trigger per process (`video:mpv:1234`, label "HDR video in mpv"); start delay and hold from General, or `[video] hold_secs`.
 - Extension (Manifest V3, `world: MAIN` content script on www.youtube.com; Firefox 128 or later): marks the title while the open video offers a BT.2020 format with PQ or HLG transfer, follows YouTube's in-page navigation, and reloads the video at the same time when `(dynamic-range: high)` becomes true. No permissions, no network requests, no storage.

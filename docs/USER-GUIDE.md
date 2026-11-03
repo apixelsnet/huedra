@@ -69,8 +69,8 @@ Huedra lives in the notification area next to the clock. If you do not see it, o
 
 | Icon | Meaning |
 | --- | --- |
-| Coloured gamut shape | HDR is on |
-| Grey outline | SDR |
+| Colored gamut shape | HDR is on |
+| Gray outline | SDR |
 
 - **Left-click** opens the Huedra window.
 - **Right-click** opens the menu:
@@ -88,7 +88,7 @@ Huedra lives in the notification area next to the clock. If you do not see it, o
 
 ## 5. Modes
 
-| Mode | Behaviour |
+| Mode | Behavior |
 | --- | --- |
 | **Automatic** | HDR turns on while a game or HDR video runs and off again when it ends. This is the normal mode. |
 | **Always HDR** | HDR stays on for the main display (the one Windows uses as the primary display), or for every managed display when **Displays › Always HDR on the main display only** is off. |
@@ -139,7 +139,7 @@ HDR stays on until the game and the programs it started have closed.
 
 Huedra watches VLC, mpv, mpv.net, MPC-HC, MPC-BE and PotPlayer. On the **Video players** page, choose for each player:
 
-| Choice | Behaviour |
+| Choice | Behavior |
 | --- | --- |
 | **When HDR video plays** | HDR turns on when the window title shows an HDR file. |
 | **While open** | HDR is on whenever the player is open. |

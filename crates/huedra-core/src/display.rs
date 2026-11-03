@@ -156,7 +156,7 @@ impl DisplaySelector {
     }
 }
 
-/// Decoders for the advanced-colour flag words returned by
+/// Decoders for the advanced-color flag words returned by
 /// `DisplayConfigGetDeviceInfo`. The bit layouts come from the Windows SDK
 /// header `wingdi.h` (10.0.26100); they live here so they can be tested on any
 /// platform.
@@ -182,7 +182,7 @@ pub mod color_flags {
     }
 
     /// `DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO` (earlier versions). Advanced
-    /// colour with wide colour enforced is not HDR.
+    /// color with wide color enforced is not HDR.
     pub fn decode_v1(value: u32) -> (HdrSupport, HdrState) {
         let supported = bit(value, 0);
         let enabled = bit(value, 1);
@@ -234,7 +234,7 @@ mod tests {
         assert_eq!(
             decode_v2(0b1100_0001),
             (HdrSupport::Unsupported, HdrState::Off),
-            "wide colour only"
+            "wide color only"
         );
         assert_eq!(
             decode_v2(0b01_1001),
@@ -253,7 +253,7 @@ mod tests {
         assert_eq!(
             decode_v1(0b0111),
             (HdrSupport::Supported, HdrState::Off),
-            "wide colour enforced is not HDR"
+            "wide color enforced is not HDR"
         );
         assert_eq!(
             decode_v1(0b1001),
