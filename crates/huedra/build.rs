@@ -159,7 +159,7 @@ fn bmp_entry(size: u32) -> Result<Vec<u8>, String> {
     let mut data = Vec::with_capacity(40 + image_bytes as usize);
     data.extend_from_slice(&40_u32.to_le_bytes());
     data.extend_from_slice(&side.to_le_bytes());
-    data.extend_from_slice(&(side * 2).to_le_bytes()); // colour and mask
+    data.extend_from_slice(&(side * 2).to_le_bytes()); // color and mask
     data.extend_from_slice(&1_u16.to_le_bytes());
     data.extend_from_slice(&32_u16.to_le_bytes());
     data.extend_from_slice(&0_u32.to_le_bytes()); // BI_RGB

@@ -19,7 +19,7 @@ use huedra_core::geometry::WindowGeometry;
 use huedra_core::icon;
 use huedra_core::ipc::{HistoryKind, Request, Response, StatusReport};
 use huedra_core::launch;
-use huedra_core::library::{Game, GameId, Store};
+use huedra_core::library::{self, Game, GameId, Store};
 use huedra_core::locations::Locations;
 use huedra_core::paths::{NormPath, display_name};
 use huedra_core::video::{self, StreamingSite, VideoApp};
@@ -168,6 +168,7 @@ pub fn run(locations: Locations, page: Page) -> Result<(), slint::PlatformError>
     ui.set_install_version(install_version(&locations.update).into());
     let mut games = config.manual_games();
     games.extend(stores::scan());
+    let games = library::without_repeats(games);
     let state = State {
         info: Cache::load(&locations.game_info),
         displays: display::displays().unwrap_or_default(),
@@ -488,7 +489,7 @@ fn set_running(ui: &SettingsWindow, state: &mut State, running: Vec<String>) {
 
 fn caption(state: &State, hdr_on: bool) -> String {
     if !hdr_on {
-        return "sRGB colour · standard brightness".to_owned();
+        return "sRGB color · standard brightness".to_owned();
     }
     let peak = state
         .displays
@@ -498,9 +499,9 @@ fn caption(state: &State, hdr_on: bool) -> String {
         .map(|n| n.get())
         .fold(0.0_f32, f32::max);
     if peak > 0.0 {
-        format!("BT.2020 colour · up to {peak:.0} nits")
+        format!("BT.2020 color · up to {peak:.0} nits")
     } else {
-        "BT.2020 colour".to_owned()
+        "BT.2020 color".to_owned()
     }
 }
 
@@ -577,6 +578,13 @@ fn show_games(ui: &SettingsWindow, state: &State) {
         Store::Ea,
         Store::Ubisoft,
         Store::Rockstar,
+        Store::BattleNet,
+        Store::Riot,
+        Store::HoYoPlay,
+        Store::Amazon,
+        Store::Itch,
+        Store::Heroic,
+        Store::GameBar,
         Store::Manual,
     ] {
         let n = state.games.iter().filter(|g| g.store == store).count();
@@ -888,7 +896,7 @@ fn wire_games(ui: &SettingsWindow) {
 fn reload_games(state: &mut State) {
     let mut games = state.config.manual_games();
     games.extend(stores::scan());
-    state.games = games;
+    state.games = library::without_repeats(games);
 }
 
 /// Finds icons for the games that have none yet; icons kept from earlier

@@ -109,7 +109,7 @@ pub struct DisplayReport {
     pub detail: String,
 }
 
-/// Kind of history entry, used for the badge colour.
+/// Kind of history entry, used for the badge color.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum HistoryKind {

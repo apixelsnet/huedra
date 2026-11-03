@@ -21,6 +21,6 @@ RUN cargo install --locked "cargo-xwin@${CARGO_XWIN_VERSION}" "cargo-deny@${CARG
 
 # cargo-xwin downloads Microsoft's C runtime and Windows SDK files. Accepting
 # Microsoft's free terms for those files is a recorded project decision
-# (docs/features/12-packaging.md). No paid licence is involved.
+# (docs/features/12-packaging.md). No paid license is involved.
 ENV XWIN_ACCEPT_LICENSE=1 \
     XWIN_CACHE_DIR=/xwin-cache

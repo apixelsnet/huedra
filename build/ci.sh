@@ -24,10 +24,10 @@ cargo xwin clippy --workspace --all-targets --target "$target" $locked -- -D war
 step "deny"
 cargo deny --workspace check
 
-step "third-party licences"
+step "third-party licenses"
 # Rewritten in the source tree, like Cargo.lock: remote-build.sh copies it
 # back, and CI fails when the committed copy differs.
-bash build/licences.sh
+bash build/licenses.sh
 
 step "test"
 cargo test --workspace $locked

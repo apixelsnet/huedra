@@ -115,7 +115,7 @@ component Caption inherits Text {
     wrap: word-wrap;
 }
 
-// Centres its children vertically without capping the row it sits in. A
+// Centers its children vertically without capping the row it sits in. A
 // row is never taller than the smallest maximum height among its parts, and
 // fixed-height controls have one, so wrapped text beside them was cut off.
 component Centered inherits VerticalLayout {
@@ -272,9 +272,9 @@ component ModeSelector inherits Rectangle {
     }
 }
 
-// The status card with its colour chart: the BT.2020 triangle around the
-// sRGB triangle. Grey in SDR; while HDR is on the spectrum fades into the
-// chart and the card over Theme.fade (400 ms), and back to grey in SDR.
+// The status card with its color chart: the BT.2020 triangle around the
+// sRGB triangle. Gray in SDR; while HDR is on the spectrum fades into the
+// chart and the card over Theme.fade (400 ms), and back to gray in SDR.
 component HeroCard inherits Rectangle {
     in property <bool> hdr-on;
     in property <string> headline;

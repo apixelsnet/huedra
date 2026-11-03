@@ -108,7 +108,7 @@ struct App {
     tracker: Tracker,
     watches: HashMap<Pid, ExitWatch>,
     /// The display showing each tracked game process's main window, when
-    /// HDR follows the content; kept while the window is minimised.
+    /// HDR follows the content; kept while the window is minimized.
     game_monitors: HashMap<Pid, u32>,
     /// Window-move hooks of tracked game processes, so HDR follows a game
     /// moved to another display.

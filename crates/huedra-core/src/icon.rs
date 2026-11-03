@@ -1,6 +1,6 @@
-//! Draws Huedra's icon: the outline of the colours the eye can see (the CIE
+//! Draws Huedra's icon: the outline of the colors the eye can see (the CIE
 //! 1931 chromaticity diagram), filled with the BT.2020 palette while HDR is
-//! on, with the BT.2020 triangle inside at larger sizes; a grey outline of
+//! on, with the BT.2020 triangle inside at larger sizes; a gray outline of
 //! the same shape in SDR. Used for the tray, the program, the settings window
 //! and the browser extension. Pixels are computed here so the shapes are
 //! tested on any platform. Feature doc: `docs/features/07-tray-hotkeys.md`.
@@ -22,12 +22,12 @@ const SPECTRUM: [[u8; 3]; 5] = [
     [0x00, 0xC8, 0xF0], // cyan
     [0x14, 0xD9, 0x8A], // green
 ];
-const SDR_GREY: [u8; 3] = [0xA9, 0xA4, 0xB6];
+const SDR_GRAY: [u8; 3] = [0xA9, 0xA4, 0xB6];
 /// Samples per pixel along each axis, for smooth edges.
 const SUPERSAMPLE: u32 = 4;
-/// Where the colours start, in turns clockwise from the top: green sits at
+/// Where the colors start, in turns clockwise from the top: green sits at
 /// the top, as on the diagram, and pink on the right.
-const COLOUR_START: f32 = 0.2;
+const COLOR_START: f32 = 0.2;
 
 /// The spectral locus, 380 to 700 nm, as CIE 1931 x, y; the straight line
 /// back to the start closes the shape.
@@ -62,7 +62,7 @@ const BT2020: [[f32; 2]; 3] = [[0.708, 0.292], [0.170, 0.797], [0.131, 0.046]];
 /// Smallest icon that shows the triangle.
 const TRIANGLE_FROM: u32 = 32;
 
-/// Maps diagram coordinates into an icon of `n` pixels, centred with a
+/// Maps diagram coordinates into an icon of `n` pixels, centered with a
 /// small margin. The shape is drawn a quarter wider than the diagram's own
 /// proportions, as charts usually show it.
 fn place(point: [f32; 2], n: f32) -> [f32; 2] {
@@ -126,7 +126,7 @@ pub fn render(icon: TrayIcon, size: u32) -> Vec<u8> {
     let n = size as f32;
     let shape: Vec<[f32; 2]> = LOCUS.iter().map(|&p| place(p, n)).collect();
     let triangle: Vec<[f32; 2]> = BT2020.iter().map(|&p| place(p, n)).collect();
-    let centre = place([0.30, 0.36], n);
+    let center = place([0.30, 0.36], n);
     // SDR: an outline; HDR: filled, with the triangle drawn in white and a
     // white glow round the white point.
     let outline = (n * 0.09).max(1.5);
@@ -159,7 +159,7 @@ pub fn render(icon: TrayIcon, size: u32) -> Vec<u8> {
             }
             let rgb = match icon {
                 TrayIcon::Hdr => {
-                    let (dx, dy) = (x as f32 + 0.5 - centre[0], y as f32 + 0.5 - centre[1]);
+                    let (dx, dy) = (x as f32 + 0.5 - center[0], y as f32 + 0.5 - center[1]);
                     let near = (1.0 - (dx * dx + dy * dy).sqrt() / glow).max(0.0);
                     let base = towards_white(spectrum_at(dx, dy), near * near * 0.75);
                     let triangle = if covered == 0 {
@@ -169,7 +169,7 @@ pub fn render(icon: TrayIcon, size: u32) -> Vec<u8> {
                     };
                     towards_white(base, triangle)
                 }
-                TrayIcon::Sdr => SDR_GREY,
+                TrayIcon::Sdr => SDR_GRAY,
             };
             pixels.extend_from_slice(&rgb);
             pixels.push(u8::try_from(covered * 255 / samples).unwrap_or(u8::MAX));
@@ -218,8 +218,8 @@ pub fn spectrum_strip(width: u32, height: u32) -> Vec<u8> {
     pixels
 }
 
-/// Colour of the conic gradient at an offset from the centre: pink at
-/// [`COLOUR_START`] turns clockwise from the top, then round in palette order.
+/// Color of the conic gradient at an offset from the center: pink at
+/// [`COLOR_START`] turns clockwise from the top, then round in palette order.
 #[expect(
     clippy::cast_possible_truncation,
     clippy::cast_sign_loss,
@@ -227,7 +227,7 @@ pub fn spectrum_strip(width: u32, height: u32) -> Vec<u8> {
     reason = "values are bounded to 0..=255 and 0..5 by construction"
 )]
 fn spectrum_at(dx: f32, dy: f32) -> [u8; 3] {
-    let turn = (dx.atan2(-dy) / std::f32::consts::TAU - COLOUR_START).rem_euclid(1.0);
+    let turn = (dx.atan2(-dy) / std::f32::consts::TAU - COLOR_START).rem_euclid(1.0);
     let scaled = turn * SPECTRUM.len() as f32;
     let index = (scaled.floor() as usize) % SPECTRUM.len();
     let next = (index + 1) % SPECTRUM.len();
@@ -324,7 +324,7 @@ mod tests {
 
     #[test]
     fn spectrum_has_no_yellow() {
-        let start = COLOUR_START * std::f32::consts::TAU;
+        let start = COLOR_START * std::f32::consts::TAU;
         assert_eq!(
             spectrum_at(start.sin(), -start.cos()),
             SPECTRUM[0],

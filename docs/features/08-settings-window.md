@@ -6,9 +6,9 @@ The Slint window, run as its own process (`huedra settings`).
 - Pages: Status, Games, Video players, Displays, General.
 - Resizable: default 1040 x 680, minimum 520 x 560. Layouts: wide (1000 px and up), medium (680 to 999), compact (below 680, icon rail).
 - Size, position and maximized state remembered. Per-monitor DPI awareness v2; follows the Windows text size.
-- Palette from the BT.2020 primaries; spectrum only while HDR is on, grey in SDR.
+- Palette from the BT.2020 primaries; spectrum only while HDR is on, gray in SDR.
 - Motion: HDR fade 400 ms, page change 150 ms, controls 120 ms, hover 80 ms; none when Windows "Animation effects" is off.
-- Rendering: FemtoVG (OpenGL) with the software renderer as fallback. Slint royalty-free licence: attribution line on the About page.
+- Rendering: FemtoVG (OpenGL) with the software renderer as fallback. Slint royalty-free license: attribution line on the About page.
 
 ## Done when
 Every page works by keyboard, in light and dark, in all three layouts, at 100%, 150% and 200% scaling, and the window opens in under 300 ms.
@@ -22,14 +22,14 @@ Code: `crates/huedra-ui/ui/{theme,pages,app}.slint`, `crates/huedra-ui/src/{app,
 - `huedra settings [status|games|video|displays|general]` opens on a page; a second request brings the open window to the front. Size, position and maximized state are kept in `window.toml` (local app-data); a position off every monitor is ignored.
 
 Verified on this PC: all four pages render as designed in the dark theme at 100 % scaling in the wide layout; the Status page follows the tray within one second (a real game, Dispatch, showed "HDR is on" with both displays); 8.8 MB private memory per window; the window handle exists about 30 to 45 ms after the process starts.
-Not verified: the light theme; the medium and compact layouts (an attempt was stopped because a game was in use on this PC); keyboard-only use; 150 % and 200 % scaling; the Add game dialog and the Start with Windows switch. The controls take the Windows accent colour (Fluent style) rather than ultramarine.
+Not verified: the light theme; the medium and compact layouts (an attempt was stopped because a game was in use on this PC); keyboard-only use; 150 % and 200 % scaling; the Add game dialog and the Start with Windows switch. The controls take the Windows accent color (Fluent style) rather than ultramarine.
 
 ## Result (2026-10-31) — open items
 Code: `crates/huedra-ui/ui/{theme,pages,app}.slint`, `crates/huedra-ui/src/app.rs`.
 - Keyboard: Tab reaches every control, hidden pages are skipped, and a white (dark) or ink (light) outline shows keyboard focus only. Up and Down change the page in the navigation pane; Left and Right change the mode; Space or Enter picks a store filter; in the game list Up, Down, Home and End move and Enter or Space opens the game, scrolling the row into view. The mode is shown at once instead of after the next status poll, so quick arrow presses step through.
 - The detail panel of the open game is updated in place, so a control keeps the focus after each change; it is rebuilt only for another game, a reset of the times or an applied suggestion. The store filters are replaced only when their counts change. Before, each change rebuilt both and the focus was lost.
-- Switches and the "Start Huedra" button are drawn in the ultramarine accent (`Toggle`, `ActionButton`) instead of the Windows accent colour.
-- Fixed rows that cut off wrapped text: a page taller than the window was laid out at its minimum height (the scroll views now take the preferred height), and a row is never taller than the smallest maximum of its parts, so fixed-height controls are centred between stretchable spacers (`Centered`).
+- Switches and the "Start Huedra" button are drawn in the ultramarine accent (`Toggle`, `ActionButton`) instead of the Windows accent color.
+- Fixed rows that cut off wrapped text: a page taller than the window was laid out at its minimum height (the scroll views now take the preferred height), and a row is never taller than the smallest maximum of its parts, so fixed-height controls are centered between stretchable spacers (`Centered`).
 - With a game open in the wide layout the list hid the game names; the store and setting columns now give way while the detail panel is open.
 - `compact` and `wide` are set when the width changes instead of bound to it, which removes the binding-loop warnings Slint gave for the layout; the unused `Glyph` component is gone.
 
@@ -39,8 +39,8 @@ Not verified: real 150 % and 200 % Windows display scaling (simulated with `SLIN
 
 ## Result (2026-10-31) — consistency and end-to-end pass
 Code: `crates/huedra-ui/ui/controls.slint` (new), `crates/huedra-ui/ui/{pages,app}.slint`, `crates/huedra-ui/src/app.rs`, `crates/huedra-win/src/{instance,registry}.rs`.
-- Every control is now Huedra's own: `ActionButton` (plain, or primary in the accent), `Toggle`, `SearchBox`, `NumberBox` (typed, arrow buttons, Up and Down, mouse wheel; clamped; applied on Enter or leaving the field) and `Dropdown` (Up and Down change it directly; Space or Enter opens the list, which takes Up, Down, Enter and Escape). The Fluent button, text box, spin box and combo box are no longer used, so no control takes the Windows accent colour, which can be pink, the colour of HDR labels here. One focus outline, one field underline (ultramarine while typing), one hover and pressed tint throughout. The executable is 9.29 MB, slightly smaller than with the Fluent widgets.
-- The window follows the Windows light or dark setting through its own registry watch (`registry::watch_light_theme`, `RegNotifyChangeKeyValue`, no polling) and sets the colour scheme itself. Slint's own tracking applied a change late and missed the next one while the window was open.
+- Every control is now Huedra's own: `ActionButton` (plain, or primary in the accent), `Toggle`, `SearchBox`, `NumberBox` (typed, arrow buttons, Up and Down, mouse wheel; clamped; applied on Enter or leaving the field) and `Dropdown` (Up and Down change it directly; Space or Enter opens the list, which takes Up, Down, Enter and Escape). The Fluent button, text box, spin box and combo box are no longer used, so no control takes the Windows accent color, which can be pink, the color of HDR labels here. One focus outline, one field underline (ultramarine while typing), one hover and pressed tint throughout. The executable is 9.29 MB, slightly smaller than with the Fluent widgets.
+- The window follows the Windows light or dark setting through its own registry watch (`registry::watch_light_theme`, `RegNotifyChangeKeyValue`, no polling) and sets the color scheme itself. Slint's own tracking applied a change late and missed the next one while the window was open.
 - The window's size is limited to 16 384 physical pixels in `WM_WINDOWPOSCHANGING` (`instance::limit_window_size`, a subclass of the window), which also catches resizes made by other programs; Slint's `max-width` did not.
 - Every change made in the window is a read-modify-write of `config.toml` (`edit`), so it no longer undoes a mode set from the tray menu, a shortcut or the command line while the window was open. Before, saving any setting wrote back the mode the window had loaded, and the tray then switched to it.
 - PCGamingWiki's ray tracing field is shown in words ("Supported", "Limited support", "Not supported", "Through a modification") and left out when unknown, instead of the raw "true" or "false".
@@ -89,15 +89,15 @@ Verified: CI green on the branch (build of the fix); the UI Automation tree abov
 Code: the disclaimer overlay and About properties in `crates/huedra-ui/ui/app.slint`, the About section in `pages.slint`, `wire_about` in `crates/huedra-ui/src/app.rs`, the tray's check in `run` in `crates/huedra/src/app.rs`, `general.disclaimer_accepted` in `config.rs`.
 - First start: the tray does not start until the disclaimer is accepted (it opens the settings window instead and ends). The window shows "Before you start" over every page: what Huedra changes, beta and no warranty, no liability, anti-cheat, how to undo a stuck display. **Accept and continue** records `disclaimer_accepted = true`, adds the start-up entry as the tray's first start used to (non-portable copies with Start with Windows on), and starts the tray if none runs. **Exit** closes the window. **General › About › Disclaimer** shows it again with only **Close**.
 - About: **Check for updates** (runs `huedra update --check` without a console, then shows the result), **Install Huedra x.y.z** when one is waiting (`huedra update`), **Star on GitHub** (the repository the release address belongs to; hidden for builds without a GitHub release address) and **Support on Ko-fi**.
-- The window's logo is the gamut icon in both states (HDR colour, SDR grey outline) instead of a dot and a ring.
+- The window's logo is the gamut icon in both states (HDR color, SDR gray outline) instead of a dot and a ring.
 Verified on this PC on a hidden desktop with the CI build: the disclaimer appears for a settings file without the flag, with Exit and Accept and continue; Accept wrote `disclaimer_accepted = true` and the Status page followed; About shows Check for updates, Disclaimer, Star on GitHub and Support on Ko-fi. Not verified: Check for updates and Install against a real newer release; the buttons opening the browser; the tray's start being held back on a fresh PC (the logic is in `run`, not exercised on this PC's running tray).
 
-## Result (2026-11-01) — window icon, vector logo, colour chart, navigation status
+## Result (2026-11-01) — window icon, vector logo, color chart, navigation status
 Code: `set_icon` in `crates/huedra-win/src/instance.rs`; `HeroCard` in `crates/huedra-ui/ui/pages.slint`; the navigation header in `crates/huedra-ui/ui/app.slint`; `crates/huedra-ui/ui/assets/`.
 - Window icon: Slint did not pass its `icon` property on to the window (no small or large icon set, so Windows drew a generic one in the title bar). The window now gets the exe's icon resource with `WM_SETICON`, at the small and large icon sizes for its display scale; the unused Slint icon was removed.
-- The settings window draws the icon and the Status card's colour chart from SVG files embedded at build time, so they are sharp at any display scale (the raster versions were drawn at a fixed 44 px). SVG support was already in the exe; the exe grew by 56 KB to 9,894,400 bytes.
-- Status card, as in the plan's mockup: a colour chart of the BT.2020 triangle around the dashed sRGB triangle, grey in SDR with the sRGB triangle filled. While HDR is on, the spectrum fades into the chart, the card and its border over 400 ms, and back to grey in SDR (no motion when Windows animation effects are off). The headline turns pink in HDR.
-- Navigation pane: the icon fades between grey and colour, with the state ("HDR on" or "SDR") and one line below it, for example "Display 1 · Always HDR mode" or "No HDR content".
+- The settings window draws the icon and the Status card's color chart from SVG files embedded at build time, so they are sharp at any display scale (the raster versions were drawn at a fixed 44 px). SVG support was already in the exe; the exe grew by 56 KB to 9,894,400 bytes.
+- Status card, as in the plan's mockup: a color chart of the BT.2020 triangle around the dashed sRGB triangle, gray in SDR with the sRGB triangle filled. While HDR is on, the spectrum fades into the chart, the card and its border over 400 ms, and back to gray in SDR (no motion when Windows animation effects are off). The headline turns pink in HDR.
+- Navigation pane: the icon fades between gray and color, with the state ("HDR on" or "SDR") and one line below it, for example "Display 1 · Always HDR mode" or "No HDR content".
 - Displays: a switch "Always HDR on the main display only", on by default (see 02).
 
 Verified on this PC on a hidden desktop: the title bar shows the gamut icon (WM_GETICON returns small and large icons); the switch shows on with no `manual` line in the file, off wrote `manual = "all"`, on again `manual = "main"`; with the tray switching Display 1 to HDR, the card, chart and navigation status went from SDR to HDR and back (captured frames for the README tour).
@@ -130,8 +130,8 @@ Code: `starts_with_windows` in `crates/huedra-ui/src/app.rs`, `startup_starts` i
 
 Verified on this PC, every page driven through UI Automation on a portable copy (the owner's settings and registry untouched, their start-up entry checked before and after):
 - Disclaimer: shown first, no HDR change before Accept (even with Always HDR in the file), Accept writes the flag and applies the mode, Exit closes Huedra.
-- Status: the three mode buttons switch HDR, Pause and Resume, the navigation status and the colour-chart caption follow HDR, Recent changes lists the switches, a mode set with `huedra mode` shows in the window, starting Huedra again keeps one window.
-- Games: library with store filters, search, Added filter, a game's HDR setting (Do not change then applied by the tray), delay and Use the default times, Create a desktop shortcut (target `huedra.exe launch -- "<program>"`, removed afterwards), the Steam launch option and Copy, PCGamingWiki results arriving, Scan again, Remove this game, Add game opening its file dialog (cancelled).
+- Status: the three mode buttons switch HDR, Pause and Resume, the navigation status and the color-chart caption follow HDR, Recent changes lists the switches, a mode set with `huedra mode` shows in the window, starting Huedra again keeps one window.
+- Games: library with store filters, search, Added filter, a game's HDR setting (Do not change then applied by the tray), delay and Use the default times, Create a desktop shortcut (target `huedra.exe launch -- "<program>"`, removed afterwards), the Steam launch option and Copy, PCGamingWiki results arriving, Scan again, Remove this game, Add game opening its file dialog (canceled).
 - Video players: Only in full screen, keywords (Enter), a player set to While open (then applied by the tray), hold time, a streaming site.
 - Displays: Only the display showing the content, Always HDR on the main display only (then both displays in Always HDR), Manage, Retry attempts.
 - General: Start with Windows (Off in the portable copy), the Start with HDR menu entry written and removed, Updates, Game information, hold and delay, Keyboard shortcuts, window titles, the version, the disclaimer, Closing this window: Quit closes Huedra, Keep running leaves the tray.

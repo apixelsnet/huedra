@@ -7,7 +7,7 @@
 pub struct NormPath(String);
 
 impl NormPath {
-    /// Normalises a path.
+    /// Normalizes a path.
     pub fn new(path: &str) -> Self {
         let mut s: String = path
             .trim()
@@ -21,7 +21,7 @@ impl NormPath {
         Self(s)
     }
 
-    /// The normalised text.
+    /// The normalized text.
     pub fn as_str(&self) -> &str {
         &self.0
     }
@@ -62,7 +62,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn normalises() {
+    fn normalizes() {
         assert_eq!(
             NormPath::new("D:/Games/Foo/").as_str(),
             r"d:\games\foo",

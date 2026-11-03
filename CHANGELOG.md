@@ -5,7 +5,12 @@ Changes that matter to people using Huedra (not the project's own build and work
 ## Unreleased
 
 ### Added
+- More games are found automatically: the libraries of **Battle.net**, **Riot Games** (VALORANT, League of Legends, Teamfight Tactics…), **HoYoPlay** (Genshin Impact, Honkai: Star Rail, Zenless Zone Zero…), **Amazon Games**, the **itch.io** app and **Heroic Games Launcher** (its Epic, GOG and Amazon games). The Games page has a filter for each. Riot's PBE and Battle.net's test realms and betas are left out, and for League of Legends only the game counts, not its client.
+- Games that no launcher lists but that the Xbox Game Bar recognized while they ran (a standalone install, for example) appear under **Game Bar**, named after their folder. A program inside a game already listed is not added again.
 - The Huedra browser extension is on the Chrome Web Store. **Get the extension** on the **Video players** page, under Browsers, opens its store page, for Chrome, Edge, Brave, Opera and Vivaldi. The setup guide now installs it from the store; Firefox still loads it from the release's extension zip.
+
+### Changed
+- Huedra's text uses US English spelling (color, gray, license).
 
 ## 1.0.2 — 2026-11-02
 
@@ -58,10 +63,10 @@ The first stable release. Every feature was tested end to end before it.
 - Check for updates and Install buttons under General › About.
 - Links to star the project on GitHub and to support it on Ko-fi, under General › About. The tray menu has **Support Huedra on Ko-fi...** too.
 - A user guide: `docs/USER-GUIDE.md`.
-- The download includes `THIRD-PARTY-LICENSES.md`, the licences of the libraries built into Huedra.
+- The download includes `THIRD-PARTY-LICENSES.md`, the licenses of the libraries built into Huedra.
 - General › Closing this window: keep Huedra running in the notification area (the default) or quit Huedra when the window is closed.
 - Problem reports: after a crash, the next start offers to copy the details (versions, the crash and the last log lines, without your user name) to the clipboard. **Report a problem...** in the tray menu does the same at any time. Huedra sends nothing itself.
-- The Status page shows a colour chart of the BT.2020 and sRGB gamuts that fades into colour when HDR turns on and back to grey when it turns off. The navigation pane shows the current state and its reason.
+- The Status page shows a color chart of the BT.2020 and sRGB gamuts that fades into color when HDR turns on and back to gray when it turns off. The navigation pane shows the current state and its reason.
 - An **Update available** dialog: when a new version is found it shows what is new, with a link to the full changelog, and installs it with **Download and install**. It never opens while a game or video is using HDR. The list of changes is signed like the update itself.
 - Displays › Always HDR on the main display only, on by default: Always HDR mode and the Win+Alt+H shortcut turn HDR on only for the main display (the Windows primary display), so a second monitor stays in SDR. Turn it off to switch every managed display.
 
@@ -69,7 +74,7 @@ The first stable release. Every feature was tested end to end before it.
 - Starting Huedra opens its window, and starting it again while it runs brings the window to the front. At sign-in, Start with Windows still starts it in the notification area only (`huedra --background`).
 - Updates now ask before installing by default, with the update dialog; Install automatically is still available under General › Updates.
 - "Hold time" is now called "Keep HDR on after it ends", with a description of what it does, and the history says how long HDR stayed on.
-- New icon: the visible colour gamut with the BT.2020 triangle, in colour while HDR is on and as a grey outline in SDR. Used for the program, the tray, the settings window and the browser extension. The settings window draws it as a vector image, sharp at any display scale, and shows it in the title bar.
+- New icon: the visible color gamut with the BT.2020 triangle, in color while HDR is on and as a gray outline in SDR. Used for the program, the tray, the settings window and the browser extension. The settings window draws it as a vector image, sharp at any display scale, and shows it in the title bar.
 
 ## 0.1.0 — 2026-11-01
 

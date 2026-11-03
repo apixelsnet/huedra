@@ -41,6 +41,8 @@ pub mod report;
 #[cfg(windows)]
 pub mod shell;
 #[cfg(windows)]
+mod sqlite;
+#[cfg(windows)]
 pub mod stores;
 #[cfg(windows)]
 pub mod tray;

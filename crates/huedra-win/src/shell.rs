@@ -124,11 +124,11 @@ pub fn create_shortcut(file: &Path, shortcut: &Shortcut<'_>) -> windows::core::R
     unsafe { persist.Save(&HSTRING::from(file.as_os_str()), true) }
 }
 
-/// Initialises COM on this thread for the guard's lifetime. A thread
-/// already initialised (S_FALSE, or another apartment type) keeps working;
+/// Initializes COM on this thread for the guard's lifetime. A thread
+/// already initialized (S_FALSE, or another apartment type) keeps working;
 /// only a successful call is balanced by the guard.
 pub(crate) fn init_com() -> Option<ComGuard> {
-    // SAFETY: initialises COM on this thread; balanced by the guard.
+    // SAFETY: initializes COM on this thread; balanced by the guard.
     let init = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) };
     init.is_ok().then_some(ComGuard)
 }

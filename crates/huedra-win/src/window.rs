@@ -225,7 +225,7 @@ fn monitor_of(hwnd: HWND) -> Option<(RECT, u32)> {
 }
 
 /// A window is full screen when it covers its whole monitor (`area`) and
-/// has no title bar. The second test excludes maximised windows, whose
+/// has no title bar. The second test excludes maximized windows, whose
 /// frame reaches past the monitor's edges.
 fn is_full_screen(hwnd: HWND, area: RECT) -> bool {
     let mut rect = RECT::default();

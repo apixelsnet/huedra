@@ -1,7 +1,11 @@
 //! Installed games and how a running program is matched to one.
 //! Feature doc: `docs/features/04-game-library.md`.
 
+pub mod amazon;
 pub mod epic;
+pub mod gamebar;
+pub mod heroic;
+pub mod itch;
 pub mod registry;
 pub mod steam;
 pub mod vdf;
@@ -31,6 +35,24 @@ pub enum Store {
     Ea,
     /// Rockstar Games Launcher.
     Rockstar,
+    /// Battle.net.
+    #[serde(rename = "battlenet")]
+    BattleNet,
+    /// Riot Client.
+    Riot,
+    /// HoYoPlay.
+    #[serde(rename = "hoyoplay")]
+    HoYoPlay,
+    /// Amazon Games.
+    Amazon,
+    /// itch.io app.
+    Itch,
+    /// Heroic Games Launcher (its Epic, GOG and Amazon installs).
+    Heroic,
+    /// A program the Xbox Game Bar recognized as a game while it ran, that no
+    /// launcher lists.
+    #[serde(rename = "gamebar")]
+    GameBar,
     /// Added by the user.
     Manual,
 }
@@ -46,6 +68,13 @@ impl Store {
             Self::Ubisoft => "Ubisoft",
             Self::Ea => "EA",
             Self::Rockstar => "Rockstar",
+            Self::BattleNet => "Battle.net",
+            Self::Riot => "Riot Games",
+            Self::HoYoPlay => "HoYoPlay",
+            Self::Amazon => "Amazon Games",
+            Self::Itch => "itch.io",
+            Self::Heroic => "Heroic",
+            Self::GameBar => "Game Bar",
             Self::Manual => "Added manually",
         }
     }
@@ -60,6 +89,13 @@ impl Store {
             Self::Ubisoft => "ubisoft",
             Self::Ea => "ea",
             Self::Rockstar => "rockstar",
+            Self::BattleNet => "battlenet",
+            Self::Riot => "riot",
+            Self::HoYoPlay => "hoyoplay",
+            Self::Amazon => "amazon",
+            Self::Itch => "itch",
+            Self::Heroic => "heroic",
+            Self::GameBar => "gamebar",
             Self::Manual => "manual",
         }
     }
@@ -114,6 +150,20 @@ pub struct Game {
     pub exe: Option<String>,
 }
 
+/// A store title without trademark signs (`Game™` becomes `Game`).
+pub(crate) fn clean_name(name: &str) -> String {
+    name.replace(['™', '®', '©'], "").trim().to_owned()
+}
+
+/// A folder path with backslashes, no surrounding quotes and no trailing
+/// separator.
+pub(crate) fn clean_folder(path: &str) -> String {
+    path.trim()
+        .trim_matches('"')
+        .trim_end_matches(['\\', '/'])
+        .replace('/', r"\")
+}
+
 /// File names inside game folders that are never the game itself.
 const NOT_GAMES: &[&str] = &[
     "unins",
@@ -143,14 +193,30 @@ pub struct Library {
     exes: Vec<Option<NormPath>>,
 }
 
+/// The games without repeats: a later entry with an id already seen, and a
+/// Game Bar entry for a program that an earlier game (one added by hand,
+/// for example) already names, are left out.
+pub fn without_repeats(games: Vec<Game>) -> Vec<Game> {
+    let mut ids = std::collections::HashSet::new();
+    let mut programs = std::collections::HashSet::new();
+    games
+        .into_iter()
+        .filter(|g| {
+            let program = g.exe.as_deref().map(NormPath::new);
+            let repeat =
+                g.store == Store::GameBar && program.as_ref().is_some_and(|p| programs.contains(p));
+            if let Some(program) = program {
+                programs.insert(program);
+            }
+            !repeat && ids.insert(g.id.clone())
+        })
+        .collect()
+}
+
 impl Library {
-    /// Builds the matcher. Later entries with an id already seen are ignored.
+    /// Builds the matcher, without repeats (see [`without_repeats`]).
     pub fn new(games: Vec<Game>) -> Self {
-        let mut seen = std::collections::HashSet::new();
-        let games: Vec<Game> = games
-            .into_iter()
-            .filter(|g| seen.insert(g.id.clone()))
-            .collect();
+        let games = without_repeats(games);
         let folders = games
             .iter()
             .map(|g| NormPath::new(&g.install_dir))
@@ -248,6 +314,29 @@ mod tests {
             found(r"D:\Steam\common\Cyberpunk 2077\unins000.exe"),
             None,
             "uninstaller ignored"
+        );
+    }
+
+    #[test]
+    fn game_bar_entry_does_not_repeat_a_known_program() {
+        let exe = r"D:\Indie\Game.exe";
+        let games = without_repeats(vec![
+            game(Store::Manual, exe, r"D:\Indie", Some(exe)),
+            game(Store::GameBar, "x", r"D:\Indie", Some(r"d:/indie/game.exe")),
+            game(
+                Store::GameBar,
+                "y",
+                r"D:\Other",
+                Some(r"D:\Other\Other.exe"),
+            ),
+            game(Store::Steam, "1", r"D:\Steam\1", None),
+            game(Store::Steam, "1", r"D:\Steam\1 again", None),
+        ]);
+        let ids: Vec<&str> = games.iter().map(|g| g.id.as_str()).collect();
+        assert_eq!(
+            ids,
+            [r"manual:d:\indie\game.exe", "gamebar:y", "steam:1"],
+            "repeated program and repeated id left out"
         );
     }
 

@@ -22,7 +22,7 @@ allow = [
     "BSL-1.0",
     "ISC",
     "Zlib",
-    # Slint, used under its royalty-free licence: the About section of the
+    # Slint, used under its royalty-free license: the About section of the
     # General page shows the required attribution (AboutSlint).
     "LicenseRef-Slint-Royalty-free-2.0",
 ]

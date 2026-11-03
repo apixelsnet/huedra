@@ -142,7 +142,7 @@ impl EventLoop {
             lpszClassName: CLASS_NAME,
             ..Default::default()
         };
-        // SAFETY: `class` is fully initialised and its strings are static.
+        // SAFETY: `class` is fully initialized and its strings are static.
         if unsafe { RegisterClassExW(&class) } == 0 {
             return Err(Error::from_thread());
         }

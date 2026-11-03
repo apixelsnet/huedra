@@ -69,8 +69,8 @@ Huedra lives in the notification area next to the clock. If you do not see it, o
 
 | Icon | Meaning |
 | --- | --- |
-| Coloured gamut shape | HDR is on |
-| Grey outline | SDR |
+| Colored gamut shape | HDR is on |
+| Gray outline | SDR |
 
 - **Left-click** opens the Huedra window.
 - **Right-click** opens the menu:
@@ -88,7 +88,7 @@ Huedra lives in the notification area next to the clock. If you do not see it, o
 
 ## 5. Modes
 
-| Mode | Behaviour |
+| Mode | Behavior |
 | --- | --- |
 | **Automatic** | HDR turns on while a game or HDR video runs and off again when it ends. This is the normal mode. |
 | **Always HDR** | HDR stays on for the main display (the one Windows uses as the primary display), or for every managed display when **Displays › Always HDR on the main display only** is off. |
@@ -102,7 +102,11 @@ Huedra only ever turns off HDR that it turned on itself. If you switched HDR on 
 
 ### Found automatically
 
-Huedra reads the libraries of Steam, Epic Games, GOG, Xbox (Microsoft Store), Ubisoft Connect, EA app and Rockstar Games. Installed games appear on the **Games** page. Choose **Scan again** after installing a game while Huedra is open.
+Huedra reads the libraries of Steam, Epic Games, GOG, Xbox (Microsoft Store), Ubisoft Connect, EA app, Rockstar Games, Battle.net, Riot Games, HoYoPlay, Amazon Games, itch.io and Heroic Games Launcher (its Epic, GOG and Amazon games). Installed games appear on the **Games** page. Choose **Scan again** after installing a game while Huedra is open.
+
+Games that no launcher lists but that the Xbox Game Bar recognized as games while they ran are listed too, under **Game Bar**, named after their folder. A program the Game Bar took for a game by mistake can be set to **Do not change**.
+
+For League of Legends, only the game itself counts, not the League client that stays open between matches. Test servers (Riot's PBE, Battle.net's test realms and betas) are not listed.
 
 A game that is not listed, for example one installed without a store, can be added with **Add game**: choose its program file.
 
@@ -139,7 +143,7 @@ HDR stays on until the game and the programs it started have closed.
 
 Huedra watches VLC, mpv, mpv.net, MPC-HC, MPC-BE and PotPlayer. On the **Video players** page, choose for each player:
 
-| Choice | Behaviour |
+| Choice | Behavior |
 | --- | --- |
 | **When HDR video plays** | HDR turns on when the window title shows an HDR file. |
 | **While open** | HDR is on whenever the player is open. |

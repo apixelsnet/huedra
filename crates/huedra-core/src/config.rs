@@ -397,7 +397,7 @@ impl Config {
     /// The settings as TOML text.
     ///
     /// # Errors
-    /// [`ConfigError::Invalid`] if serialisation fails (it should not).
+    /// [`ConfigError::Invalid`] if serialization fails (it should not).
     pub fn to_toml(&self) -> Result<String, ConfigError> {
         toml::to_string_pretty(self).map_err(|e| ConfigError::Invalid(e.to_string()))
     }
@@ -537,7 +537,7 @@ mod tests {
     #[test]
     fn defaults_round_trip() {
         let config = Config::default();
-        let text = config.to_toml().expect("serialise");
+        let text = config.to_toml().expect("serialize");
         assert_eq!(Config::parse(&text).expect("parse"), config, "round trip");
         assert_eq!(Config::parse("").expect("empty"), config, "empty file");
         assert_eq!(config.general.hold, Seconds(10), "default hold");
@@ -555,7 +555,7 @@ mod tests {
     fn close_action() {
         let config = Config::parse("[general]\non_close = \"quit\"\n").expect("parse");
         assert_eq!(config.general.on_close, CloseAction::Quit, "quit");
-        let text = config.to_toml().expect("serialise");
+        let text = config.to_toml().expect("serialize");
         assert!(text.contains("on_close = \"quit\""), "written as {text}");
     }
 
@@ -624,7 +624,7 @@ mod tests {
         let trigger = config.video_trigger(VideoApp::Mpv, VideoKind::Hdr);
         assert_eq!(trigger.label, "HDR video in mpv", "label");
         assert_eq!(trigger.hold, Duration::from_secs(4), "video hold");
-        let text = config.to_toml().expect("serialise");
+        let text = config.to_toml().expect("serialize");
         assert!(
             text.contains("mpv-net = \"while-open\""),
             "keys written: {text}"
@@ -646,7 +646,7 @@ mod tests {
             "sites read"
         );
         sites.video.set_site(StreamingSite::HboMax, false);
-        let text = sites.to_toml().expect("serialise");
+        let text = sites.to_toml().expect("serialize");
         assert!(text.contains("sites = [\"netflix\"]"), "written: {text}");
         assert_eq!(Config::parse(&text).expect("again"), sites, "round trip");
     }

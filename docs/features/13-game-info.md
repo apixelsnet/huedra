@@ -24,7 +24,7 @@ Code: `crates/huedra-core/src/gameinfo.rs` (paths, parsing, markup cleaning, cac
 - Suggestions: supported or limited gives "Enable while running", not supported gives "Do not change"; shown as a button, never applied automatically. Games added by hand are not looked up.
 
 Verified on this PC: all 22 store games were looked up; 16 pages were found (for example Resident Evil 4 (2023): limited, with notes; Hades II: no HDR), 6 games show "Not found on PCGamingWiki".
-Not verified: behaviour behind a proxy; that the wiki's rate limits are never reached with very large libraries.
+Not verified: behavior behind a proxy; that the wiki's rate limits are never reached with very large libraries.
 
 
 ## Result (2026-10-31) — end-to-end pass
