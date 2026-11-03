@@ -1053,6 +1053,7 @@ export component VideoPage inherits Rectangle {
     callback set-site(string, bool);
     callback set-hold(int);
     callback reset-hold();
+    callback open-extension();
 
     ScrollView {
         // At least the preferred height, so rows keep their wrapped text
@@ -1154,6 +1155,19 @@ export component VideoPage inherits Rectangle {
             }
             Caption {
                 text: "Browsers turn HDR on through the Huedra browser extension, which marks the tab while an HDR video is open on YouTube or a full-screen video plays on a streaming site below, and for full-screen video with sound when SDR video with RTX Video HDR applies. Otherwise browsers never change the display.";
+            }
+            SettingRow {
+                title: "Huedra browser extension";
+                description: "For Chrome, Edge, Brave, Opera and Vivaldi, from the Chrome Web Store. Firefox loads it from the extension zip of the release; the setup guide has the steps.";
+                Centered {
+                    ActionButton {
+                        primary: true;
+                        text: "Get the extension";
+                        clicked => {
+                            root.open-extension();
+                        }
+                    }
+                }
             }
             VideoAppList {
                 apps: root.browsers;

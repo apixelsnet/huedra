@@ -4,6 +4,7 @@
   <p><strong>Automatic HDR for Windows.</strong><br>HDR turns on when a game or HDR video starts, and off again when it ends.</p>
   <p>
     <a href="../../releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/apixelsnet/huedra?label=release&color=3341E6"></a>
+    <a href="https://chromewebstore.google.com/detail/huedra/kilkdlcbhddpigcdffdnmdknjhlddlod"><img alt="Chrome Web Store" src="https://img.shields.io/chrome-web-store/v/kilkdlcbhddpigcdffdnmdknjhlddlod?label=Chrome%20Web%20Store&logo=googlechrome&logoColor=white&color=4285F4"></a>
     <img alt="Windows 10 and 11" src="https://img.shields.io/badge/Windows-10%20%7C%2011-9B3DFF">
     <a href="LICENSE"><img alt="Licence: Apache 2.0" src="https://img.shields.io/badge/licence-Apache%202.0-00C8F0"></a>
     <a href="https://buymeacoffee.com/pixelsthecoder"><img alt="Buy me a coffee" src="https://img.shields.io/badge/Buy%20me%20a%20coffee-support-FF2D6F?logo=buymeacoffee&logoColor=white"></a>

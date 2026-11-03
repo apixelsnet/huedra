@@ -153,11 +153,12 @@ Huedra watches VLC, mpv, mpv.net, MPC-HC, MPC-BE and PotPlayer. On the **Video p
 
 Browsers change HDR only through the Huedra browser extension. With it, HDR turns on while an HDR video is open on YouTube and, if you choose, while a video plays in full screen on Netflix, Disney+, Prime Video, HBO Max or Apple TV (**Video players › Streaming sites**).
 
-Until the extension is published in the browser stores, install it by hand:
+Install it:
 
-1. From the release, download `huedra-browser-extension-<version>.zip` and unpack it into a folder you keep.
-2. **Chrome, Edge, Brave, Opera, Vivaldi:** open the extensions page (`chrome://extensions` or `edge://extensions`), turn on **Developer mode**, choose **Load unpacked** and select the folder.
-3. **Firefox:** open `about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-on**, and select `manifest.json` in the folder. Firefox removes temporary add-ons when it closes.
+- **Chrome, Edge, Brave, Opera, Vivaldi:** install [Huedra from the Chrome Web Store](https://chromewebstore.google.com/detail/huedra/kilkdlcbhddpigcdffdnmdknjhlddlod) and choose **Add to Chrome** (or the button named after your browser). **Get the extension** on the **Video players** page, under Browsers, opens the store page. Edge first asks to allow extensions from other stores; Opera first needs its **Install Chrome Extensions** add-on. The browser keeps the extension up to date.
+- **Firefox:** from the release, download `huedra-browser-extension-<version>.zip` and unpack it into a folder you keep. Open `about:debugging#/runtime/this-firefox`, choose **Load Temporary Add-on**, and select `manifest.json` in the folder. Firefox removes temporary add-ons when it closes.
+
+The [setup guide](SETUP.md#7-set-up-the-browser-extension) has the steps in detail, including installing by hand without the store.
 
 After HDR turns on, the extension asks YouTube's player to switch to its HDR stream.
 

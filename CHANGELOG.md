@@ -4,6 +4,9 @@ Changes that matter to people using Huedra (not the project's own build and work
 
 ## Unreleased
 
+### Added
+- The Huedra browser extension is on the Chrome Web Store. **Get the extension** on the **Video players** page, under Browsers, opens its store page, for Chrome, Edge, Brave, Opera and Vivaldi. The setup guide now installs it from the store; Firefox still loads it from the release's extension zip.
+
 ## 1.0.2 — 2026-11-02
 
 ### Fixed
