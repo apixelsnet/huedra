@@ -4,6 +4,8 @@ Changes that matter to people using Huedra (not the project's own build and work
 
 ## Unreleased
 
+## 1.1.0 — 2026-11-03
+
 ### Added
 - More games are found automatically: the libraries of **Battle.net**, **Riot Games** (VALORANT, League of Legends, Teamfight Tactics…), **HoYoPlay** (Genshin Impact, Honkai: Star Rail, Zenless Zone Zero…), **Amazon Games**, the **itch.io** app and **Heroic Games Launcher** (its Epic, GOG and Amazon games). The Games page has a filter for each. Riot's PBE and Battle.net's test realms and betas are left out, and for League of Legends only the game counts, not its client.
 - Games that no launcher lists but that the Xbox Game Bar recognized while they ran (a standalone install, for example) appear under **Game Bar**, named after their folder. A program inside a game already listed is not added again.
