@@ -128,7 +128,7 @@ pub enum HistoryKind {
 pub struct HistoryEntry {
     /// Local time, `HH:MM`.
     pub time: String,
-    /// Short title, for example "HDR enabled".
+    /// Short title, for example "HDR turned on".
     pub title: String,
     /// Reason.
     pub detail: String,

@@ -50,7 +50,7 @@ body:
     attributes:
       label: Its setting in Huedra
       description: The game's setting on the Games page, and whether Start with HDR is used.
-      placeholder: Enable while running, Start with HDR off
+      placeholder: Turn HDR on, Turn HDR on when I press Play in Steam off
 
   - type: textarea
     id: description

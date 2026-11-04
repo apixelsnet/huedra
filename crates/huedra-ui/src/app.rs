@@ -400,9 +400,9 @@ fn show_status(ui: &SettingsWindow, state: &mut State, report: Option<&StatusRep
     let Some(report) = report else {
         let on = state.displays.iter().any(|d| d.state == HdrState::On);
         ui.set_hdr_on(on);
-        ui.set_headline((if on { "HDR is on" } else { "SDR" }).into());
+        ui.set_headline((if on { "HDR is on" } else { "HDR is off" }).into());
         ui.set_nav_detail("Huedra is not running".into());
-        ui.set_detail("Automatic switching is off while Huedra is not running.".into());
+        ui.set_detail("Automatic switching is off until Huedra starts.".into());
         ui.set_caption(caption(state, on).into());
         ui.set_history(ModelRc::default());
         set_running(ui, state, Vec::new());
@@ -423,7 +423,14 @@ fn show_status(ui: &SettingsWindow, state: &mut State, report: Option<&StatusRep
         format!("{}. {}.", join(&all_labels), report.reason)
     };
     ui.set_hdr_on(report.hdr_on);
-    ui.set_headline((if report.hdr_on { "HDR is on" } else { "SDR" }).into());
+    ui.set_headline(
+        (if report.hdr_on {
+            "HDR is on"
+        } else {
+            "HDR is off"
+        })
+        .into(),
+    );
     ui.set_nav_detail(nav_detail(&on_labels, report.hdr_on, &report.reason).into());
     ui.set_detail(detail.into());
     ui.set_caption(caption(state, report.hdr_on).into());
@@ -466,7 +473,7 @@ fn show_status(ui: &SettingsWindow, state: &mut State, report: Option<&StatusRep
 }
 
 /// The line under the state in the navigation pane, for example
-/// "Display 1 · Always HDR mode" or "No HDR content".
+/// "Display 1 · Always HDR mode" or "Nothing needs HDR right now".
 fn nav_detail(on_labels: &[&str], hdr_on: bool, reason: &str) -> String {
     if !hdr_on || on_labels.is_empty() {
         return reason.to_owned();
@@ -489,7 +496,7 @@ fn set_running(ui: &SettingsWindow, state: &mut State, running: Vec<String>) {
 
 fn caption(state: &State, hdr_on: bool) -> String {
     if !hdr_on {
-        return "sRGB color · standard brightness".to_owned();
+        return "Standard color and brightness".to_owned();
     }
     let peak = state
         .displays
@@ -499,9 +506,9 @@ fn caption(state: &State, hdr_on: bool) -> String {
         .map(|n| n.get())
         .fold(0.0_f32, f32::max);
     if peak > 0.0 {
-        format!("BT.2020 color · up to {peak:.0} nits")
+        format!("Wide color · up to {peak:.0} nits")
     } else {
-        "BT.2020 color".to_owned()
+        "Wide color".to_owned()
     }
 }
 
@@ -521,10 +528,10 @@ fn setting_of(state: &State, id: &GameId) -> GameHdr {
 
 fn info_text(state: &State, id: &GameId) -> String {
     if !state.config.general.game_info {
-        return "Game information is turned off".to_owned();
+        return "Game info is off".to_owned();
     }
     match state.info.get(id) {
-        None => "Not yet looked up".to_owned(),
+        None => "Not checked yet".to_owned(),
         Some(info) if info.page.is_none() => "Not found on PCGamingWiki".to_owned(),
         Some(info) => info.hdr.label().to_owned(),
     }
@@ -546,7 +553,7 @@ fn show_games(ui: &SettingsWindow, state: &State) {
                 icon: state.icons.get(&g.id).cloned().unwrap_or_default(),
                 initial: initial(&g.name).into(),
                 store: (if g.store == Store::Manual {
-                    "Added"
+                    "Added by you"
                 } else {
                     g.store.label()
                 })
@@ -592,7 +599,7 @@ fn show_games(ui: &SettingsWindow, state: &State) {
             chips.push(StoreChip {
                 key: store.key().into(),
                 label: (if store == Store::Manual {
-                    "Added"
+                    "Added by you"
                 } else {
                     store.label()
                 })
@@ -730,10 +737,11 @@ fn can_shortcut(game: &Game) -> bool {
 /// Writes "<game> (with HDR)" on the desktop and describes the result.
 fn create_shortcut(game: &Game) -> String {
     let (Some(exe), Some(program)) = (huedra_exe(), game.exe.as_deref()) else {
-        return "The shortcut could not be made: the game's program is not known.".to_owned();
+        return "Couldn't create the shortcut: Huedra doesn't know which program starts this game."
+            .to_owned();
     };
     let Some(desktop) = shell::desktop_folder() else {
-        return "The shortcut could not be made: the desktop folder was not found.".to_owned();
+        return "Couldn't create the shortcut: the desktop folder wasn't found.".to_owned();
     };
     let file = desktop.join(launch::shortcut_file_name(&game.name));
     let working_dir = std::path::Path::new(program)
@@ -749,7 +757,7 @@ fn create_shortcut(game: &Game) -> String {
     };
     match shell::create_shortcut(&file, &shortcut) {
         Ok(()) => format!("Shortcut created on the desktop: {}.", file.display()),
-        Err(error) => format!("The shortcut could not be made: {}.", error.message()),
+        Err(error) => format!("Couldn't create the shortcut: {}.", error.message()),
     }
 }
 
@@ -837,7 +845,7 @@ fn wire_games(ui: &SettingsWindow) {
     let r = refresh.clone();
     let weak = ui.as_weak();
     ui.on_add_game(move || {
-        let Some(path) = shell::pick_program("Choose the game's program") else {
+        let Some(path) = shell::pick_program("Choose the game's .exe file") else {
             return;
         };
         r(&|s| {
@@ -978,10 +986,10 @@ fn show_displays(ui: &SettingsWindow, state: &State) {
             let mut parts = vec![match d.support {
                 HdrSupport::Supported => "Supports HDR".to_owned(),
                 HdrSupport::LimitedByPolicy => "HDR limited by Windows policy".to_owned(),
-                HdrSupport::Unsupported => "Does not support HDR".to_owned(),
+                HdrSupport::Unsupported => "No HDR support".to_owned(),
             }];
             if let Some(peak) = d.peak.filter(|_| d.support.is_capable()) {
-                parts.push(format!("peak brightness {peak} (reported by the display)"));
+                parts.push(format!("up to {peak}"));
             }
             if d.primary {
                 parts.push("main display".to_owned());
@@ -1102,11 +1110,9 @@ fn show_video(ui: &SettingsWindow, state: &State) {
 fn rtx_note(rtx: Option<bool>) -> &'static str {
     match rtx {
         Some(true) => {
-            "RTX Video HDR is on in the NVIDIA settings. Full-screen video with sound in a player or browser turns HDR on, so the driver can convert it."
+            "RTX Video HDR is on in the NVIDIA app. Any full-screen video with sound turns HDR on, so RTX can convert it."
         }
-        Some(false) => {
-            "RTX Video HDR is off in the NVIDIA settings, so this has no effect now. When it is on, full-screen video with sound turns HDR on, so the driver can convert it."
-        }
+        Some(false) => "RTX Video HDR is off in the NVIDIA app, so this does nothing for now.",
         None => "Needs an NVIDIA RTX graphics card; none was found.",
     }
 }
@@ -1397,7 +1403,7 @@ fn wire_about(ui: &SettingsWindow) {
             let waiting = install_version(&path);
             ui.set_update_check_status(
                 if !ok {
-                    "The check did not succeed; the log has the reason.".to_owned()
+                    "Couldn't check for updates. The log has details.".to_owned()
                 } else if waiting.is_empty() {
                     format!("Huedra {} is up to date.", huedra_core::VERSION)
                 } else {
@@ -1407,7 +1413,7 @@ fn wire_about(ui: &SettingsWindow) {
             );
             let mut note = update_note(&path);
             if !ok {
-                note = format!("The check did not succeed; the log has the reason. {note}");
+                note = format!("Couldn't check for updates. The log has details. {note}");
             }
             ui.set_update_note(note.into());
             ui.set_install_version(install_version(&path).into());
@@ -1421,7 +1427,7 @@ fn wire_about(ui: &SettingsWindow) {
         };
         ui.set_installing_update(true);
         ui.set_update_status(
-            "Downloading and installing. Huedra starts again in the notification area when it is done."
+            "Installing… Huedra restarts in the tray when done."
                 .into(),
         );
         run_program(&ui, &["update"], |ui, ok| {
@@ -1432,14 +1438,14 @@ fn wire_about(ui: &SettingsWindow) {
             // install; the program now in place tells which it was.
             let installed = program_version().is_some_and(|v| v > Version::current());
             if ok && installed {
-                ui.set_update_status("Installed. This window opens again with the new version.".into());
+                ui.set_update_status("Installed. The window reopens with the new version.".into());
                 REOPEN.set(true);
                 let _ = slint::quit_event_loop();
             } else if ok {
-                ui.set_update_status("Huedra is up to date; there was nothing to install.".into());
+                ui.set_update_status("Already up to date.".into());
             } else {
                 ui.set_update_status(
-                    "The update was not installed. If a game or video is using HDR, try again after it ends; otherwise the log has the reason."
+                    "Couldn't install the update. If a game or video is using HDR, try again when it ends. Otherwise, the log has details."
                         .into(),
                 );
             }
@@ -1551,7 +1557,7 @@ fn update_note(path: &std::path::Path) -> String {
     use huedra_core::update::{self, UpdateState, Version};
 
     if !update::is_available() {
-        return "This build has no release address, so no checks are made.".to_owned();
+        return "This build can't check for updates.".to_owned();
     }
     let state = UpdateState::load(path);
     let mut note = if state.last_check == 0 {

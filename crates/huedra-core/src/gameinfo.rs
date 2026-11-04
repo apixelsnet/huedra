@@ -55,8 +55,8 @@ impl WikiHdr {
             Self::Supported => "Supports HDR",
             Self::Limited => "Limited HDR support",
             Self::NotSupported => "No HDR support",
-            Self::Hackable => "HDR through a modification",
-            Self::Unknown => "HDR support not recorded",
+            Self::Hackable => "HDR with a mod",
+            Self::Unknown => "HDR support unknown",
         }
     }
 
@@ -100,7 +100,7 @@ impl GameInfo {
             "true" => Some("Supported"),
             "limited" => Some("Limited support"),
             "false" => Some("Not supported"),
-            "hackable" => Some("Through a modification"),
+            "hackable" => Some("With a mod"),
             _ => None,
         }
     }
