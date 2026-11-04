@@ -4,8 +4,10 @@ Changes that matter to people using Huedra (not the project's own build and work
 
 ## Unreleased
 
+## 1.1.2 — 2026-11-04
+
 ### Changed
-- **Turn HDR on when Steam starts the game** is on by default for every Steam game set to **Enable while running**. Switch it off on a game's page to have HDR wait for the game's window again. With **Only the display showing the content** on, the main display turns on first and HDR moves to the game's display once its window shows.
+- **Turn HDR on when I press Play in Steam** is on by default for every Steam game set to **Turn HDR on**. Switch it off on a game's page to have HDR wait for the game's window again. With **Switch only the display with the game or video** on, the main display turns on first and HDR moves to the game's display once its window shows.
 - Simpler wording throughout the window, the tray menu and Huedra's messages. Settings keep their place and their values; some have new names: a game's **Enable while running**, **Do not change** and **Game controls HDR** are now **Turn HDR on**, **Leave HDR alone** and **Let the game switch HDR**; **Delay before enabling HDR** is **Wait before turning HDR on**; **Scan again** is **Find new games**; **Turn HDR on when Steam starts the game** is **Turn HDR on when I press Play in Steam**; **Only the display showing the content** is **Switch only the display with the game or video**; **SDR video with RTX Video HDR** is **Regular video with RTX Video HDR**; **Words that mark HDR video** is **HDR words in file names**; **Record window titles in the log** is **Write tab and file names to the log**; **"Start with HDR" in the menu of programs** is **Add "Start with HDR" to the right-click menu**. The state reads **HDR on** or **HDR off** instead of SDR.
 
 ## 1.1.1 — 2026-11-04
