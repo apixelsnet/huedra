@@ -4,6 +4,8 @@ Changes that matter to people using Huedra (not the project's own build and work
 
 ## Unreleased
 
+## 1.1.1 — 2026-11-04
+
 ### Added
 - **Turn HDR on when Steam starts the game**, a switch on a Steam game's page under **Start with HDR**. HDR turns on as soon as Steam reports the game running, about a second after you choose **Play** and before the game's window shows, so games that check HDR only while they start (Battlefield 6 grayed out its HDR settings) see it on. Huedra only reads which game Steam reports as running and never touches the game, so it suits games with anti-cheat that refuse to start through the Steam launch option.
 
