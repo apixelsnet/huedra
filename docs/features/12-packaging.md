@@ -199,3 +199,8 @@ A scripted pass on this PC (two HDR displays) with portable copies of a main bui
 ## Result (2026-11-04) — 1.1.1
 - PR #36 (Turn HDR on when Steam starts the game, with the 1.1.1 changelog) merged as 3d76642 with a plain squash merge, no bypass. Release > Run workflow (version 1.1.1): every job green; "Huedra 1.1.1" marked Latest, with `huedra-1.1.1-windows-x64.zip` (5,570,873 bytes), its signature and the extension 0.3.1 zip; the update channel's `huedra.exe` is 10,161,152 bytes.
 - Verified on this PC from the downloads: the zip, `release.toml` and `release-notes.md` signatures verify (trusted comment "huedra 1.1.1"); the exe's size and SHA-256 match `release.toml`; `--version` prints Huedra 1.1.1; the notes carry the Steam start switch; Defender finds nothing.
+
+## Result (2026-11-04) — 1.1.2
+- PR #40 (simpler wording, retaken README tour and Games screenshot) merged as bf54110 and PR #41 (the 1.1.2 changelog) as 6772988, both with a plain squash merge. Release > Run workflow (version 1.1.2) on 6772988: every job green; "Huedra 1.1.2" marked Latest, with `huedra-1.1.2-windows-x64.zip` (5,571,475 bytes), its signature and the extension 0.3.1 zip; the update channel's `huedra.exe` is 10,161,152 bytes.
+- Verified on this PC from the downloads: the zip, `release.toml` and `release-notes.md` signatures verify (trusted comment "huedra 1.1.2"); the exe's size and SHA-256 match `release.toml`, and the zip's exe is the channel's; `--version` prints Huedra 1.1.2; the notes carry the Steam start default and the wording change; Defender finds nothing.
+- PR #42 (the tour GIF's colors) merged after the tag; it changes only the README image, not the release.
