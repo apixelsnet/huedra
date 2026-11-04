@@ -87,9 +87,9 @@ impl GameHdr {
     /// Text shown to the user.
     pub fn label(self) -> &'static str {
         match self {
-            Self::EnableWhileRunning => "Enable while running",
-            Self::DoNotChange => "Do not change",
-            Self::GameControls => "Game controls HDR",
+            Self::EnableWhileRunning => "Turn HDR on",
+            Self::DoNotChange => "Leave HDR alone",
+            Self::GameControls => "Let the game switch HDR",
         }
     }
 }
@@ -504,15 +504,16 @@ impl Config {
         })
     }
 
-    /// Whether "Turn HDR on when Steam starts the game" is on for a game:
+    /// Whether "Turn HDR on when I press Play in Steam" is on for a game:
     /// on unless the game was switched off.
     pub fn steam_start(&self, id: &GameId) -> bool {
         self.game(id).and_then(|s| s.steam_start).unwrap_or(true)
     }
 
     /// The trigger that turns HDR on when Steam starts a game, for a Steam
-    /// game set to Enable while running with "Turn HDR on when Steam starts
-    /// it" on: no delay (its window is not there yet), the game's hold time.
+    /// game set to "Turn HDR on" with "Turn HDR on when I press Play in
+    /// Steam" on: no delay (its window is not there yet), the game's hold
+    /// time.
     pub fn steam_start_trigger(&self, game: &Game) -> Option<Trigger> {
         if game.store != Store::Steam || !self.steam_start(&game.id) {
             return None;
@@ -761,7 +762,7 @@ mod tests {
         config.game_mut(&steam.id).hdr = GameHdr::GameControls;
         assert!(
             config.steam_start_trigger(&steam).is_none(),
-            "only for Enable while running"
+            "only for Turn HDR on"
         );
         let epic = game(Store::Epic, "Fn");
         assert!(config.steam_start_trigger(&epic).is_none(), "Steam only");

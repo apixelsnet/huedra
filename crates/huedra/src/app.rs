@@ -657,12 +657,12 @@ impl App {
     fn launch(&mut self, host: &EventLoop, now: Instant, pid: Pid, program: &str) -> Response {
         if self.launches.contains_key(&pid) {
             return Response::Failed {
-                message: "This launch is already known.".to_owned(),
+                message: "This program is already starting.".to_owned(),
             };
         }
         let Some(watch) = ExitWatch::new(pid.0, self.waker) else {
             return Response::Failed {
-                message: "Huedra could not follow the launch, so HDR was not turned on.".to_owned(),
+                message: "Huedra couldn't track the program's start, so HDR stayed off.".to_owned(),
             };
         };
         self.launches.insert(pid, watch);
@@ -906,7 +906,7 @@ impl App {
             .into_iter()
             .find(|(id, _)| !launch::is_launch(id) && !steam_start::is_steam_start(id));
         if let Some((_, label)) = &game {
-            entries.push(item(MENU_NEVER, &format!("Never for {label}")));
+            entries.push(item(MENU_NEVER, &format!("Never use HDR for {label}")));
         }
         let pause_text = if status.paused_until.is_some() {
             "Resume automatic switching"
@@ -919,10 +919,7 @@ impl App {
         ));
         entries.push(MenuEntry::Separator);
         if let Some(version) = self.update_available {
-            entries.push(item(
-                MENU_UPDATE,
-                &format!("Huedra {version} is available..."),
-            ));
+            entries.push(item(MENU_UPDATE, &format!("Install Huedra {version}...")));
         }
         entries.push(item(MENU_OPEN, "Open Huedra"));
         entries.push(item(MENU_REPORT, "Report a problem..."));
@@ -1007,7 +1004,7 @@ impl App {
                     self.update_available = Some(version);
                     self.offer_update = true;
                     done(&format!(
-                        "Huedra {version} is offered once no game or video uses HDR."
+                        "Huedra {version} will be offered once no game or video is using HDR."
                     ))
                 }
                 _ => Response::Failed {
@@ -1090,7 +1087,7 @@ impl App {
         self.hotkeys = Some(hotkeys);
         for key in refused {
             self.log_line(&format!(
-                "The shortcut {} is used by another program and is not available.",
+                "{} is already used by another program.",
                 key.label()
             ));
         }
@@ -1235,16 +1232,16 @@ impl App {
     fn record(&mut self, notes: &[Note]) {
         for note in notes {
             let (title, kind) = match note.kind {
-                NoteKind::Enabled => ("HDR enabled", HistoryKind::Hdr),
-                NoteKind::Disabled => ("Returned to SDR", HistoryKind::Sdr),
-                NoteKind::External if note.reason.contains("enabled outside") => {
-                    ("No action taken", HistoryKind::External)
+                NoteKind::Enabled => ("HDR turned on", HistoryKind::Hdr),
+                NoteKind::Disabled => ("HDR turned off", HistoryKind::Sdr),
+                NoteKind::External if note.reason.contains("will leave it on") => {
+                    ("Left on", HistoryKind::External)
                 }
                 NoteKind::External => ("Changed outside Huedra", HistoryKind::External),
-                NoteKind::Failed => ("Switch failed", HistoryKind::Failed),
+                NoteKind::Failed => ("Couldn't switch", HistoryKind::Failed),
             };
             let display = self.display_label(&note.display);
-            self.log_line(&format!("{title} on {display}: {}.", note.reason));
+            self.log_line(&format!("{title} ({display}): {}.", note.reason));
             let time = clock::now().hour_minute();
             // Several displays switching for one reason make one entry.
             let same = self.history.front().is_some_and(|last| {
@@ -1302,9 +1299,9 @@ impl App {
         self.tray.show(icon, &tip);
     }
 
-    /// "HDR on · Cyberpunk 2077", "SDR · Automatic".
+    /// "HDR on · Cyberpunk 2077", "HDR off · Automatic".
     fn summary(&self, status: &Status, now: Instant) -> String {
-        let state = if status.hdr_on { "HDR on" } else { "SDR" };
+        let state = if status.hdr_on { "HDR on" } else { "HDR off" };
         let detail = if let Some(minutes) = paused_minutes(status, now) {
             format!("Paused until {}", clock::now().hour_minute_after(minutes))
         } else if status.mode != Mode::Automatic {
@@ -1325,7 +1322,7 @@ impl App {
             .filter(|(_, phase)| !status.hdr_on || phase_is_on(*phase))
             .filter_map(|(id, _)| self.display(id).map(|d| d.number.to_string()))
             .collect();
-        let state = if status.hdr_on { "HDR on" } else { "SDR" };
+        let state = if status.hdr_on { "HDR on" } else { "HDR off" };
         match numbers.as_slice() {
             [] => state.to_owned(),
             [one] => format!("{state}, Display {one}"),
@@ -1333,7 +1330,7 @@ impl App {
         }
     }
 
-    /// "Cyberpunk 2077 is running", "No HDR content".
+    /// "Cyberpunk 2077 is running", "Nothing needs HDR right now".
     fn reason_line(&self, status: &Status, now: Instant) -> String {
         if let Some(minutes) = paused_minutes(status, now) {
             format!("Paused until {}", clock::now().hour_minute_after(minutes))
@@ -1342,7 +1339,7 @@ impl App {
         } else if let Some(reason) = &status.reason {
             format!("{reason} is running")
         } else {
-            "No HDR content".to_owned()
+            "Nothing needs HDR right now".to_owned()
         }
     }
 
@@ -1468,15 +1465,15 @@ fn phase_is_on(phase: Phase) -> bool {
 
 fn phase_detail(phase: Phase, now: Instant) -> String {
     match phase {
-        Phase::Sdr => "SDR".to_owned(),
-        Phase::Waiting { .. } => "SDR; HDR turns on when the start delay ends".to_owned(),
-        Phase::HdrByHuedra => "HDR on, turned on by Huedra".to_owned(),
+        Phase::Sdr => "HDR off".to_owned(),
+        Phase::Waiting { .. } => "HDR off; turning on after the delay".to_owned(),
+        Phase::HdrByHuedra => "HDR on (by Huedra)".to_owned(),
         Phase::Holding { until } => {
             let secs = until.saturating_duration_since(now).as_secs().max(1);
             let unit = if secs == 1 { "second" } else { "seconds" };
-            format!("HDR on; returns to SDR in {secs} {unit}")
+            format!("HDR on; turns off in {secs} {unit}")
         }
-        Phase::HdrExternal => "HDR on, turned on outside Huedra".to_owned(),
+        Phase::HdrExternal => "HDR on (not by Huedra)".to_owned(),
     }
 }
 

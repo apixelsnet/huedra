@@ -259,7 +259,7 @@ impl PlayerHdr {
     pub fn label(self) -> &'static str {
         match self {
             Self::WhenHdrPlays => "When HDR video plays",
-            Self::WhileOpen => "While open",
+            Self::WhileOpen => "Whenever it's open",
             Self::Never => "Never",
         }
     }

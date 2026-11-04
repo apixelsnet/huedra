@@ -50,7 +50,7 @@ Windows HDR makes HDR games and video look as intended, but it makes the desktop
 2. Unpack it into a folder of your own, for example `%LOCALAPPDATA%\Programs\Huedra`.
 3. Start `huedra.exe` and accept the disclaimer.
 
-Huedra opens its window, runs in the notification area in Automatic mode, adds itself to Windows start-up and finds your games. Nothing else needs to be set up. Closing the window keeps Huedra running; starting `huedra.exe` again brings the window back.
+Huedra opens its window, runs in the tray in Automatic mode, adds itself to Windows start-up and finds your games. Nothing else needs to be set up. Closing the window keeps Huedra running; starting `huedra.exe` again brings the window back.
 
 **Requirements:** Windows 10 (version 1903 or later) or Windows 11, 64-bit, and a display that supports HDR.
 
