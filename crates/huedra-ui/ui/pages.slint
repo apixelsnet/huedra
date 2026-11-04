@@ -37,6 +37,8 @@ export struct GameDetail {
     suggestion-index: int,
     // Steam launch option for Launch with HDR; empty for other stores.
     launch-option: string,
+    // Whether HDR turns on when Steam starts it (Steam games only).
+    steam-start: bool,
     // Whether a desktop shortcut can start it with HDR (its program is known).
     shortcut: bool,
     // Result of the last shortcut made for it.
@@ -490,6 +492,7 @@ component GameDetailPanel inherits Card {
     callback open-wiki(string);
     callback remove-game(string);
     callback create-shortcut(string);
+    callback set-steam-start(string, bool);
 
     ScrollView {
         // At least the preferred height, so rows keep their wrapped text
@@ -605,12 +608,38 @@ component GameDetailPanel inherits Card {
                 text: "Start with HDR";
             }
             if root.detail.launch-option != "" || root.detail.shortcut: Caption {
-                text: "For games that go wrong when HDR changes while they start. HDR is turned on first, then the game starts, and HDR stays on until it closes.";
+                text: "For games that go wrong when HDR changes while they start, or that gray out their HDR option because HDR was off when they started. HDR is turned on first, then the game starts, and HDR stays on until it closes.";
+            }
+            if root.detail.launch-option != "": HorizontalLayout {
+                spacing: 16px;
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    spacing: 2px;
+                    Text {
+                        text: "Turn HDR on when Steam starts the game";
+                        font-size: Theme.body-size;
+                        color: Theme.text;
+                        wrap: word-wrap;
+                    }
+                    Caption {
+                        text: "HDR turns on as soon as Steam reports the game running, about a second after you choose Play and before the game's window shows, on the main display until that window appears. Nothing touches the game, so it suits games with anti-cheat.";
+                    }
+                }
+                Centered {
+                    horizontal-stretch: 0;
+                    Toggle {
+                        accessible-label: "Turn HDR on when Steam starts the game";
+                        checked: root.detail.steam-start;
+                        toggled => {
+                            root.set-steam-start(root.detail.id, self.checked);
+                        }
+                    }
+                }
             }
             if root.detail.launch-option != "": VerticalLayout {
                 spacing: 6px;
                 Text {
-                    text: "Steam launch option (in Steam: the game's Properties, General, Launch options)";
+                    text: "Or the Steam launch option (in Steam: the game's Properties, General, Launch options). Games with anti-cheat may refuse to start this way.";
                     font-size: Theme.body-size;
                     color: Theme.text;
                     wrap: word-wrap;
@@ -711,6 +740,7 @@ export component GamesPage inherits Rectangle {
     callback open-wiki(string);
     callback remove-game(string);
     callback create-shortcut(string);
+    callback set-steam-start(string, bool);
 
     property <bool> has-selection: root.details.length > 0;
     property <bool> list-visible: root.wide || !root.has-selection;
@@ -971,6 +1001,9 @@ export component GamesPage inherits Rectangle {
                 }
                 create-shortcut(id) => {
                     root.create-shortcut(id);
+                }
+                set-steam-start(id, on) => {
+                    root.set-steam-start(id, on);
                 }
             }
         }

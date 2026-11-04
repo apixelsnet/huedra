@@ -126,12 +126,14 @@ When **Game information and icons** is on, the page also shows what PCGamingWiki
 
 ### Start a game with HDR already on
 
-Some games behave badly when HDR changes while they start. For these, HDR can be turned on first:
+Some games behave badly when HDR changes while they start, and some check HDR only while they start, so their HDR settings stay grayed out when HDR came on later. For these, HDR can be turned on first:
 
-- **Steam:** the game's page in Huedra shows a launch option. In Steam, right-click the game › **Properties** › **Launch options**, and paste it. It looks like this:
+- **Steam, recommended:** on the game's page, turn on **Turn HDR on when Steam starts the game**. HDR turns on as soon as Steam reports the game running, about a second after you choose **Play** and before the game's window shows, on the main display until that window appears. Huedra only reads which game Steam reports as running, so this suits games with anti-cheat too.
+- **Steam launch option:** the game's page in Huedra also shows a launch option. In Steam, right-click the game › **Properties** › **Launch options**, and paste it. It looks like this:
   ```text
   "C:\path\to\huedra.exe" launch -- %command%
   ```
+  Games with anti-cheat (Battlefield 6, for example) may refuse to start this way; use the switch above instead.
 - **Desktop shortcut:** the game's page has **Create a desktop shortcut**, which starts the game with HDR.
 - **Any program:** turn on **General › "Start with HDR" in the menu of programs**. Then right-click a program in File Explorer, choose **Show more options**, and choose **Start with HDR**.
 

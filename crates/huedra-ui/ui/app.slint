@@ -149,6 +149,7 @@ export component SettingsWindow inherits Window {
     callback open-wiki(string);
     callback remove-game(string);
     callback create-shortcut(string);
+    callback set-game-steam-start(string, bool);
 
     // Displays
     in property <[VideoAppRow]> video-players;
@@ -407,6 +408,9 @@ export component SettingsWindow inherits Window {
                 }
                 create-shortcut(id) => {
                     root.create-shortcut(id);
+                }
+                set-steam-start(id, on) => {
+                    root.set-game-steam-start(id, on);
                 }
             }
             VideoPage {
