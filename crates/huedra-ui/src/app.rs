@@ -701,7 +701,7 @@ fn detail_of(state: &State, game: &Game) -> GameDetail {
             (Store::Steam, Some(exe)) => launch::steam_option(&exe).into(),
             _ => Default::default(),
         },
-        steam_start: settings.is_some_and(|s| s.steam_start),
+        steam_start: state.config.steam_start(&game.id),
         shortcut: can_shortcut(game),
         launch_note: state
             .launch_note
@@ -876,7 +876,8 @@ fn wire_games(ui: &SettingsWindow) {
     ui.on_set_game_steam_start(move |id, on| {
         r(&|s| {
             edit(s, |c| {
-                c.game_mut(&GameId::from_raw(id.as_str())).steam_start = on;
+                // On is the default and is not written.
+                c.game_mut(&GameId::from_raw(id.as_str())).steam_start = (!on).then_some(false);
             });
         });
     });
