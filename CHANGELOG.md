@@ -4,6 +4,9 @@ Changes that matter to people using Huedra (not the project's own build and work
 
 ## Unreleased
 
+### Changed
+- **Turn HDR on when Steam starts the game** is on by default for every Steam game set to **Enable while running**. Switch it off on a game's page to have HDR wait for the game's window again. With **Only the display showing the content** on, the main display turns on first and HDR moves to the game's display once its window shows.
+
 ## 1.1.1 — 2026-11-04
 
 ### Added

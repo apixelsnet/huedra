@@ -318,9 +318,10 @@ pub struct GameSettings {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub launch_with_hdr: bool,
     /// Turn HDR on as soon as Steam reports the game running, before its
-    /// window shows (Steam games only; see `steam_start`).
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub steam_start: bool,
+    /// window shows (Steam games only; see `steam_start`). Unset means on;
+    /// only a game switched off writes `false`. See [`Config::steam_start`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub steam_start: Option<bool>,
 }
 
 impl GameSettings {
@@ -334,7 +335,7 @@ impl GameSettings {
             start_delay: None,
             hold: None,
             launch_with_hdr: false,
-            steam_start: false,
+            steam_start: None,
         }
     }
 }
@@ -503,12 +504,17 @@ impl Config {
         })
     }
 
-    /// The trigger that turns HDR on when Steam starts a game, for a game
-    /// set to Enable while running with "Turn HDR on when Steam starts it"
-    /// on: no delay (no program runs yet), the game's hold time.
+    /// Whether "Turn HDR on when Steam starts the game" is on for a game:
+    /// on unless the game was switched off.
+    pub fn steam_start(&self, id: &GameId) -> bool {
+        self.game(id).and_then(|s| s.steam_start).unwrap_or(true)
+    }
+
+    /// The trigger that turns HDR on when Steam starts a game, for a Steam
+    /// game set to Enable while running with "Turn HDR on when Steam starts
+    /// it" on: no delay (its window is not there yet), the game's hold time.
     pub fn steam_start_trigger(&self, game: &Game) -> Option<Trigger> {
-        let settings = self.game(&game.id)?;
-        if game.store != Store::Steam || !settings.steam_start {
+        if game.store != Store::Steam || !self.steam_start(&game.id) {
             return None;
         }
         self.trigger_for(game).map(|trigger| Trigger {
@@ -730,11 +736,10 @@ mod tests {
         let steam = game(Store::Steam, "2807960");
         let mut config = Config::default();
         assert!(
-            config.steam_start_trigger(&steam).is_none(),
-            "off by default"
+            config.steam_start_trigger(&steam).is_some(),
+            "on by default, with no entry for the game"
         );
         let settings = config.game_mut(&steam.id);
-        settings.steam_start = true;
         settings.start_delay = Some(Seconds(8));
         settings.hold = Some(Seconds(4));
         let trigger = config.steam_start_trigger(&steam);
@@ -743,20 +748,27 @@ mod tests {
             Some((Duration::ZERO, Duration::from_secs(4))),
             "no delay, the game's hold"
         );
+        let text = toml::to_string(&config).unwrap_or_default();
+        assert!(
+            text.contains("steam:2807960") && !text.contains("steam_start"),
+            "the default is not written"
+        );
+        config.game_mut(&steam.id).steam_start = Some(false);
+        assert!(config.steam_start_trigger(&steam).is_none(), "switched off");
+        let text = toml::to_string(&config).unwrap_or_default();
+        assert!(text.contains("steam_start = false"), "off is written");
+        config.game_mut(&steam.id).steam_start = None;
         config.game_mut(&steam.id).hdr = GameHdr::GameControls;
         assert!(
             config.steam_start_trigger(&steam).is_none(),
             "only for Enable while running"
         );
         let epic = game(Store::Epic, "Fn");
-        config.game_mut(&epic.id).steam_start = true;
         assert!(config.steam_start_trigger(&epic).is_none(), "Steam only");
-        let mut off = Config::default();
-        off.game_mut(&steam.id).hold = Some(Seconds(4));
-        let text = toml::to_string(&off).unwrap_or_default();
+        let old = Config::parse("[[game]]\nid = \"steam:1\"\nsteam_start = true\n").ok();
         assert!(
-            text.contains("steam:2807960") && !text.contains("steam_start"),
-            "not written when off"
+            old.is_some_and(|c| c.steam_start(&GameId::from_raw("steam:1"))),
+            "1.1.1 files still read"
         );
     }
 

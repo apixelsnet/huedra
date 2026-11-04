@@ -183,7 +183,7 @@ Select a game to open its settings:
 
 Some games misbehave when HDR changes while they start, or gray out their HDR settings because HDR was still off when they checked. For those, start the game with HDR already on:
 
-- **Steam (recommended):** open the game's page in Huedra and turn on **Turn HDR on when Steam starts the game**. HDR turns on as soon as Steam reports the game running, about a second after you choose **Play** and before the game's window shows. Huedra only reads which game Steam reports as running and never touches the game, so this works with anti-cheat.
+- **Steam (recommended):** **Turn HDR on when Steam starts the game** is on by default (on the game's page in Huedra). HDR turns on as soon as Steam reports the game running, about a second after you choose **Play** and before the game's window shows. Huedra only reads which game Steam reports as running and never touches the game, so this works with anti-cheat.
 - **Steam launch option** (games without anti-cheat; anti-cheat such as Battlefield 6's may end a game started this way):
   1. Open the game's page in Huedra and copy the **Steam launch option**.
   2. In Steam, right-click the game › **Properties** › **General** › **Launch options**.
@@ -418,11 +418,11 @@ Work through these in order:
 The game does not cope with HDR changing while it starts. Either:
 
 - set a **Delay before enabling HDR** so HDR changes after it has started, or
-- start it with HDR already on: for a Steam game turn on **Turn HDR on when Steam starts the game**, otherwise use a desktop shortcut or **Start with HDR** (see [section 5](#games-that-need-hdr-on-before-they-start)).
+- start it with HDR already on: for a Steam game check that **Turn HDR on when Steam starts the game** is on, otherwise use a desktop shortcut or **Start with HDR** (see [section 5](#games-that-need-hdr-on-before-they-start)).
 
 #### A game's HDR settings are grayed out
 
-The game checked HDR while it started, before Huedra turned it on: Huedra waits for the game's window. Start it with HDR already on (see above). For a Steam game, **Turn HDR on when Steam starts the game** is the way that also works with anti-cheat.
+The game checked HDR while it started, before Huedra turned it on: Huedra waits for the game's window. Start it with HDR already on (see above). For a Steam game, **Turn HDR on when Steam starts the game** (on by default) is the way that also works with anti-cheat.
 
 #### HDR switches off and on twice when a game starts or restarts
 
