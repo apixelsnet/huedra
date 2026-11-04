@@ -161,3 +161,6 @@ Code: the texts in `crates/huedra-ui/ui/pages.slint` and `app.slint`, `crates/hu
 - History titles: HDR turned on, HDR turned off, Left on, Changed outside Huedra, Couldn't switch. Reasons read "Cyberpunk 2077 closed (HDR kept on 10 seconds longer)". The tray's "Never for (game)" reads "Never use HDR for (game)" and the update item "Install Huedra (version)...". The log line is "HDR turned on (Display 1 (MO27Q3)): ...".
 - The settings file is unchanged: only the shown texts changed, not the keys or values.
 - Do not change and Game controls HDR still behave the same; only their names changed.
+- README images retaken with this build: `docs/assets/huedra-tour.gif` (820x558, 219 frames, 2.3 MB, one shared palette) and `docs/assets/screenshot-games.png` (the tour's Games frame). Taken on a hidden desktop from a portable copy with default settings (Start with Windows shows off, as for any portable copy) and a build carrying the release key and address, so Updates shows Ask before installing; a test tray switched the main display to Always HDR for about 10 s and back.
+
+Verified: build green (fmt, clippy, tests, release, 10.1 MB), Defender scan clean; every page captured on the hidden desktop with the new texts, none cut off or overflowing in the 1040x680 window.
