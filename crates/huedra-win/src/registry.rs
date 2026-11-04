@@ -1,20 +1,24 @@
 //! Registry access: reading store keys, the start-up entry, the "Start with
-//! HDR" entry in Explorer's menu, the Windows light or dark app setting and
-//! NVIDIA's RTX Video HDR switch.
+//! HDR" entry in Explorer's menu, the Windows light or dark app setting,
+//! NVIDIA's RTX Video HDR switch and the game Steam runs.
 //! Everything Huedra writes is under `HKEY_CURRENT_USER` and removed by
 //! [`remove_all`].
 //! Feature docs: `04-game-library.md`, `05-video.md`, `06-launch-with-hdr.md`,
 //! `08-settings-window.md`, `12-packaging.md`.
 
 use huedra_core::library::registry::RegistryEntry;
-use windows::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_SUCCESS};
+use windows::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_SUCCESS, WAIT_OBJECT_0};
 use windows::Win32::System::Registry::{
     HKEY, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_NOTIFY, KEY_READ, KEY_WOW64_32KEY,
     REG_NOTIFY_CHANGE_LAST_SET, REG_SZ, RRF_RT_REG_DWORD, RRF_RT_REG_EXPAND_SZ, RRF_RT_REG_SZ,
     RegCloseKey, RegDeleteKeyValueW, RegDeleteKeyW, RegDeleteTreeW, RegEnumKeyExW, RegGetValueW,
     RegNotifyChangeKeyValue, RegOpenKeyExW, RegQueryInfoKeyW, RegSetKeyValueW,
 };
+use windows::Win32::System::Threading::{CreateEventW, INFINITE, WaitForSingleObject};
 use windows::core::{HSTRING, PWSTR};
+
+use crate::event_loop::{WM_STEAM_APP, Waker};
+use crate::handle::OwnedHandle;
 
 const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
 const RUN_VALUE: &str = "Huedra";
@@ -28,6 +32,10 @@ const MENU_PARENTS: [&str; 2] = [
 const MENU_COMMAND_KEY: &str = r"Software\Classes\exefile\shell\Huedra.StartWithHdr\command";
 const THEME_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
 const THEME_VALUE: &str = "AppsUseLightTheme";
+/// Steam's key for this user; [`STEAM_RUNNING_VALUE`] names the game it
+/// runs.
+const STEAM_KEY: &str = r"Software\Valve\Steam";
+const STEAM_RUNNING_VALUE: &str = "RunningAppID";
 /// The display adapters' device class; each adapter has a numbered subkey
 /// (`0000`, `0001`, ...) where its driver keeps settings.
 const DISPLAY_CLASS_KEY: &str =
@@ -318,12 +326,53 @@ pub fn apps_use_light_theme() -> bool {
 /// setting changes, on a thread of its own that lives as long as the
 /// process. Returns `false` when the setting cannot be watched.
 pub fn watch_light_theme(changed: impl Fn(bool) + Send + 'static) -> bool {
+    let mut light = apps_use_light_theme();
+    watch_values(THEME_KEY, "huedra-theme", move || {
+        let now = apps_use_light_theme();
+        if now != light {
+            light = now;
+            changed(light);
+        }
+    })
+}
+
+/// The app id of the game Steam runs, 0 when none (or no Steam). Steam
+/// writes it within about a second of starting a game's first program,
+/// and 0 again a moment after the game has ended.
+pub fn steam_running_app() -> u32 {
+    open(Hive::CurrentUser, STEAM_KEY)
+        .and_then(|key| read_dword(&key, STEAM_RUNNING_VALUE))
+        .unwrap_or(0)
+}
+
+/// Reports [`Event::SteamApp`](crate::event_loop::Event::SteamApp) each
+/// time [`steam_running_app`] changes, from a thread of its own that lives
+/// as long as the process. Only reads Steam's key in the registry; nothing
+/// touches Steam or the game. Returns `false` when Steam's key cannot be
+/// watched (Steam was never installed for this user).
+pub fn watch_steam_running_app(waker: Waker) -> bool {
+    let mut running = steam_running_app();
+    watch_values(STEAM_KEY, "huedra-steam", move || {
+        let now = steam_running_app();
+        if now != running {
+            running = now;
+            waker.post(WM_STEAM_APP, now as usize);
+        }
+    })
+}
+
+/// Calls `changed` whenever values directly under the `HKEY_CURRENT_USER`
+/// key `path` may have been written, on a thread of its own that lives as
+/// long as the process. The notification is armed before each call, so a
+/// write that lands while `changed` reads is not missed; `changed` also
+/// runs once at the start and compares with what it read before.
+fn watch_values(path: &str, thread: &str, mut changed: impl FnMut() + Send + 'static) -> bool {
     let mut key = HKEY::default();
     // SAFETY: opens a key for change notifications; `key` receives the handle.
     let status = unsafe {
         RegOpenKeyExW(
             HKEY_CURRENT_USER,
-            &HSTRING::from(THEME_KEY),
+            &HSTRING::from(path),
             None,
             KEY_NOTIFY,
             &mut key,
@@ -332,38 +381,54 @@ pub fn watch_light_theme(changed: impl Fn(bool) + Send + 'static) -> bool {
     if status != ERROR_SUCCESS {
         return false;
     }
-    let key = Watched(Key(key));
+    let key = Key(key);
+    // SAFETY: an unnamed auto-reset event, closed by `OwnedHandle`.
+    let Ok(event) = (unsafe { CreateEventW(None, false, false, None) }) else {
+        return false;
+    };
+    let watched = Watched {
+        key,
+        event: OwnedHandle(event),
+    };
     std::thread::Builder::new()
-        .name("huedra-theme".into())
+        .name(thread.into())
         .spawn(move || {
-            // Moves the whole key in (a closure would otherwise take only
-            // the handle field, which is not `Send`).
-            let key = key;
-            let mut light = apps_use_light_theme();
+            // Moves the whole value in (a closure would otherwise take only
+            // the handle fields, which are not `Send`).
+            let watched = watched;
             loop {
-                // SAFETY: waits on our own open key until a value under it
-                // changes; no event handle, so the call blocks.
+                // SAFETY: arms a one-shot notification on our own open key;
+                // the event is signaled at the next write under it.
                 let status = unsafe {
-                    RegNotifyChangeKeyValue(key.0.0, false, REG_NOTIFY_CHANGE_LAST_SET, None, false)
+                    RegNotifyChangeKeyValue(
+                        watched.key.0,
+                        false,
+                        REG_NOTIFY_CHANGE_LAST_SET,
+                        Some(watched.event.0),
+                        true,
+                    )
                 };
                 if status != ERROR_SUCCESS {
                     return;
                 }
-                let now = apps_use_light_theme();
-                if now != light {
-                    light = now;
-                    changed(light);
+                changed();
+                // SAFETY: waits on our own event without a time limit.
+                if unsafe { WaitForSingleObject(watched.event.0, INFINITE) } != WAIT_OBJECT_0 {
+                    return;
                 }
             }
         })
         .is_ok()
 }
 
-/// The key watched by [`watch_light_theme`], moved to its thread.
-struct Watched(Key);
+/// A key watched by [`watch_values`] and its event, moved to its thread.
+struct Watched {
+    key: Key,
+    event: OwnedHandle,
+}
 
-// SAFETY: a registry key handle is not tied to the thread that opened it,
-// and only the watching thread uses it after the move.
+// SAFETY: registry key and event handles are not tied to the thread that
+// opened them, and only the watching thread uses them after the move.
 unsafe impl Send for Watched {}
 
 fn read_dword(key: &Key, name: &str) -> Option<u32> {

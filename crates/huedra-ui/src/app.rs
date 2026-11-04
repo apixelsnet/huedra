@@ -701,6 +701,7 @@ fn detail_of(state: &State, game: &Game) -> GameDetail {
             (Store::Steam, Some(exe)) => launch::steam_option(&exe).into(),
             _ => Default::default(),
         },
+        steam_start: settings.is_some_and(|s| s.steam_start),
         shortcut: can_shortcut(game),
         launch_note: state
             .launch_note
@@ -869,6 +870,14 @@ fn wire_games(ui: &SettingsWindow) {
                 let note = create_shortcut(game);
                 s.launch_note = Some((id, note));
             }
+        });
+    });
+    let r = refresh.clone();
+    ui.on_set_game_steam_start(move |id, on| {
+        r(&|s| {
+            edit(s, |c| {
+                c.game_mut(&GameId::from_raw(id.as_str())).steam_start = on;
+            });
         });
     });
     let r = refresh.clone();

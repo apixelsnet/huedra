@@ -27,6 +27,7 @@ use crate::hotkey::Hotkey;
 pub(crate) const WM_TRAY: u32 = WM_APP + 1;
 pub(crate) const WM_PROCESS_EXIT: u32 = WM_APP + 2;
 pub(crate) const WM_WAKE: u32 = WM_APP + 3;
+pub(crate) const WM_STEAM_APP: u32 = WM_APP + 4;
 /// `NIN_KEYSELECT`: the icon was chosen with the keyboard.
 const NIN_KEYSELECT: u32 = NIN_SELECT | 1;
 const CLASS_NAME: PCWSTR = w!("HuedraTray");
@@ -57,6 +58,9 @@ pub enum Event {
     TaskbarCreated,
     /// Another thread has work for the loop (see [`Waker`]).
     Wake,
+    /// Steam reports another running game: its app id, 0 for none (see
+    /// [`crate::registry::watch_steam_running_app`]).
+    SteamApp(u32),
 }
 
 /// Identifies a timer.
@@ -248,6 +252,7 @@ unsafe extern "system" fn window_proc(
         },
         WM_PROCESS_EXIT => u32::try_from(wparam.0).ok().map(Event::ProcessExited),
         WM_WAKE => Some(Event::Wake),
+        WM_STEAM_APP => u32::try_from(wparam.0).ok().map(Event::SteamApp),
         m if m != 0 && m == TASKBAR_CREATED.get() => Some(Event::TaskbarCreated),
         _ => None,
     };

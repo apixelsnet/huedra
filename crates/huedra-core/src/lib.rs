@@ -25,6 +25,7 @@ pub mod locations;
 pub mod logfile;
 pub mod paths;
 pub mod report;
+pub mod steam_start;
 pub mod tracker;
 pub mod update;
 pub mod video;

@@ -317,6 +317,10 @@ pub struct GameSettings {
     /// Start through `huedra launch` (shown in the Games page).
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub launch_with_hdr: bool,
+    /// Turn HDR on as soon as Steam reports the game running, before its
+    /// window shows (Steam games only; see `steam_start`).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub steam_start: bool,
 }
 
 impl GameSettings {
@@ -330,6 +334,7 @@ impl GameSettings {
             start_delay: None,
             hold: None,
             launch_with_hdr: false,
+            steam_start: false,
         }
     }
 }
@@ -495,6 +500,20 @@ impl Config {
                 .unwrap_or(self.general.hold)
                 .duration(),
             target: Target::All,
+        })
+    }
+
+    /// The trigger that turns HDR on when Steam starts a game, for a game
+    /// set to Enable while running with "Turn HDR on when Steam starts it"
+    /// on: no delay (no program runs yet), the game's hold time.
+    pub fn steam_start_trigger(&self, game: &Game) -> Option<Trigger> {
+        let settings = self.game(&game.id)?;
+        if game.store != Store::Steam || !settings.steam_start {
+            return None;
+        }
+        self.trigger_for(game).map(|trigger| Trigger {
+            delay: Duration::ZERO,
+            ..trigger
         })
     }
 
@@ -697,6 +716,48 @@ mod tests {
         assert!(config.is_managed("x"), "managed by default");
         config.displays.unmanaged.push("X".into());
         assert!(!config.is_managed("x"), "excluded");
+    }
+
+    #[test]
+    fn steam_start_trigger() {
+        let game = |store: Store, id: &str| Game {
+            id: GameId::new(store, id),
+            name: "Battlefield 6".into(),
+            store,
+            install_dir: r"D:\Steam\common\Battlefield 6".into(),
+            exe: None,
+        };
+        let steam = game(Store::Steam, "2807960");
+        let mut config = Config::default();
+        assert!(
+            config.steam_start_trigger(&steam).is_none(),
+            "off by default"
+        );
+        let settings = config.game_mut(&steam.id);
+        settings.steam_start = true;
+        settings.start_delay = Some(Seconds(8));
+        settings.hold = Some(Seconds(4));
+        let trigger = config.steam_start_trigger(&steam);
+        assert_eq!(
+            trigger.as_ref().map(|t| (t.delay, t.hold)),
+            Some((Duration::ZERO, Duration::from_secs(4))),
+            "no delay, the game's hold"
+        );
+        config.game_mut(&steam.id).hdr = GameHdr::GameControls;
+        assert!(
+            config.steam_start_trigger(&steam).is_none(),
+            "only for Enable while running"
+        );
+        let epic = game(Store::Epic, "Fn");
+        config.game_mut(&epic.id).steam_start = true;
+        assert!(config.steam_start_trigger(&epic).is_none(), "Steam only");
+        let mut off = Config::default();
+        off.game_mut(&steam.id).hold = Some(Seconds(4));
+        let text = toml::to_string(&off).unwrap_or_default();
+        assert!(
+            text.contains("steam:2807960") && !text.contains("steam_start"),
+            "not written when off"
+        );
     }
 
     #[test]

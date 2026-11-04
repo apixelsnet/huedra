@@ -19,6 +19,7 @@ use huedra_core::ipc::{DisplayReport, HistoryEntry, HistoryKind, Request, Respon
 use huedra_core::launch;
 use huedra_core::library::{GameId, Library};
 use huedra_core::logfile::{self, LogFile};
+use huedra_core::steam_start::{self, SteamStarts};
 use huedra_core::tracker::{Exit, Pid, Tracker};
 use huedra_core::update::{self, UpdateState, Version};
 use huedra_core::video::{self, PlayerHdr, VideoApp, VideoKind};
@@ -38,6 +39,8 @@ const FOLLOW_TIMER: TimerId = TimerId(2);
 const VIDEO_TIMER: TimerId = TimerId(3);
 /// The daily update check; runs only in builds that can update.
 const UPDATE_TIMER: TimerId = TimerId(4);
+/// Ends early starts whose game never appeared (see `steam_start::GRACE`).
+const STEAM_TIMER: TimerId = TimerId(5);
 /// The first check waits this long after start, so it does not compete
 /// with Windows starting up.
 const UPDATE_FIRST_DELAY: Duration = Duration::from_secs(120);
@@ -128,6 +131,8 @@ struct App {
     video_polling: bool,
     /// Running `huedra launch` processes; HDR is held while each lives.
     launches: HashMap<Pid, ExitWatch>,
+    /// Steam games that got HDR when Steam started them.
+    steam_starts: SteamStarts,
     displays: Vec<Display>,
     /// The daily check came due while a game or video used HDR; it runs
     /// once they end.
@@ -185,6 +190,7 @@ impl App {
             foreground: 0,
             video_polling: false,
             launches: HashMap::new(),
+            steam_starts: SteamStarts::new(registry::steam_running_app()),
             update_due: false,
             update_available,
             offer_update: false,
@@ -199,6 +205,8 @@ impl App {
             pipe,
         };
         app.register_hotkeys(host);
+        // Read only; without Steam there is nothing to watch.
+        registry::watch_steam_running_app(host.waker());
         app.apply(host, now, outcome);
         if let Some(pid) = foreground::foreground_pid() {
             app.on_foreground(host, now, pid);
@@ -241,6 +249,8 @@ impl App {
                 self.apply(host, now, outcome);
             }
             Event::Timer(FOLLOW_TIMER) => self.on_follow_tick(host, now),
+            Event::Timer(STEAM_TIMER) => self.on_steam_tick(host, now),
+            Event::SteamApp(app_id) => self.on_steam_app(host, now, app_id),
             Event::Timer(VIDEO_TIMER) => self.on_video_tick(host, now),
             Event::Timer(UPDATE_TIMER) => {
                 // Timers repeat: the next check is a day later.
@@ -321,6 +331,7 @@ impl App {
             self.find_game_window(pid);
             trigger.target = self.game_target(&id);
             self.log_line(&format!("{} started.", trigger.label));
+            self.follow_steam_start(host, now, &id, &trigger.target);
             let outcome = self.engine.trigger_started(now, id, trigger);
             self.apply(host, now, outcome);
         } else {
@@ -380,7 +391,9 @@ impl App {
             return;
         };
         self.find_game_window(pid);
-        let outcome = self.engine.retarget(now, &id, self.game_target(&id));
+        let target = self.game_target(&id);
+        self.follow_steam_start(host, now, &id, &target);
+        let outcome = self.engine.retarget(now, &id, target);
         if outcome != Outcome::default() {
             self.apply(host, now, outcome);
         }
@@ -569,6 +582,7 @@ impl App {
                 self.log_line(&format!("{label} ended."));
                 let outcome = self.engine.trigger_ended(now, &id);
                 self.apply(host, now, outcome);
+                self.end_steam_start(host, now, &id);
             }
             Exit::Following => {
                 self.log_line("A launcher closed; looking for the game it started.");
@@ -608,6 +622,7 @@ impl App {
         for id in self.tracker.expire(now) {
             let outcome = self.engine.trigger_ended(now, &id);
             self.apply(host, now, outcome);
+            self.end_steam_start(host, now, &id);
         }
         if !self.tracker.is_following() {
             host.kill_timer(FOLLOW_TIMER);
@@ -662,20 +677,11 @@ impl App {
             .unwrap_or(self.config.general.hold)
             .duration();
         self.log_line(&format!("{label} is starting with HDR."));
-        // Before the program starts it has no window to follow: the main
-        // display turns on, where games open by default (every managed
-        // display when HDR does not follow the content).
-        let main: BTreeSet<u32> = self
-            .displays
-            .iter()
-            .filter(|d| d.primary)
-            .map(|d| d.number)
-            .collect();
         let trigger = Trigger {
             label,
             delay: Duration::ZERO,
             hold,
-            target: self.target_for(&main),
+            target: self.main_target(),
         };
         let outcome = self
             .engine
@@ -695,6 +701,103 @@ impl App {
         };
         Response::Done {
             message: message.to_owned(),
+        }
+    }
+
+    /// The displays for a game that has no window yet: the main display,
+    /// where games open by default (every managed display when HDR does
+    /// not follow the content).
+    fn main_target(&self) -> Target {
+        let main: BTreeSet<u32> = self
+            .displays
+            .iter()
+            .filter(|d| d.primary)
+            .map(|d| d.number)
+            .collect();
+        self.target_for(&main)
+    }
+
+    // --- HDR when Steam starts a game ------------------------------------
+
+    /// Steam reports another running game. A game set to "Turn HDR on when
+    /// Steam starts it" gets HDR now, before its window shows.
+    fn on_steam_app(&mut self, host: &EventLoop, now: Instant, app_id: u32) {
+        if let Some(app_id) = self.steam_starts.steam_reports(app_id, now) {
+            let trigger = self
+                .library
+                .get(&steam_start::game_id(app_id))
+                .and_then(|game| self.config.steam_start_trigger(game));
+            if let Some(mut trigger) = trigger {
+                self.steam_starts.started(app_id);
+                trigger.target = self.main_target();
+                self.log_line(&format!(
+                    "Steam is starting {}; HDR turns on before its window shows.",
+                    trigger.label
+                ));
+                let outcome =
+                    self.engine
+                        .trigger_started(now, steam_start::trigger_id(app_id), trigger);
+                self.apply(host, now, outcome);
+            }
+        }
+        self.schedule_steam_tick(host, now);
+    }
+
+    /// Ends the early starts of games that Steam stopped reporting and
+    /// that never appeared.
+    fn on_steam_tick(&mut self, host: &EventLoop, now: Instant) {
+        let tracker = &self.tracker;
+        let ended = self.steam_starts.expire(now, |app_id| {
+            tracker.is_active(&TriggerId::new(steam_start::game_id(app_id).as_str()))
+        });
+        for app_id in ended {
+            let id = steam_start::trigger_id(app_id);
+            let label = self.engine.label(&id).unwrap_or("A Steam game").to_owned();
+            self.log_line(&format!(
+                "{label} did not appear after Steam started it; HDR is no longer kept on for it."
+            ));
+            let outcome = self.engine.trigger_ended(now, &id);
+            self.apply(host, now, outcome);
+        }
+        self.schedule_steam_tick(host, now);
+    }
+
+    /// Sets [`STEAM_TIMER`] for the next grace end, or stops it.
+    fn schedule_steam_tick(&self, host: &EventLoop, now: Instant) {
+        match self.steam_starts.next_deadline() {
+            Some(at) => host.set_timer(STEAM_TIMER, at.saturating_duration_since(now)),
+            None => host.kill_timer(STEAM_TIMER),
+        }
+    }
+
+    /// Moves a game's early start to the displays the game itself wants,
+    /// once its window is known; until then it keeps the main display.
+    fn follow_steam_start(&mut self, host: &EventLoop, now: Instant, id: &TriggerId, to: &Target) {
+        let Some(app_id) = GameId::from_raw(id.as_str()).steam_app_id() else {
+            return;
+        };
+        if !self.steam_starts.is_starting(app_id) || *to == Target::Only(BTreeSet::new()) {
+            return;
+        }
+        let outcome = self
+            .engine
+            .retarget(now, &steam_start::trigger_id(app_id), to.clone());
+        if outcome != Outcome::default() {
+            self.apply(host, now, outcome);
+        }
+    }
+
+    /// The game's own trigger ended: its early start ends with it.
+    fn end_steam_start(&mut self, host: &EventLoop, now: Instant, id: &TriggerId) {
+        let Some(app_id) = GameId::from_raw(id.as_str()).steam_app_id() else {
+            return;
+        };
+        if self.steam_starts.game_ended(app_id) {
+            let outcome = self
+                .engine
+                .trigger_ended(now, &steam_start::trigger_id(app_id));
+            self.apply(host, now, outcome);
+            self.schedule_steam_tick(host, now);
         }
     }
 
@@ -776,6 +879,7 @@ impl App {
         ));
         let outcome = self.engine.trigger_ended(now, id);
         self.apply(host, now, outcome);
+        self.end_steam_start(host, now, id);
     }
 
     fn on_menu(&mut self, host: &EventLoop, now: Instant) -> Flow {
@@ -794,12 +898,13 @@ impl App {
             radio(MENU_ALWAYS_SDR, "Always SDR", mode == Mode::AlwaysSdr),
             MenuEntry::Separator,
         ];
-        // "Never for" applies to games and video programs, not to launches.
+        // "Never for" applies to games and video programs, not to launches
+        // or to Steam starting a game (the game's own entry ends both).
         let game = self
             .engine
             .active_triggers()
             .into_iter()
-            .find(|(id, _)| !launch::is_launch(id));
+            .find(|(id, _)| !launch::is_launch(id) && !steam_start::is_steam_start(id));
         if let Some((_, label)) = &game {
             entries.push(item(MENU_NEVER, &format!("Never for {label}")));
         }
