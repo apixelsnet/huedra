@@ -4,7 +4,15 @@ Changes that matter to people using Huedra (not the project's own build and work
 
 ## Unreleased
 
+### Added
+- **Status** is a dashboard: **Now running** names the game or player that holds HDR, with a link to its settings; **Displays** shows each display's state and whether Huedra controls it; **Pause** sits in the **Mode** card with the shortcuts as key labels; **Recent changes** are grouped by day, with the latest five shown first.
+- **Games** says more: an **HDR support** column from PCGamingWiki, the setting reads **Default** unless a game has its own, a violet marker where PCGamingWiki suggests another setting, and filters for **Supports HDR**, **Own setting** and **Suggestions**. A notice offers to review the suggestions or apply them all at once. A **cover grid** can replace the list (the buttons beside Scan again).
+- One kind of notice for everything the window has to tell: Huedra not running, a switch that failed, and a new version (**See what's new**).
+
 ### Changed
+- **General** is now **Settings**, pinned at the foot of the navigation pane, as in Windows 11's own apps. `huedra settings settings` opens it; `huedra settings general` still works. Timing, keyboard shortcuts, the advanced settings and About fold into sections that sum up their values.
+- **Managed** is now the switch **Let Huedra control HDR**, and each display says **Controlled by Huedra**, **Not controlled by Huedra** or **No HDR support**.
+- Pages stop at 1000 pixels wide, so on a maximized window the switches stay close to their labels.
 - **Turn HDR on when Steam starts the game** is on by default for every Steam game set to **Enable while running**. Switch it off on a game's page to have HDR wait for the game's window again. With **Only the display showing the content** on, the main display turns on first and HDR moves to the game's display once its window shows.
 
 ## 1.1.1 — 2026-11-04

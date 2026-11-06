@@ -3,17 +3,39 @@
 
 import { ScrollView, ListView, AboutSlint } from "std-widgets.slint";
 import { Theme } from "theme.slint";
-import { FocusRing, Toggle, ActionButton, SearchBox, NumberBox, Dropdown, CopyField, TextBox } from "controls.slint";
+import {
+    FocusRing, Toggle, ActionButton, SearchBox, NumberBox, Dropdown, CopyField, TextBox,
+    IconButton, LinkButton, KeyCap, FilterChip, InfoBar, Expander, SubRow
+} from "controls.slint";
 
 export struct GameRow {
     id: string,
     name: string,
     icon: image,
     initial: string,
+    // The store, or "Running · Steam" while it runs.
     store: string,
-    detail: string,
+    // HDR support from PCGamingWiki: hdr, limited, no, mod, unknown,
+    // pending (not looked up yet), or empty while game information is off.
+    hdr: string,
+    // Its HDR setting; "Default" unless the game has its own.
     setting: string,
+    own: bool,
+    // The suggested setting where it differs from the current one.
+    suggestion: string,
     running: bool,
+    // 0 to 5: the tint of its tile in the cover grid.
+    tint: int,
+}
+
+// What holds HDR now: a game, a video player, or nothing (kind "none").
+export struct NowRow {
+    kind: string,
+    id: string,
+    name: string,
+    icon: image,
+    initial: string,
+    detail: string,
 }
 
 export struct GameDetail {
@@ -51,8 +73,11 @@ export struct DisplayRow {
     title: string,
     detail: string,
     capable: bool,
-    managed: bool,
+    // Huedra may change HDR on it ("Let Huedra control HDR").
+    controlled: bool,
     hdr-on: bool,
+    // The line under its name on Status: "Main display · Controlled by Huedra".
+    status: string,
 }
 
 export struct VideoAppRow {
@@ -71,6 +96,8 @@ export struct SiteRow {
 }
 
 export struct HistoryRow {
+    // The day heading ("Today") on the first change of each day, else empty.
+    group: string,
     time: string,
     title: string,
     detail: string,
@@ -192,22 +219,91 @@ component SettingRow inherits Card {
     }
 }
 
+// A pill label. Kinds: hdr (pink), sdr (gray), external and suggestion
+// (violet), failed (pink outline), out (outline only, for "not recorded").
 component Badge inherits Rectangle {
     in property <string> text;
-    in property <string> kind; // hdr, sdr, external, failed
+    in property <string> kind;
+    in property <bool> dot;
     height: 22px;
-    width: label.preferred-width + 16px;
+    width: layout.preferred-width;
     border-radius: 11px;
-    background: kind == "hdr" ? #FF2D6F26 : kind == "external" ? #9B3DFF26 : kind == "failed" ? #FF2D6F14 : #A9A4B633;
-    border-width: kind == "failed" ? 1px : 0px;
-    border-color: Theme.hdr-label;
-    label := Text {
+    background: kind == "hdr" ? #FF2D6F26 : kind == "external" || kind == "suggestion" ? #9B3DFF26
+        : kind == "failed" ? #FF2D6F14 : kind == "out" ? transparent : #A9A4B633;
+    border-width: kind == "failed" || kind == "out" ? 1px : 0px;
+    border-color: kind == "out" ? Theme.border : Theme.hdr-label;
+    accessible-role: AccessibleRole.text;
+    accessible-label: root.text;
+    layout := HorizontalLayout {
+        padding-left: 9px;
+        padding-right: 9px;
+        spacing: 5px;
+        if root.dot: VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 7px;
+                height: 7px;
+                border-radius: 3.5px;
+                background: label.color;
+            }
+        }
+        label := Text {
+            text: root.text;
+            font-size: Theme.caption-size;
+            font-weight: kind == "out" ? 400 : 600;
+            color: kind == "hdr" || kind == "failed" ? Theme.hdr-label
+                : kind == "external" || kind == "suggestion" ? Theme.violet-text : Theme.text-muted;
+            vertical-alignment: center;
+            accessible-role: none;
+        }
+    }
+}
+
+// The HDR support badge of a game, from GameRow.hdr.
+component HdrBadge inherits Badge {
+    in property <string> support;
+    kind: support == "hdr" || support == "limited" ? "hdr" : support == "no" ? "sdr"
+        : support == "mod" ? "suggestion" : "out";
+    text: support == "hdr" ? "HDR" : support == "limited" ? "Limited HDR" : support == "no" ? "No HDR"
+        : support == "mod" ? "HDR mod" : support == "pending" ? "Looking up" : "Not recorded";
+}
+
+// A tile on a dashboard card: raised, with an icon, two lines and an
+// action on the right.
+component Tile inherits Rectangle {
+    min-height: 56px;
+    border-radius: Theme.radius-control + 2px;
+    background: Theme.surface-raised;
+    HorizontalLayout {
+        padding-left: 12px;
+        padding-right: 12px;
+        padding-top: 8px;
+        padding-bottom: 8px;
+        spacing: 12px;
+        @children
+    }
+}
+
+// The two lines of text in a tile or row.
+component TwoLines inherits VerticalLayout {
+    in property <string> title;
+    in property <string> text;
+    in property <bool> bold;
+    horizontal-stretch: 1;
+    alignment: center;
+    spacing: 2px;
+    Text {
+        text: root.title;
+        font-size: Theme.body-size;
+        font-weight: root.bold ? 600 : 400;
+        color: Theme.text;
+        wrap: word-wrap;
+    }
+    if root.text != "": Text {
         text: root.text;
         font-size: Theme.caption-size;
-        font-weight: 600;
-        color: kind == "hdr" || kind == "failed" ? Theme.hdr-label : kind == "external" ? Theme.violet : Theme.text-muted;
-        horizontal-alignment: center;
-        vertical-alignment: center;
+        color: Theme.text-muted;
+        wrap: word-wrap;
     }
 }
 
@@ -353,6 +449,133 @@ component HeroCard inherits Rectangle {
 
 // ---- Status -----------------------------------------------------------
 
+// The game or player that holds HDR, with a link to its settings.
+component NowCard inherits Card {
+    in property <[NowRow]> now;
+    in property <string> idle;
+    callback open-game(string);
+    callback open-video();
+    VerticalLayout {
+        padding: 16px;
+        padding-top: 14px;
+        spacing: 10px;
+        alignment: start;
+        SectionTitle {
+            text: "Now running";
+        }
+        if root.now.length == 0: Tile {
+            Centered {
+                Rectangle {
+                    width: 32px;
+                    height: 32px;
+                    border-radius: Theme.radius-control;
+                    background: Theme.border;
+                    Text {
+                        text: "–";
+                        color: Theme.text-muted;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+            TwoLines {
+                title: "No game or HDR video";
+                text: root.idle;
+            }
+        }
+        for item in root.now: Tile {
+            Centered {
+                if item.kind == "game": GameIcon {
+                    icon: item.icon;
+                    initial: item.initial;
+                }
+                if item.kind != "game": Rectangle {
+                    width: 32px;
+                    height: 32px;
+                    border-radius: Theme.radius-control;
+                    background: #3341E640;
+                    Text {
+                        text: "\u{E714}";
+                        font-family: Theme.icons;
+                        font-size: 16px;
+                        color: Theme.text;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+            TwoLines {
+                title: item.name;
+                text: item.detail;
+                bold: true;
+            }
+            if item.kind == "game" || item.kind == "video": Centered {
+                LinkButton {
+                    text: item.kind == "game" ? "Game settings" : "Player settings";
+                    clicked => {
+                        if item.kind == "game" {
+                            root.open-game(item.id);
+                        } else {
+                            root.open-video();
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Each display's state and whether Huedra controls it.
+component DisplaysCard inherits Card {
+    in property <[DisplayRow]> displays;
+    callback open-displays();
+    VerticalLayout {
+        padding: 16px;
+        padding-top: 14px;
+        spacing: 10px;
+        alignment: start;
+        HorizontalLayout {
+            SectionTitle {
+                horizontal-stretch: 1;
+                text: "Displays";
+                vertical-alignment: center;
+            }
+            LinkButton {
+                text: "Display settings";
+                clicked => {
+                    root.open-displays();
+                }
+            }
+        }
+        if root.displays.length == 0: Caption {
+            text: "No display was found.";
+        }
+        for d in root.displays: Tile {
+            Centered {
+                Text {
+                    width: 20px;
+                    text: "\u{E7F4}";
+                    font-family: Theme.icons;
+                    font-size: 16px;
+                    color: Theme.text;
+                    horizontal-alignment: center;
+                    accessible-role: none;
+                }
+            }
+            TwoLines {
+                title: d.title;
+                text: d.status;
+            }
+            if d.capable: Centered {
+                Badge {
+                    kind: d.hdr-on ? "hdr" : "sdr";
+                    text: d.hdr-on ? "HDR" : "SDR";
+                }
+            }
+        }
+    }
+}
+
 export component StatusPage inherits Rectangle {
     in property <bool> tray-running;
     in property <bool> hdr-on;
@@ -363,11 +586,37 @@ export component StatusPage inherits Rectangle {
     in property <bool> paused;
     in property <string> pause-note;
     in property <[HistoryRow]> history;
+    in property <[NowRow]> now;
+    in property <string> idle;
+    in property <[DisplayRow]> displays;
+    in property <bool> hotkeys;
+    // The newest failed switch, until closed.
+    in property <string> failure;
+    // A newer version waiting, until closed.
+    in property <string> update-version;
+    in property <string> version;
     callback set-mode(int);
     callback toggle-pause();
     callback start-huedra();
+    callback open-game(string);
+    callback open-page(int);
+    callback close-failure();
+    callback show-update();
+    callback close-update();
 
-    ScrollView {
+    // How many changes show before "Show earlier changes".
+    property <int> history-limit: 5;
+    property <bool> all-history;
+    // The two cards sit side by side when there is room.
+    property <bool> two-columns: true;
+    changed width => {
+        root.two-columns = min(root.width, Theme.page-width) >= 760px;
+    }
+    init => {
+        root.two-columns = min(root.width, Theme.page-width) >= 760px;
+    }
+
+    page := ScrollView {
         // At least the preferred height, so rows keep their wrapped text
         // when the page is taller than the window (the default is the
         // minimum height, which squeezes them). Setting one size drops the
@@ -375,30 +624,47 @@ export component StatusPage inherits Rectangle {
         content-width: self.visible-width;
         content-height: max(self.visible-height, body.preferred-height);
         body := VerticalLayout {
-            padding: 28px;
+            width: min(page.visible-width, Theme.page-width);
+            padding: Theme.page-padding;
             spacing: Theme.gap;
             alignment: start;
             PageTitle {
                 text: "Status";
             }
-            if !root.tray-running: Card {
-                background: Theme.surface-raised;
-                HorizontalLayout {
-                    padding: 16px;
-                    spacing: 12px;
-                    Caption {
-                        horizontal-stretch: 1;
-                        vertical-alignment: center;
-                        text: "Huedra is not running, so HDR is not switched automatically.";
-                        color: Theme.text;
+            if !root.tray-running: InfoBar {
+                kind: "info";
+                title: "Huedra is not running.";
+                text: "HDR is not switched automatically until it starts.";
+                ActionButton {
+                    text: "Start Huedra";
+                    primary: true;
+                    clicked => {
+                        root.start-huedra();
                     }
-                    ActionButton {
-                        text: "Start Huedra";
-                        primary: true;
-                        clicked => {
-                            root.start-huedra();
-                        }
+                }
+            }
+            if root.failure != "": InfoBar {
+                kind: "error";
+                title: "HDR did not switch.";
+                text: root.failure + " Recent changes and the log have the details.";
+                closable: true;
+                closed => {
+                    root.close-failure();
+                }
+            }
+            if root.update-version != "": InfoBar {
+                kind: "update";
+                title: "Huedra " + root.update-version + " is available.";
+                text: "You have " + root.version + ".";
+                closable: true;
+                ActionButton {
+                    text: "See what's new";
+                    clicked => {
+                        root.show-update();
                     }
+                }
+                closed => {
+                    root.close-update();
                 }
             }
             HeroCard {
@@ -407,32 +673,102 @@ export component StatusPage inherits Rectangle {
                 detail: root.detail;
                 caption: root.caption;
             }
-            Card {
-                VerticalLayout {
-                    padding: 16px;
-                    spacing: 10px;
-                    SectionTitle {
-                        text: "Mode";
+            if root.two-columns: HorizontalLayout {
+                spacing: Theme.gap;
+                NowCard {
+                    horizontal-stretch: 1;
+                    now: root.now;
+                    idle: root.idle;
+                    open-game(id) => {
+                        root.open-game(id);
                     }
-                    Caption {
-                        text: "Automatic mode follows the setting of each game. The other two modes stay in effect until changed.";
+                    open-video => {
+                        root.open-page(2);
                     }
-                    ModeSelector {
-                        mode: root.mode;
-                        chosen(i) => {
-                            root.set-mode(i);
-                        }
+                }
+                DisplaysCard {
+                    horizontal-stretch: 1;
+                    displays: root.displays;
+                    open-displays => {
+                        root.open-page(3);
                     }
                 }
             }
-            SettingRow {
-                title: "Pause automatic switching";
-                description: root.paused ? root.pause-note : "The current state is kept and no switching occurs until the pause ends.";
-                ActionButton {
-                    text: root.paused ? "Resume" : "Pause for 1 hour";
-                    enabled: root.tray-running;
-                    clicked => {
-                        root.toggle-pause();
+            if !root.two-columns: NowCard {
+                now: root.now;
+                idle: root.idle;
+                open-game(id) => {
+                    root.open-game(id);
+                }
+                open-video => {
+                    root.open-page(2);
+                }
+            }
+            if !root.two-columns: DisplaysCard {
+                displays: root.displays;
+                open-displays => {
+                    root.open-page(3);
+                }
+            }
+            // Mode, with Pause as its own row at the foot of the card.
+            Card {
+                VerticalLayout {
+                    VerticalLayout {
+                        padding: 16px;
+                        padding-top: 14px;
+                        spacing: 10px;
+                        SectionTitle {
+                            text: "Mode";
+                        }
+                        ModeSelector {
+                            mode: root.mode;
+                            chosen(i) => {
+                                root.set-mode(i);
+                            }
+                        }
+                        HorizontalLayout {
+                            spacing: 8px;
+                            Caption {
+                                horizontal-stretch: 1;
+                                vertical-alignment: center;
+                                text: "Automatic follows the setting of each game and video player. Always HDR and Always SDR stay in effect until changed.";
+                            }
+                            if root.hotkeys: Centered {
+                                KeyCap {
+                                    text: "Win+Alt+O";
+                                }
+                            }
+                        }
+                    }
+                    Rectangle {
+                        height: 1px;
+                        background: Theme.border;
+                    }
+                    HorizontalLayout {
+                        padding-left: 16px;
+                        padding-right: 16px;
+                        padding-top: 12px;
+                        padding-bottom: 12px;
+                        spacing: 16px;
+                        min-height: 60px;
+                        TwoLines {
+                            title: "Pause automatic switching";
+                            text: root.paused ? root.pause-note : "Keeps the displays as they are for 1 hour, then resumes.";
+                        }
+                        if root.hotkeys: Centered {
+                            KeyCap {
+                                text: "Win+Alt+P";
+                            }
+                        }
+                        Centered {
+                            ActionButton {
+                                text: root.paused ? "Resume" : "Pause for 1 hour";
+                                enabled: root.tray-running;
+                                clicked => {
+                                    root.toggle-pause();
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -440,36 +776,69 @@ export component StatusPage inherits Rectangle {
                 text: "Recent changes";
             }
             if root.history.length == 0: Caption {
-                text: "No changes since Huedra started.";
+                text: root.tray-running ? "No changes since Huedra started." : "Shown while Huedra is running.";
             }
-            for entry in root.history: Card {
-                HorizontalLayout {
-                    padding: 12px;
-                    spacing: 14px;
-                    Text {
-                        text: entry.time;
-                        font-size: Theme.caption-size;
-                        color: Theme.text-muted;
-                        vertical-alignment: center;
-                        width: 40px;
-                    }
-                    VerticalLayout {
-                        horizontal-stretch: 1;
-                        spacing: 2px;
-                        Text {
-                            text: entry.title;
-                            font-size: Theme.body-size;
-                            font-weight: 600;
-                            color: Theme.text;
+            if root.history.length > 0: Card {
+                VerticalLayout {
+                    padding-bottom: 4px;
+                    for entry[i] in root.history: VerticalLayout {
+                        if (i < root.history-limit || root.all-history) && entry.group != "": HorizontalLayout {
+                            padding-left: 14px;
+                            padding-top: 10px;
+                            Text {
+                                text: entry.group;
+                                font-size: Theme.caption-size;
+                                font-weight: 600;
+                                color: Theme.text-muted;
+                            }
                         }
-                        Caption {
-                            text: entry.detail;
+                        if (i < root.history-limit || root.all-history) && entry.group == "" && i > 0: Rectangle {
+                            height: 1px;
+                            background: Theme.border;
+                        }
+                        if i < root.history-limit || root.all-history: HorizontalLayout {
+                            padding-left: 14px;
+                            padding-right: 14px;
+                            padding-top: 10px;
+                            padding-bottom: 10px;
+                            spacing: 14px;
+                            Text {
+                                text: entry.time;
+                                font-size: Theme.caption-size;
+                                color: Theme.text-muted;
+                                vertical-alignment: center;
+                                width: 48px;
+                            }
+                            TwoLines {
+                                title: entry.title;
+                                text: entry.detail;
+                                bold: true;
+                            }
+                            Centered {
+                                Badge {
+                                    kind: entry.kind;
+                                    text: entry.kind == "hdr" ? "HDR" : entry.kind == "external" ? "External" : entry.kind == "failed" ? "Failed" : "SDR";
+                                }
+                            }
                         }
                     }
-                    Centered {
-                        Badge {
-                            kind: entry.kind;
-                            text: entry.kind == "hdr" ? "HDR" : entry.kind == "external" ? "External" : entry.kind == "failed" ? "Failed" : "SDR";
+                    if root.history.length > root.history-limit: VerticalLayout {
+                        Rectangle {
+                            height: 1px;
+                            background: Theme.border;
+                        }
+                        HorizontalLayout {
+                            padding-left: 76px;
+                            padding-top: 4px;
+                            alignment: start;
+                            LinkButton {
+                                text: root.all-history ? "Show fewer"
+                                    : "Show " + (root.history.length - root.history-limit) + " earlier "
+                                    + (root.history.length - root.history-limit == 1 ? "change" : "changes");
+                                clicked => {
+                                    root.all-history = !root.all-history;
+                                }
+                            }
                         }
                     }
                 }
@@ -714,24 +1083,74 @@ component GameDetailPanel inherits Card {
     }
 }
 
+// The tint behind a game's tile in the cover grid.
+component CoverTint inherits Rectangle {
+    in property <int> tint;
+    background: tint == 0 ? #9B3DFF40 : tint == 1 ? #3341E640 : tint == 2 ? #00C8F033
+        : tint == 3 ? #14D98A33 : tint == 4 ? #FF2D6F33 : #A9A4B640;
+}
+
+// The store filters of the Games page.
+component StoreChips inherits HorizontalLayout {
+    in property <[StoreChip]> chips;
+    in property <string> filter;
+    callback chosen(string);
+    spacing: 6px;
+    alignment: start;
+    for chip in root.chips: FilterChip {
+        text: chip.label;
+        count: chip.count;
+        selected: root.filter == chip.key;
+        clicked => {
+            root.chosen(chip.key);
+        }
+    }
+}
+
+// The filters by what the Games list shows: Supports HDR, Own setting,
+// Suggestions.
+component CueChips inherits HorizontalLayout {
+    in property <[StoreChip]> chips;
+    in property <string> filter;
+    callback chosen(string);
+    spacing: 6px;
+    alignment: start;
+    for chip in root.chips: FilterChip {
+        text: chip.label;
+        count: chip.count;
+        selected: root.filter == chip.key;
+        has-dot: chip.key == "hdr" || chip.key == "suggest";
+        dot: chip.key == "hdr" ? Theme.hdr-label : Theme.violet-text;
+        clicked => {
+            root.chosen(chip.key);
+        }
+    }
+}
+
 export component GamesPage inherits Rectangle {
     in property <bool> wide;
     in property <[GameRow]> games;
     in property <[StoreChip]> chips;
+    // Filters by what the list shows: Supports HDR, Own setting, Suggestions.
+    in property <[StoreChip]> cue-chips;
     in property <string> filter;
     in property <int> total;
+    in property <int> suggest-count;
     // The selected game, as a list of zero or one entries: a new list makes a
     // fresh detail panel (another game, or values changed from outside the
     // controls); the same game is updated in place and keeps the focus.
     in property <[GameDetail]> details;
     in property <string> selected-id;
     in property <string> scan-note;
+    // The cover grid instead of the list.
+    in-out property <bool> grid;
     callback search-changed(string);
     callback filter-changed(string);
     callback select-game(string);
     callback close-detail();
     callback add-game();
     callback rescan();
+    callback apply-all-suggestions();
     callback set-setting(string, int);
     callback set-delay(string, int);
     callback set-hold(string, int);
@@ -745,17 +1164,44 @@ export component GamesPage inherits Rectangle {
     property <bool> has-selection: root.details.length > 0;
     property <bool> list-visible: root.wide || !root.has-selection;
     property <length> row-height: 56px;
+    property <bool> suggest-closed;
     // The row the keyboard is on, and whether the keyboard put it there.
     property <int> cursor: 0;
     property <bool> keyboard;
+    // Which columns fit; set when the width changes (see SettingsWindow).
+    property <bool> show-support: true;
+    property <bool> show-setting: true;
+    property <bool> chips-wrap: false;
+    // The cover grid's columns and tile size.
+    property <length> grid-gap: 14px;
+    property <int> columns: 4;
+    property <length> tile-width: 120px;
+    property <length> tile-height: self.tile-width * 1.5 + 28px;
+
+    function fit() {
+        let page = min(root.width, Theme.page-width);
+        root.show-support = root.has-selection ? page >= 1000px : page >= 560px;
+        root.show-setting = !root.has-selection && page >= 820px;
+        root.chips-wrap = page < 1000px;
+    }
+    changed width => {
+        root.fit();
+    }
+    changed has-selection => {
+        root.fit();
+    }
+    init => {
+        root.fit();
+    }
 
     function move-cursor(index: int) {
         root.cursor = max(0, min(index, root.games.length - 1));
         root.keyboard = true;
     }
 
-    VerticalLayout {
-        padding: 28px;
+    column := VerticalLayout {
+        width: min(root.width, Theme.page-width);
+        padding: Theme.page-padding;
         padding-bottom: 16px;
         spacing: Theme.gap;
         PageTitle {
@@ -782,53 +1228,105 @@ export component GamesPage inherits Rectangle {
                     root.rescan();
                 }
             }
+            Rectangle {
+                width: 70px;
+                height: Theme.button-height;
+                border-radius: Theme.radius-control + 2px;
+                background: Theme.surface-raised;
+                accessible-role: tab-list;
+                accessible-label: "View";
+                HorizontalLayout {
+                    padding: 1px;
+                    spacing: 2px;
+                    IconButton {
+                        width: 33px;
+                        height: 30px;
+                        glyph: "\u{E8FD}";
+                        label: "List";
+                        selected: !root.grid;
+                        clicked => {
+                            root.grid = false;
+                        }
+                    }
+                    IconButton {
+                        width: 33px;
+                        height: 30px;
+                        glyph: "\u{F0E2}";
+                        label: "Cover grid";
+                        selected: root.grid;
+                        clicked => {
+                            root.grid = true;
+                        }
+                    }
+                }
+            }
         }
-        HorizontalLayout {
+        // The filters: stores, then what the list shows. On narrow pages
+        // the second group takes its own row.
+        if !root.chips-wrap: HorizontalLayout {
             spacing: 6px;
             alignment: start;
-            for chip in root.chips: Rectangle {
-                property <bool> selected: root.filter == chip.key;
-                height: 28px;
-                width: chip-text.preferred-width + 20px;
-                border-radius: 14px;
-                background: selected ? Theme.accent : chip-touch.has-hover ? Theme.hover : Theme.surface-raised;
-                animate background { duration: Theme.hover-time; }
-                accessible-role: button;
-                accessible-label: chip.label;
-                accessible-item-selected: selected;
-                accessible-action-default => {
-                    root.filter-changed(chip.key);
+            StoreChips {
+                chips: root.chips;
+                filter: root.filter;
+                chosen(key) => {
+                    root.filter-changed(key);
                 }
-                chip-text := Text {
-                    text: chip.label + " " + chip.count;
-                    font-size: Theme.caption-size;
-                    color: selected ? Theme.on-accent : Theme.text;
-                    vertical-alignment: center;
-                    horizontal-alignment: center;
-                }
-                chip-touch := TouchArea {
-                    clicked => {
-                        root.filter-changed(chip.key);
+            }
+            if root.cue-chips.length > 0: VerticalLayout {
+                alignment: center;
+                Rectangle {
+                    width: 9px;
+                    height: 18px;
+                    Rectangle {
+                        x: 4px;
+                        width: 1px;
+                        background: Theme.border;
                     }
                 }
-                chip-focus := FocusScope {
-                    x: 0;
-                    width: 0px;
-                    key-pressed(event) => {
-                        if event.text == Key.Space || event.text == Key.Return {
-                            root.filter-changed(chip.key);
-                            return accept;
-                        }
-                        reject
-                    }
+            }
+            CueChips {
+                chips: root.cue-chips;
+                filter: root.filter;
+                chosen(key) => {
+                    root.filter-changed(key);
                 }
-                if chip-focus.has-focus: FocusRing {
-                    x: -3px;
-                    y: -3px;
-                    width: parent.width + 6px;
-                    height: parent.height + 6px;
-                    border-radius: parent.border-radius + 3px;
+            }
+        }
+        if root.chips-wrap: StoreChips {
+            chips: root.chips;
+            filter: root.filter;
+            chosen(key) => {
+                root.filter-changed(key);
+            }
+        }
+        if root.chips-wrap: CueChips {
+            chips: root.cue-chips;
+            filter: root.filter;
+            chosen(key) => {
+                root.filter-changed(key);
+            }
+        }
+        if root.suggest-count > 0 && !root.suggest-closed: InfoBar {
+            kind: "info";
+            title: root.suggest-count == 1 ? "1 game has a different suggestion." : root.suggest-count + " games have a different suggestion.";
+            text: "PCGamingWiki's HDR support points to another setting for them. Suggestions are never applied on their own.";
+            closable: true;
+            if root.filter != "suggest": ActionButton {
+                text: "Review";
+                clicked => {
+                    root.filter-changed("suggest");
                 }
+            }
+            ActionButton {
+                text: root.suggest-count == 1 ? "Apply it" : "Apply all " + root.suggest-count;
+                primary: true;
+                clicked => {
+                    root.apply-all-suggestions();
+                }
+            }
+            closed => {
+                root.suggest-closed = true;
             }
         }
         if root.scan-note != "": Caption {
@@ -839,8 +1337,9 @@ export component GamesPage inherits Rectangle {
             spacing: Theme.gap;
             if root.list-visible: Card {
                 horizontal-stretch: 3;
-                // Up, Down, Home and End move through the list; Enter or Space
-                // opens the game. Clicking a row also gives the list the keyboard.
+                // Up, Down, Home and End move through the list (in the grid
+                // Left and Right as well); Enter or Space opens the game.
+                // Clicking a row also gives the list the keyboard.
                 list-keys := FocusScope {
                     x: 0;
                     width: 0px;
@@ -852,11 +1351,20 @@ export component GamesPage inherits Rectangle {
                         if root.games.length == 0 {
                             return reject;
                         }
+                        let step = root.grid ? root.columns : 1;
                         if event.text == Key.DownArrow {
-                            root.move-cursor(root.cursor + 1);
+                            root.move-cursor(root.cursor + step);
                             return accept;
                         }
                         if event.text == Key.UpArrow {
+                            root.move-cursor(root.cursor - step);
+                            return accept;
+                        }
+                        if root.grid && event.text == Key.RightArrow {
+                            root.move-cursor(root.cursor + 1);
+                            return accept;
+                        }
+                        if root.grid && event.text == Key.LeftArrow {
                             root.move-cursor(root.cursor - 1);
                             return accept;
                         }
@@ -876,85 +1384,233 @@ export component GamesPage inherits Rectangle {
                         reject
                     }
                 }
-                ListView {
-                    accessible-label: "Games";
-                    // Scrolls just enough to keep the keyboard row in view.
-                    property <int> cursor: root.cursor;
-                    changed cursor => {
-                        let top = self.cursor * root.row-height;
-                        if top < -self.content-y {
-                            self.content-y = -top;
-                        } else if top + root.row-height > self.visible-height - self.content-y {
-                            self.content-y = self.visible-height - top - root.row-height;
+                if !root.grid: VerticalLayout {
+                    if root.show-support: HorizontalLayout {
+                        height: 32px;
+                        padding-left: 14px;
+                        padding-right: 14px;
+                        spacing: 12px;
+                        Rectangle {
+                            width: 32px;
+                        }
+                        Text {
+                            horizontal-stretch: 1;
+                            text: "Game";
+                            font-size: Theme.caption-size;
+                            color: Theme.text-muted;
+                            vertical-alignment: center;
+                        }
+                        Text {
+                            width: 130px;
+                            text: "HDR support";
+                            font-size: Theme.caption-size;
+                            color: Theme.text-muted;
+                            vertical-alignment: center;
+                        }
+                        if root.show-setting: Text {
+                            width: 250px;
+                            text: "Setting";
+                            font-size: Theme.caption-size;
+                            color: Theme.text-muted;
+                            vertical-alignment: center;
                         }
                     }
+                    if root.show-support: Rectangle {
+                        height: 1px;
+                        background: Theme.border;
+                    }
+                    ListView {
+                        vertical-stretch: 1;
+                        accessible-label: "Games";
+                        // Scrolls just enough to keep the keyboard row in view.
+                        property <int> cursor: root.cursor;
+                        changed cursor => {
+                            let top = self.cursor * root.row-height;
+                            if top < -self.content-y {
+                                self.content-y = -top;
+                            } else if top + root.row-height > self.visible-height - self.content-y {
+                                self.content-y = self.visible-height - top - root.row-height;
+                            }
+                        }
+                        for game[i] in root.games: Rectangle {
+                            property <bool> selected: root.has-selection && root.selected-id == game.id;
+                            height: root.row-height;
+                            background: selected ? Theme.surface-raised : row-touch.has-hover ? Theme.hover : transparent;
+                            animate background { duration: Theme.hover-time; }
+                            accessible-role: list-item;
+                            accessible-label: game.name;
+                            accessible-description: game.setting;
+                            accessible-item-selected: selected;
+                            accessible-action-default => {
+                                root.select-game(game.id);
+                            }
+                            if i > 0: Rectangle {
+                                y: 0;
+                                height: 1px;
+                                background: Theme.border;
+                            }
+                            Rectangle {
+                                x: 0;
+                                width: 3px;
+                                height: 20px;
+                                y: (parent.height - self.height) / 2;
+                                border-radius: 2px;
+                                background: selected ? Theme.accent : transparent;
+                            }
+                            HorizontalLayout {
+                                padding-left: 14px;
+                                padding-right: 14px;
+                                spacing: 12px;
+                                Centered {
+                                    GameIcon {
+                                        icon: game.icon;
+                                        initial: game.initial;
+                                    }
+                                }
+                                VerticalLayout {
+                                    horizontal-stretch: 1;
+                                    alignment: center;
+                                    spacing: 2px;
+                                    Text {
+                                        text: game.name;
+                                        font-size: Theme.body-size;
+                                        font-weight: game.running ? 600 : 500;
+                                        color: Theme.text;
+                                        overflow: elide;
+                                    }
+                                    Text {
+                                        text: game.store;
+                                        font-size: Theme.caption-size;
+                                        color: game.running ? Theme.hdr-label : Theme.text-muted;
+                                        overflow: elide;
+                                    }
+                                }
+                                if root.show-support: Rectangle {
+                                    width: 130px;
+                                    if game.hdr != "": HdrBadge {
+                                        x: 0;
+                                        support: game.hdr;
+                                    }
+                                }
+                                if root.show-setting: HorizontalLayout {
+                                    width: 250px;
+                                    spacing: 8px;
+                                    Text {
+                                        horizontal-stretch: 1;
+                                        text: game.setting;
+                                        font-size: Theme.caption-size;
+                                        font-weight: game.own ? 600 : 400;
+                                        color: game.own ? Theme.text : Theme.text-muted;
+                                        vertical-alignment: center;
+                                        overflow: elide;
+                                    }
+                                    if game.suggestion != "": Centered {
+                                        Badge {
+                                            kind: "suggestion";
+                                            dot: true;
+                                            text: "Suggests " + game.suggestion;
+                                        }
+                                    }
+                                    if game.suggestion == "" && game.own: Text {
+                                        text: "Own setting";
+                                        font-size: 11px;
+                                        color: Theme.text-muted;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                            }
+                            row-touch := TouchArea {
+                                clicked => {
+                                    root.cursor = i;
+                                    list-keys.focus();
+                                    root.keyboard = false;
+                                    root.select-game(game.id);
+                                }
+                            }
+                            if list-keys.has-focus && root.keyboard && root.cursor == i: FocusRing {
+                                width: parent.width;
+                                height: parent.height;
+                                border-radius: Theme.radius-control;
+                            }
+                        }
+                    }
+                }
+                if root.grid: Flickable {
+                    property <length> area: self.width - 2 * root.grid-gap;
+                    property <int> cursor: root.cursor;
+                    changed area => {
+                        root.columns = max(2, floor((self.area + root.grid-gap) / (128px + root.grid-gap)));
+                        root.tile-width = (self.area - (root.columns - 1) * root.grid-gap) / root.columns;
+                    }
+                    init => {
+                        root.columns = max(2, floor((self.area + root.grid-gap) / (128px + root.grid-gap)));
+                        root.tile-width = (self.area - (root.columns - 1) * root.grid-gap) / root.columns;
+                    }
+                    // Scrolls just enough to keep the keyboard tile in view.
+                    changed cursor => {
+                        let top = floor(self.cursor / root.columns) * (root.tile-height + root.grid-gap);
+                        if top < -self.content-y {
+                            self.content-y = -top;
+                        } else if top + root.tile-height + 2 * root.grid-gap > self.height - self.content-y {
+                            self.content-y = self.height - top - root.tile-height - 2 * root.grid-gap;
+                        }
+                    }
+                    content-width: self.width;
+                    content-height: max(self.height, ceil(root.games.length / root.columns) * (root.tile-height + root.grid-gap) + root.grid-gap);
                     for game[i] in root.games: Rectangle {
                         property <bool> selected: root.has-selection && root.selected-id == game.id;
-                        height: root.row-height;
-                        background: selected ? Theme.surface-raised : row-touch.has-hover ? Theme.hover : transparent;
-                        animate background { duration: Theme.hover-time; }
+                        x: root.grid-gap + mod(i, root.columns) * (root.tile-width + root.grid-gap);
+                        y: root.grid-gap + floor(i / root.columns) * (root.tile-height + root.grid-gap);
+                        width: root.tile-width;
+                        height: root.tile-height;
                         accessible-role: list-item;
                         accessible-label: game.name;
+                        accessible-description: game.setting;
                         accessible-item-selected: selected;
                         accessible-action-default => {
                             root.select-game(game.id);
                         }
-                        Rectangle {
-                            x: 0;
-                            width: 3px;
+                        CoverTint {
+                            y: 0;
+                            height: root.tile-width * 1.5;
+                            border-radius: Theme.radius-card - 2px;
+                            border-width: selected ? 2px : 0px;
+                            border-color: Theme.accent;
+                            tint: game.tint;
+                            Rectangle {
+                                background: tile-touch.has-hover ? #FFFFFF14 : transparent;
+                                border-radius: parent.border-radius;
+                            }
+                            GameIcon {
+                                size: min(64px, parent.width / 2);
+                                icon: game.icon;
+                                initial: game.initial;
+                            }
+                            if game.hdr == "hdr" || game.hdr == "limited": HdrBadge {
+                                x: 6px;
+                                y: 6px;
+                                support: game.hdr;
+                            }
+                            if game.suggestion != "": Rectangle {
+                                x: parent.width - 16px;
+                                y: 9px;
+                                width: 7px;
+                                height: 7px;
+                                border-radius: 3.5px;
+                                background: Theme.violet-text;
+                            }
+                        }
+                        Text {
+                            y: root.tile-width * 1.5 + 6px;
                             height: 20px;
-                            y: (parent.height - self.height) / 2;
-                            border-radius: 2px;
-                            background: selected ? Theme.accent : transparent;
+                            width: parent.width;
+                            text: game.name;
+                            font-size: 13px;
+                            font-weight: game.running ? 600 : 400;
+                            color: Theme.text;
+                            overflow: elide;
                         }
-                        HorizontalLayout {
-                            padding-left: 14px;
-                            padding-right: 14px;
-                            spacing: 12px;
-                            Centered {
-                                GameIcon {
-                                    icon: game.icon;
-                                    initial: game.initial;
-                                }
-                            }
-                            VerticalLayout {
-                                horizontal-stretch: 1;
-                                alignment: center;
-                                spacing: 2px;
-                                Text {
-                                    text: game.name;
-                                    font-size: Theme.body-size;
-                                    font-weight: game.running ? 600 : 400;
-                                    color: Theme.text;
-                                    overflow: elide;
-                                }
-                                Text {
-                                    text: game.detail;
-                                    font-size: Theme.caption-size;
-                                    color: game.running ? Theme.hdr-label : Theme.text-muted;
-                                    overflow: elide;
-                                }
-                            }
-                            // The store and setting columns give way to the
-                            // name while the detail panel, which shows both, is open.
-                            if root.wide && !root.has-selection: Text {
-                                text: game.store;
-                                font-size: Theme.caption-size;
-                                color: Theme.text-muted;
-                                vertical-alignment: center;
-                                width: 70px;
-                            }
-                            if !root.has-selection: Text {
-                                text: game.setting;
-                                font-size: Theme.caption-size;
-                                color: Theme.text;
-                                vertical-alignment: center;
-                                horizontal-alignment: right;
-                                width: 140px;
-                                overflow: elide;
-                            }
-                        }
-                        row-touch := TouchArea {
+                        tile-touch := TouchArea {
                             clicked => {
                                 root.cursor = i;
                                 list-keys.focus();
@@ -963,11 +1619,19 @@ export component GamesPage inherits Rectangle {
                             }
                         }
                         if list-keys.has-focus && root.keyboard && root.cursor == i: FocusRing {
-                            width: parent.width;
-                            height: parent.height;
-                            border-radius: Theme.radius-control;
+                            x: -3px;
+                            y: -3px;
+                            width: parent.width + 6px;
+                            height: root.tile-width * 1.5 + 6px;
+                            border-radius: Theme.radius-card + 1px;
                         }
                     }
+                }
+                if root.games.length == 0: Caption {
+                    x: 16px;
+                    y: root.show-support && !root.grid ? 49px : 16px;
+                    width: parent.width - 32px;
+                    text: root.total == 0 ? "No games were found. Add game picks a program by hand." : "No game matches.";
                 }
             }
             for detail in root.details: GameDetailPanel {
@@ -1088,7 +1752,7 @@ export component VideoPage inherits Rectangle {
     callback reset-hold();
     callback open-extension();
 
-    ScrollView {
+    page := ScrollView {
         // At least the preferred height, so rows keep their wrapped text
         // when the page is taller than the window (the default is the
         // minimum height, which squeezes them). Setting one size drops the
@@ -1096,7 +1760,8 @@ export component VideoPage inherits Rectangle {
         content-width: self.visible-width;
         content-height: max(self.visible-height, body.preferred-height);
         body := VerticalLayout {
-            padding: 28px;
+            width: min(page.visible-width, Theme.page-width);
+            padding: Theme.page-padding;
             spacing: Theme.gap;
             alignment: start;
             PageTitle {
@@ -1157,7 +1822,7 @@ export component VideoPage inherits Rectangle {
             }
             SettingRow {
                 title: "Keep HDR on after the video ends (seconds)";
-                description: "So the next episode or a skip to another file does not switch the display off and on again. " + (root.hold-custom ? "Used instead of the " + root.default-hold + " s set under General." : "The time set under General.");
+                description: "So the next episode or a skip to another file does not switch the display off and on again. " + (root.hold-custom ? "Used instead of the " + root.default-hold + " s set under Settings › Timing." : "The time set under Settings › Timing.");
                 if root.hold-custom: ActionButton {
                     text: "Use the default";
                     clicked => {
@@ -1236,12 +1901,12 @@ export component DisplaysPage inherits Rectangle {
     in property <int> retries;
     in property <bool> content-only;
     in property <bool> main-only;
-    callback set-managed(string, bool);
+    callback set-controlled(string, bool);
     callback set-retries(int);
     callback set-content-only(bool);
     callback set-main-only(bool);
 
-    ScrollView {
+    page := ScrollView {
         // At least the preferred height, so rows keep their wrapped text
         // when the page is taller than the window (the default is the
         // minimum height, which squeezes them). Setting one size drops the
@@ -1249,36 +1914,15 @@ export component DisplaysPage inherits Rectangle {
         content-width: self.visible-width;
         content-height: max(self.visible-height, body.preferred-height);
         body := VerticalLayout {
-            padding: 28px;
+            width: min(page.visible-width, Theme.page-width);
+            padding: Theme.page-padding;
             spacing: Theme.gap;
             alignment: start;
             PageTitle {
                 text: "Displays";
             }
             Caption {
-                text: "Huedra switches only managed displays. Displays connected later are managed automatically when they support HDR.";
-            }
-            SettingRow {
-                title: "Only the display showing the content";
-                description: "A game or video turns HDR on only for the display its window is on, and HDR follows the window to another display. Off: every managed display switches together.";
-                Toggle {
-                    accessible-label: "Only the display showing the content";
-                    checked: root.content-only;
-                    toggled => {
-                        root.set-content-only(self.checked);
-                    }
-                }
-            }
-            SettingRow {
-                title: "Always HDR on the main display only";
-                description: "Always HDR mode and the shortcut turn HDR on only for the main display, the one Windows uses as the primary display. Off: every managed display.";
-                Toggle {
-                    accessible-label: "Always HDR on the main display only";
-                    checked: root.main-only;
-                    toggled => {
-                        root.set-main-only(self.checked);
-                    }
-                }
+                text: "Huedra changes HDR only on the displays it controls. Displays connected later are controlled when they support HDR.";
             }
             for d in root.displays: Card {
                 HorizontalLayout {
@@ -1322,16 +1966,45 @@ export component DisplaysPage inherits Rectangle {
                             text: d.detail;
                         }
                     }
-                    Centered {
+                    if d.capable: Centered {
                         Toggle {
-                            text: d.capable ? (self.checked ? "Managed" : "Not managed") : "Not managed";
-                            spoken-text: "Manage " + d.title;
-                            checked: d.managed;
-                            enabled: d.capable;
+                            text: "Let Huedra control HDR";
+                            spoken-text: "Let Huedra control HDR on " + d.title;
+                            checked: d.controlled;
                             toggled => {
-                                root.set-managed(d.id, self.checked);
+                                root.set-controlled(d.id, self.checked);
                             }
                         }
+                    }
+                    if !d.capable: Centered {
+                        Caption {
+                            text: "Not available";
+                        }
+                    }
+                }
+            }
+            SectionTitle {
+                text: "How displays switch";
+            }
+            SettingRow {
+                title: "Only the display showing the content";
+                description: "A game or video turns HDR on only for the display its window is on, and HDR follows the window to another display. Off: every display Huedra controls switches together.";
+                Toggle {
+                    accessible-label: "Only the display showing the content";
+                    checked: root.content-only;
+                    toggled => {
+                        root.set-content-only(self.checked);
+                    }
+                }
+            }
+            SettingRow {
+                title: "Always HDR on the main display only";
+                description: "Always HDR mode and the shortcut turn HDR on only for the main display, the one Windows uses as the primary display. Off: every display Huedra controls.";
+                Toggle {
+                    accessible-label: "Always HDR on the main display only";
+                    checked: root.main-only;
+                    toggled => {
+                        root.set-main-only(self.checked);
                     }
                 }
             }
@@ -1352,9 +2025,10 @@ export component DisplaysPage inherits Rectangle {
     }
 }
 
-// ---- General ----------------------------------------------------------
+// ---- Settings ---------------------------------------------------------
 
-export component GeneralPage inherits Rectangle {
+export component SettingsPage inherits Rectangle {
+    in property <bool> hdr-on;
     in property <bool> start-with-windows;
     in property <bool> context-menu;
     in property <int> updates;
@@ -1370,12 +2044,14 @@ export component GeneralPage inherits Rectangle {
     in property <string> update-note;
     in property <bool> can-check-updates;
     in property <bool> checking-updates;
-    // What Check for updates found, shown under the About buttons.
+    // What Check for updates found, shown in About's header.
     in property <string> update-check-status;
-    in property <string> install-version;
+    // A newer version waiting, until closed.
+    in property <string> update-version;
     in property <bool> has-project-page;
     callback check-updates();
-    callback install-update();
+    callback show-update();
+    callback close-update();
     callback open-project();
     callback open-support();
     callback show-disclaimer();
@@ -1389,7 +2065,7 @@ export component GeneralPage inherits Rectangle {
     callback set-hotkeys(bool);
     callback set-log-titles(bool);
 
-    ScrollView {
+    page := ScrollView {
         // At least the preferred height, so rows keep their wrapped text
         // when the page is taller than the window (the default is the
         // minimum height, which squeezes them). Setting one size drops the
@@ -1397,15 +2073,31 @@ export component GeneralPage inherits Rectangle {
         content-width: self.visible-width;
         content-height: max(self.visible-height, body.preferred-height);
         body := VerticalLayout {
-            padding: 28px;
+            width: min(page.visible-width, Theme.page-width);
+            padding: Theme.page-padding;
             spacing: Theme.gap;
             alignment: start;
             PageTitle {
-                text: "General";
+                text: "Settings";
+            }
+            if root.update-version != "": InfoBar {
+                kind: "update";
+                title: "Huedra " + root.update-version + " is available.";
+                text: "You have " + root.version + ".";
+                closable: true;
+                ActionButton {
+                    text: "See what's new";
+                    clicked => {
+                        root.show-update();
+                    }
+                }
+                closed => {
+                    root.close-update();
+                }
             }
             SettingRow {
                 title: "Start with Windows";
-                description: "Starts in the notification area without opening a window.";
+                description: "Huedra starts in the notification area when you sign in, without opening a window.";
                 Toggle {
                     accessible-label: "Start with Windows";
                     checked: root.start-with-windows;
@@ -1416,7 +2108,7 @@ export component GeneralPage inherits Rectangle {
             }
             SettingRow {
                 title: "Closing this window";
-                description: "Keep Huedra running: the window closes and Huedra goes on switching HDR from the notification area; start Huedra or click its icon to open the window again. Quit Huedra: closing the window also closes Huedra, and displays it turned to HDR go back to SDR. Exit in the tray menu always quits.";
+                description: "Keep Huedra running: HDR keeps switching from the notification area. Quit Huedra: displays it turned to HDR go back to SDR. Exit in the tray menu always quits.";
                 Dropdown {
                     accessible-label: "Closing this window";
                     model: ["Keep Huedra running", "Quit Huedra"];
@@ -1427,19 +2119,8 @@ export component GeneralPage inherits Rectangle {
                 }
             }
             SettingRow {
-                title: "\"Start with HDR\" in the menu of programs";
-                description: "Right-click a program in File Explorer and choose Show more options, then Start with HDR. HDR turns on before the program starts and stays on until it closes.";
-                Toggle {
-                    accessible-label: "\"Start with HDR\" in the menu of programs";
-                    checked: root.context-menu;
-                    toggled => {
-                        root.set-context-menu(self.checked);
-                    }
-                }
-            }
-            SettingRow {
                 title: "Updates";
-                description: "Checks once a day for a new signed release. Ask before installing shows what is new and installs when you choose Download and install; Install automatically installs while no game or video is running. Your settings are kept." + (root.update-note != "" ? " " + root.update-note : "");
+                description: "Checks once a day for a new signed release. Your settings are kept." + (root.update-note != "" ? " " + root.update-note : "");
                 Dropdown {
                     accessible-label: "Updates";
                     model: ["Install automatically", "Ask before installing", "Off"];
@@ -1449,135 +2130,150 @@ export component GeneralPage inherits Rectangle {
                     }
                 }
             }
-            SettingRow {
-                title: "Game information and icons";
-                description: "Looks up HDR support on pcgamingwiki.com, which receives the Steam ID or the name of each game, and icons in Discord's public list of games. Results are stored for 30 days. When off, icons come from the games' own programs.";
-                Toggle {
-                    accessible-label: "Game information and icons";
-                    checked: root.game-info;
-                    toggled => {
-                        root.set-game-info(self.checked);
+            Expander {
+                glyph: "\u{E823}";
+                title: "Timing";
+                summary: "Keep HDR on " + root.hold + " s after a game or video ends · "
+                    + (root.delay == 0 ? "no delay before enabling" : root.delay + " s delay before enabling");
+                SubRow {
+                    first: true;
+                    title: "Keep HDR on after a game or video ends (seconds)";
+                    description: "So restarting the game or playing the next video does not switch the display off and on again. Games and the Video players page can set their own time.";
+                    NumberBox {
+                        accessible-label: "Keep HDR on after a game or video ends (seconds)";
+                        minimum: 0;
+                        maximum: 600;
+                        value: root.hold;
+                        edited(v) => {
+                            root.set-hold(v);
+                        }
+                    }
+                }
+                SubRow {
+                    title: "Default delay before enabling HDR (seconds)";
+                    description: "Used for games without their own setting.";
+                    NumberBox {
+                        accessible-label: "Default delay before enabling HDR (seconds)";
+                        minimum: 0;
+                        maximum: 120;
+                        value: root.delay;
+                        edited(v) => {
+                            root.set-delay(v);
+                        }
                     }
                 }
             }
-            SettingRow {
-                title: "Keep HDR on after a game or video ends (seconds)";
-                description: "HDR stays on this long after a game closes or a video ends, so restarting the game or playing the next video does not switch the display off and on again. Games and the Video players page can set their own time.";
-                NumberBox {
-                    accessible-label: "Keep HDR on after a game or video ends (seconds)";
-                    minimum: 0;
-                    maximum: 600;
-                    value: root.hold;
-                    edited(v) => {
-                        root.set-hold(v);
-                    }
-                }
-            }
-            SettingRow {
-                title: "Default delay before enabling HDR (seconds)";
-                description: "Used for games without their own setting.";
-                NumberBox {
-                    accessible-label: "Default delay before enabling HDR (seconds)";
-                    minimum: 0;
-                    maximum: 120;
-                    value: root.delay;
-                    edited(v) => {
-                        root.set-delay(v);
-                    }
-                }
-            }
-            SettingRow {
+            Expander {
+                glyph: "\u{E765}";
                 title: "Keyboard shortcuts";
-                description: "Win+Alt+H turns HDR on or off. Win+Alt+O changes the mode. Win+Alt+P pauses or resumes." + (root.hotkey-note != "" ? " " + root.hotkey-note : "");
-                Toggle {
-                    accessible-label: "Keyboard shortcuts";
-                    checked: root.hotkeys;
-                    toggled => {
-                        root.set-hotkeys(self.checked);
+                summary: root.hotkeys
+                    ? "Win+Alt+H turns HDR on or off · Win+Alt+O changes the mode · Win+Alt+P pauses or resumes"
+                    : "Off";
+                has-toggle: true;
+                toggle-checked: root.hotkeys;
+                toggled(on) => {
+                    root.set-hotkeys(on);
+                }
+                SubRow {
+                    first: true;
+                    description: "Win+Alt+H turns HDR on or off now. Win+Alt+O steps through Automatic, Always HDR and Always SDR. Win+Alt+P pauses switching for an hour, or resumes it." + (root.hotkey-note != "" ? " " + root.hotkey-note : "");
+                }
+            }
+            Expander {
+                glyph: "\u{E9E9}";
+                title: "Advanced";
+                summary: "\"Start with HDR\" in the menu of programs: " + (root.context-menu ? "on" : "off")
+                    + " · window titles in the log: " + (root.log-titles ? "on" : "off")
+                    + " · game information: " + (root.game-info ? "on" : "off");
+                SubRow {
+                    first: true;
+                    title: "\"Start with HDR\" in the menu of programs";
+                    description: "Right-click a program in File Explorer and choose Show more options, then Start with HDR. HDR turns on before the program starts and stays on until it closes.";
+                    Toggle {
+                        accessible-label: "\"Start with HDR\" in the menu of programs";
+                        checked: root.context-menu;
+                        toggled => {
+                            root.set-context-menu(self.checked);
+                        }
+                    }
+                }
+                SubRow {
+                    title: "Record window titles in the log";
+                    description: "When off, browser tab names and file names are not written to the log.";
+                    Toggle {
+                        accessible-label: "Record window titles in the log";
+                        checked: root.log-titles;
+                        toggled => {
+                            root.set-log-titles(self.checked);
+                        }
+                    }
+                }
+                SubRow {
+                    title: "Game information and icons";
+                    description: "Looks up HDR support on pcgamingwiki.com, which receives the Steam ID or the name of each game, and icons in Discord's public list of games. Results are stored for 30 days. When off, icons come from the games' own programs.";
+                    Toggle {
+                        accessible-label: "Game information and icons";
+                        checked: root.game-info;
+                        toggled => {
+                            root.set-game-info(self.checked);
+                        }
                     }
                 }
             }
-            SettingRow {
-                title: "Record window titles in the log";
-                description: "When off, browser tab names and file names are not written to the log.";
-                Toggle {
-                    accessible-label: "Record window titles in the log";
-                    checked: root.log-titles;
-                    toggled => {
-                        root.set-log-titles(self.checked);
+            Expander {
+                logo: true;
+                hdr: root.hdr-on;
+                title: "Huedra " + root.version;
+                title-bold: true;
+                summary: root.update-check-status != "" ? root.update-check-status
+                    : root.update-version != "" ? "Huedra " + root.update-version + " is available."
+                    : root.update-note;
+                open: true;
+                action-text: !root.can-check-updates ? "" : root.checking-updates ? "Checking..." : "Check for updates";
+                action-enabled: !root.checking-updates;
+                action => {
+                    root.check-updates();
+                }
+                SubRow {
+                    first: true;
+                    title: "Support Huedra";
+                    description: "A star on GitHub or a coffee through Buy Me a Coffee helps the project continue. Supporters are thanked by name and get preview builds before each release. Every feature stays free.";
+                    if root.has-project-page: ActionButton {
+                        text: "Star on GitHub";
+                        clicked => {
+                            root.open-project();
+                        }
+                    }
+                    ActionButton {
+                        text: "Buy me a coffee";
+                        clicked => {
+                            root.open-support();
+                        }
                     }
                 }
-            }
-            SectionTitle {
-                text: "About";
-            }
-            Card {
-                VerticalLayout {
-                    padding: 16px;
-                    spacing: 8px;
-                    Text {
-                        text: "Huedra " + root.version;
-                        font-size: Theme.body-size;
-                        font-weight: 600;
-                        color: Theme.text;
-                    }
-                    HorizontalLayout {
-                        alignment: start;
-                        spacing: 8px;
-                        if root.install-version != "": ActionButton {
-                            text: "Install Huedra " + root.install-version;
-                            primary: true;
-                            clicked => {
-                                root.install-update();
-                            }
-                        }
-                        if root.can-check-updates: ActionButton {
-                            text: root.checking-updates ? "Checking..." : "Check for updates";
-                            enabled: !root.checking-updates;
-                            clicked => {
-                                root.check-updates();
-                            }
-                        }
-                        ActionButton {
-                            text: "Disclaimer";
-                            clicked => {
-                                root.show-disclaimer();
-                            }
+                SubRow {
+                    title: "Settings and logs";
+                    description: root.data-folder;
+                }
+                SubRow {
+                    title: "Disclaimer";
+                    description: "What Huedra changes, and the terms you accepted.";
+                    ActionButton {
+                        text: "Show";
+                        clicked => {
+                            root.show-disclaimer();
                         }
                     }
-                    if root.update-check-status != "": Caption {
-                        text: root.update-check-status;
-                    }
-                    Caption {
-                        text: "If Huedra is useful to you, a star on GitHub or a coffee through Buy Me a Coffee helps the project continue. Supporters are thanked by name and get preview builds before each release.";
-                    }
-                    HorizontalLayout {
-                        alignment: start;
-                        spacing: 8px;
-                        if root.has-project-page: ActionButton {
-                            text: "Star on GitHub";
-                            clicked => {
-                                root.open-project();
-                            }
-                        }
-                        ActionButton {
-                            text: "Buy me a coffee";
-                            clicked => {
-                                root.open-support();
-                            }
-                        }
-                    }
-                    Caption {
-                        text: "Settings and logs: " + root.data-folder;
-                    }
-                    Caption {
-                        text: "Game information from PCGamingWiki (pcgamingwiki.com), licensed CC BY-NC-SA 3.0.";
-                    }
-                    HorizontalLayout {
-                        alignment: start;
-                        AboutSlint {
-                            preferred-height: 120px;
-                        }
+                }
+                SubRow {
+                    description: "Game information from PCGamingWiki (pcgamingwiki.com), licensed CC BY-NC-SA 3.0.";
+                }
+                HorizontalLayout {
+                    padding-left: 52px;
+                    padding-bottom: 12px;
+                    alignment: start;
+                    AboutSlint {
+                        preferred-height: 120px;
                     }
                 }
             }

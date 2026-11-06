@@ -1,4 +1,4 @@
-// The settings window: navigation and the four pages.
+// The settings window: navigation and the five pages.
 // Layouts: wide (1000 px and up), medium (680 to 999), compact (below 680,
 // icon rail). Feature doc: docs/features/08-settings-window.md
 
@@ -6,11 +6,11 @@ import { Palette } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { FocusRing, ActionButton } from "controls.slint";
 import {
-    StatusPage, GamesPage, VideoPage, DisplaysPage, GeneralPage,
-    GameRow, GameDetail, DisplayRow, HistoryRow, StoreChip, VideoAppRow, SiteRow, UpdateNote
+    StatusPage, GamesPage, VideoPage, DisplaysPage, SettingsPage,
+    GameRow, GameDetail, DisplayRow, HistoryRow, NowRow, StoreChip, VideoAppRow, SiteRow, UpdateNote
 } from "pages.slint";
 
-export { Theme, GameRow, GameDetail, DisplayRow, HistoryRow, StoreChip, VideoAppRow, SiteRow, UpdateNote }
+export { Theme, GameRow, GameDetail, DisplayRow, HistoryRow, NowRow, StoreChip, VideoAppRow, SiteRow, UpdateNote }
 
 component NavItem inherits Rectangle {
     in property <string> glyph;
@@ -123,13 +123,26 @@ export component SettingsWindow inherits Window {
     in property <bool> paused;
     in property <string> pause-note;
     in property <[HistoryRow]> history;
+    // What holds HDR now, and the line shown when nothing does.
+    in property <[NowRow]> now;
+    in property <string> idle;
+    // Every connected display, for the Status page.
+    in property <[DisplayRow]> status-displays;
+    // The newest failed switch; empty once closed.
+    in property <string> failure;
+    // Closes the update notices until the window opens again.
+    property <bool> update-bar-closed;
     callback set-mode(int);
     callback toggle-pause();
     callback start-huedra();
+    callback close-failure();
 
     // Games
     in property <[GameRow]> games;
     in property <[StoreChip]> chips;
+    in property <[StoreChip]> cue-chips;
+    in property <int> suggest-count;
+    in-out property <bool> games-grid;
     in property <string> filter: "all";
     in property <int> game-total;
     in property <[GameDetail]> details;
@@ -141,6 +154,7 @@ export component SettingsWindow inherits Window {
     callback close-detail();
     callback add-game();
     callback rescan();
+    callback apply-all-suggestions();
     callback set-game-setting(string, int);
     callback set-game-delay(string, int);
     callback set-game-hold(string, int);
@@ -173,12 +187,12 @@ export component SettingsWindow inherits Window {
     in property <int> retries;
     in property <bool> content-only;
     in property <bool> main-only;
-    callback set-managed(string, bool);
+    callback set-controlled(string, bool);
     callback set-retries(int);
     callback set-content-only(bool);
     callback set-main-only(bool);
 
-    // General
+    // Settings
     in property <bool> start-with-windows;
     in property <bool> context-menu;
     in property <int> updates;
@@ -255,7 +269,6 @@ export component SettingsWindow inherits Window {
                 padding: 8px;
                 padding-top: 14px;
                 spacing: 4px;
-                alignment: start;
                 // The state at a glance: the icon fades between gray and
                 // color as HDR turns off and on.
                 HorizontalLayout {
@@ -308,7 +321,6 @@ export component SettingsWindow inherits Window {
                     { glyph: "\u{E7FC}", label: "Games" },
                     { glyph: "\u{E714}", label: "Video players" },
                     { glyph: "\u{E7F4}", label: "Displays" },
-                    { glyph: "\u{E713}", label: "General" },
                 ]: NavItem {
                     glyph: item.glyph;
                     label: item.label;
@@ -317,6 +329,23 @@ export component SettingsWindow inherits Window {
                     keyboard-focus: nav.has-focus && nav.keyboard;
                     activate => {
                         root.page = i;
+                        nav.focus();
+                        nav.keyboard = false;
+                    }
+                }
+                // Settings describes Huedra itself, so it is pinned at the
+                // foot of the pane, as NavigationView does in Windows 11.
+                Rectangle {
+                    vertical-stretch: 1;
+                }
+                NavItem {
+                    glyph: "\u{E713}";
+                    label: "Settings";
+                    compact: root.compact;
+                    selected: root.page == 4;
+                    keyboard-focus: nav.has-focus && nav.keyboard;
+                    activate => {
+                        root.page = 4;
                         nav.focus();
                         nav.keyboard = false;
                     }
@@ -343,8 +372,31 @@ export component SettingsWindow inherits Window {
                 paused: root.paused;
                 pause-note: root.pause-note;
                 history: root.history;
+                now: root.now;
+                idle: root.idle;
+                displays: root.status-displays;
+                hotkeys: root.hotkeys;
+                failure: root.failure;
+                update-version: root.update-bar-closed ? "" : root.install-version;
+                version: root.version;
                 set-mode(i) => {
                     root.set-mode(i);
+                }
+                open-game(id) => {
+                    root.page = 1;
+                    root.select-game(id);
+                }
+                open-page(p) => {
+                    root.page = p;
+                }
+                close-failure => {
+                    root.close-failure();
+                }
+                show-update => {
+                    root.show-update = true;
+                }
+                close-update => {
+                    root.update-bar-closed = true;
                 }
                 toggle-pause => {
                     root.toggle-pause();
@@ -362,6 +414,9 @@ export component SettingsWindow inherits Window {
                 wide: root.wide;
                 games: root.games;
                 chips: root.chips;
+                cue-chips: root.cue-chips;
+                suggest-count: root.suggest-count;
+                grid <=> root.games-grid;
                 filter: root.filter;
                 total: root.game-total;
                 details: root.details;
@@ -384,6 +439,9 @@ export component SettingsWindow inherits Window {
                 }
                 rescan => {
                     root.rescan();
+                }
+                apply-all-suggestions => {
+                    root.apply-all-suggestions();
                 }
                 set-setting(id, i) => {
                     root.set-game-setting(id, i);
@@ -467,8 +525,8 @@ export component SettingsWindow inherits Window {
                 set-main-only(on) => {
                     root.set-main-only(on);
                 }
-                set-managed(id, on) => {
-                    root.set-managed(id, on);
+                set-controlled(id, on) => {
+                    root.set-controlled(id, on);
                 }
                 set-content-only(on) => {
                     root.set-content-only(on);
@@ -477,12 +535,13 @@ export component SettingsWindow inherits Window {
                     root.set-retries(n);
                 }
             }
-            GeneralPage {
+            SettingsPage {
                 property <bool> active: root.page == 4;
                 opacity: active ? 1 : 0;
                 y: active ? 0px : 8px;
                 visible: self.opacity > 0.01;
                 animate opacity, y { duration: Theme.page; easing: ease-out; }
+                hdr-on: root.hdr-on;
                 start-with-windows: root.start-with-windows;
                 context-menu: root.context-menu;
                 updates: root.updates;
@@ -499,13 +558,16 @@ export component SettingsWindow inherits Window {
                 can-check-updates: root.can-check-updates;
                 checking-updates: root.checking-updates;
                 update-check-status: root.update-check-status;
-                install-version: root.install-version;
+                update-version: root.update-bar-closed ? "" : root.install-version;
                 has-project-page: root.has-project-page;
                 check-updates => {
                     root.check-updates();
                 }
-                install-update => {
+                show-update => {
                     root.show-update = true;
+                }
+                close-update => {
+                    root.update-bar-closed = true;
                 }
                 open-project => {
                     root.open-project();
@@ -669,8 +731,8 @@ export component SettingsWindow inherits Window {
                     vertical-stretch: 1;
                     min-height: 72px;
                     preferred-height: notes-list.preferred-height;
-                    viewport-width: self.width;
-                    viewport-height: max(self.height, notes-list.preferred-height);
+                    content-width: self.width;
+                    content-height: max(self.height, notes-list.preferred-height);
                     notes-list := VerticalLayout {
                         width: parent.width;
                         spacing: 6px;

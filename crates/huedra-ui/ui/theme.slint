@@ -41,6 +41,8 @@ export global Theme {
     out property <color> focus: dark ? #FFFFFF : #1B1826;
     // HDR labels use pink.
     out property <color> hdr-label: dark ? #FF5C8D : #D81B57;
+    // Violet text and marks (suggestions, information), readable on both.
+    out property <color> violet-text: dark ? #B57BFF : #7A2BE0;
 
     // Sizes.
     out property <length> radius-control: 4px;
@@ -48,6 +50,10 @@ export global Theme {
     out property <length> button-height: 32px;
     out property <length> nav-row: 36px;
     out property <length> gap: 12px;
+    // Pages stop at this width (content 1000 px plus the page padding) and
+    // stay beside the navigation, as Microsoft's settings guidance has it.
+    out property <length> page-width: 1056px;
+    out property <length> page-padding: 28px;
 
     // Type.
     out property <length> title-size: 28px;

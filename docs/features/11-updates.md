@@ -35,7 +35,7 @@ Status: built; network half waits for hosting.
 ## Result (2026-11-01) — update channel and Check for updates
 - The release address of GitHub builds is the fixed pre-release `update-channel` (`releases/download/update-channel/`), refreshed by every release, since `releases/latest/download/` skips the beta pre-releases.
 - `update::project_page()` derives the repository page from that address for the Star on GitHub button; `update::SUPPORT_URL` is the Ko-fi page.
-- Settings › General › About: Check for updates and Install (see 08). The note now says to choose Install under About or in the tray menu.
+- Settings › General › About: Check for updates and Install (see 08). The note now says to choose Install under About or in the tray menu. (Since the UI review: Settings › About, and a version waiting shows as an update notice on Status and Settings with **See what's new**.)
 Verified: the 0.1.0 beta release published `huedra.exe`, `release.toml` and its signature to `update-channel`. Not verified: an update from one release to the next through the channel (needs a second release and a public repository).
 
 ## Result (2026-11-01) — update dialog with signed release notes

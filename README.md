@@ -78,7 +78,7 @@ If Huedra is useful to you:
 - **Support development** on [Buy Me a Coffee](https://buymeacoffee.com/pixelsthecoder).
 - **Report problems and test** on hardware the project has not seen yet.
 
-Both links are also in the app, under **General › About**, and Buy Me a Coffee is in the tray menu.
+Both links are also in the app, under **Settings › About**, and Buy Me a Coffee is in the tray menu.
 
 ### Supporters
 

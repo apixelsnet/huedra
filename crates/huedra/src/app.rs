@@ -1245,7 +1245,8 @@ impl App {
             };
             let display = self.display_label(&note.display);
             self.log_line(&format!("{title} on {display}: {}.", note.reason));
-            let time = clock::now().hour_minute();
+            let now = clock::now();
+            let time = now.hour_minute();
             // Several displays switching for one reason make one entry.
             let same = self.history.front().is_some_and(|last| {
                 last.time == time && last.title == title && last.detail == note.reason
@@ -1253,6 +1254,7 @@ impl App {
             if !same {
                 self.history.push_front(HistoryEntry {
                     time,
+                    day: now.date(),
                     title: title.to_owned(),
                     detail: note.reason.clone(),
                     kind,

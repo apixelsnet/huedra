@@ -61,7 +61,9 @@ fn run(command: Command) -> anyhow::Result<ExitCode> {
             let page = match page.as_deref() {
                 None => huedra_ui::Page::default(),
                 Some(name) => huedra_ui::Page::from_name(name).ok_or_else(|| {
-                    anyhow::anyhow!("unknown page `{name}`; use status, games, displays or general")
+                    anyhow::anyhow!(
+                        "unknown page `{name}`; use status, games, video, displays or settings"
+                    )
                 })?,
             };
             huedra_win::console::release_own_console();

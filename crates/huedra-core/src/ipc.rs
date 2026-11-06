@@ -128,6 +128,9 @@ pub enum HistoryKind {
 pub struct HistoryEntry {
     /// Local time, `HH:MM`.
     pub time: String,
+    /// Local day, `YYYY-MM-DD`; empty from a tray of an earlier version.
+    #[serde(default)]
+    pub day: String,
     /// Short title, for example "HDR enabled".
     pub title: String,
     /// Reason.

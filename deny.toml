@@ -7,9 +7,10 @@ targets = ["x86_64-pc-windows-msvc"]
 [advisories]
 yanked = "deny"
 ignore = [
-    # Unmaintained, not vulnerable; Slint uses it for font parsing and no
-    # maintained replacement is available to it yet. Revisit on Slint updates.
-    { id = "RUSTSEC-2026-0192", reason = "ttf-parser via Slint; unmaintained notice only" },
+    # Unmaintained, not vulnerable; Slint's build and macros use it (through
+    # spin_on) and no release of Slint has dropped it yet. Revisit on Slint
+    # updates.
+    { id = "RUSTSEC-2026-0441", reason = "pin-utils via Slint; unmaintained notice only" },
 ]
 
 [licenses]

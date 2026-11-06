@@ -15,7 +15,7 @@ Usage:
   huedra --background          Start Huedra in the notification area without
                                opening the window, as Start with Windows does.
   huedra settings [page]       Open the settings window, optionally on a page:
-                               status, games, video, displays or general.
+                               status, games, video, displays or settings.
   huedra status                Show what the running Huedra is doing.
   huedra games                 List the games found in every store.
   huedra mode automatic|hdr|sdr
