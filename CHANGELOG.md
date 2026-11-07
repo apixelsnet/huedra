@@ -2,7 +2,7 @@
 
 Changes that matter to people using Huedra (not the project's own build and workflow changes). Versions follow `MAJOR.MINOR.PATCH`; the updater installs only versions newer than the running one.
 
-## Unreleased
+## 1.2.0 — 2026-11-07
 
 ### Added
 - **Status** is a dashboard: **Now running** names the game or player that holds HDR, with a link to its settings; **Displays** shows each display's state and whether Huedra controls it; **Pause** sits in the **Mode** card with the shortcuts as key labels; **Recent changes** are grouped by day, with the latest five shown first.
