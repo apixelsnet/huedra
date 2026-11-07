@@ -97,3 +97,10 @@ Decided 2026-11-07 (the plan's smaller ideas): the failure notice yes, on by def
 Code: `Tray::notify` in `crates/huedra-win/src/tray.rs` (`NIF_INFO`, `NIIF_USER | NIIF_RESPECT_QUIET_TIME`), `Event::NoticeClick` (`NIN_BALLOONUSERCLICK`) in `event_loop.rs`, `record` in `crates/huedra/src/app.rs`, `general.notify_failures` in `config.rs`, Settings › Notify me when HDR does not switch.
 - When a switch fails after the retries, the tray icon shows a Windows notification: "Display 2 · … did not switch", "Windows did not switch the display. Huedra tried 2 more times. Recent changes on the Status page have the details." Normal switches never notify; several displays failing for one reason make one notice. Windows holds it during quiet hours or a full-screen game and keeps it in the notification center. A click on it opens the window, where the failure notice is on Status.
 Verified on this PC with a throwaway build that sent the notice when the tray started (not committed): the notification showed with Huedra's icon, title and text. Not verified: a real failed switch, the click on the notice, quiet hours.
+
+## Result (2026-11-07) — quick panel after the simpler wording
+Code: `actions` in `crates/huedra-ui/ui/flyout.slint`, the display lines in `show` in `crates/huedra-ui/src/flyout.rs`.
+- **Never use HDR for (game)** (main's new name) has a row of its own under **Pause 1 hour**, so the game's name fits; it was cut off beside Pause. Each display reads "HDR on · controlled by Huedra" or "HDR off · …".
+
+Verified on this PC with the sample build on a hidden desktop: Automatic with Cyberpunk 2077 running shows both rows in full; Always HDR, Display 2's switch, Never use HDR for, light theme and Escape.
+Not verified: on the real tray (the merged build was not run as the tray).

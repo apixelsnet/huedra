@@ -35,7 +35,7 @@ Windows HDR makes HDR games and video look as intended, but it makes the desktop
 | **Games, found automatically** | Reads the libraries of Steam, Epic Games, GOG, Xbox, Ubisoft Connect, EA app, Rockstar Games, Battle.net, Riot Games, HoYoPlay, Amazon Games, itch.io and Heroic Games Launcher, plus the games the Xbox Game Bar recognized. HDR turns on while a game runs, with an optional delay per game and a time to keep HDR on after it closes. |
 | **HDR video** | VLC, mpv, MPC-HC, MPC-BE and PotPlayer, by the title of the file playing. YouTube and streaming sites through the Huedra browser extension. RTX Video HDR aware. |
 | **The right display** | Only the display showing the game or video switches, and HDR follows the window to another display. Always HDR mode and the shortcut switch only the main display, unless you choose every display. |
-| **Quick panel** | A click on the tray icon shows whether HDR is on and why, the mode, and a switch per display, with Pause and Never for the game running, without opening the window. |
+| **Quick panel** | A click on the tray icon shows whether HDR is on and why, the mode, and a switch per display, with Pause and Never use HDR for the game running, without opening the window. |
 | **Start with HDR** | For games that misbehave when HDR changes while they start: a Steam launch option, a desktop shortcut, or a File Explorer menu entry turns HDR on first. |
 | **Light on the system** | One small executable, no installer, no background polling: Huedra waits for Windows to report a change. About 2 MB of memory. |
 | **Safe by design** | Runs without administrator rights. Never reads or writes another program's memory. Updates install only with a valid signature, and keep your settings. |
@@ -51,7 +51,7 @@ Windows HDR makes HDR games and video look as intended, but it makes the desktop
 2. Unpack it into a folder of your own, for example `%LOCALAPPDATA%\Programs\Huedra`.
 3. Start `huedra.exe` and accept the disclaimer.
 
-Huedra opens its window, runs in the notification area in Automatic mode, adds itself to Windows start-up and finds your games. Nothing else needs to be set up. Closing the window keeps Huedra running; starting `huedra.exe` again brings the window back.
+Huedra opens its window, runs in the tray in Automatic mode, adds itself to Windows start-up and finds your games. Nothing else needs to be set up. Closing the window keeps Huedra running; starting `huedra.exe` again brings the window back.
 
 **Requirements:** Windows 10 (version 1903 or later) or Windows 11, 64-bit, and a display that supports HDR.
 

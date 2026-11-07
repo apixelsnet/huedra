@@ -12,8 +12,8 @@ Usage:
   huedra                       Start Huedra and open its window. When Huedra
                                is running already, its window comes to the
                                front.
-  huedra --background          Start Huedra in the notification area without
-                               opening the window, as Start with Windows does.
+  huedra --background          Start Huedra in the tray without opening the
+                               window, as Start with Windows does.
   huedra settings [page]       Open the settings window, optionally on a page:
                                status, games, video, displays or settings.
   huedra flyout                Open the quick panel, as a click on the tray
@@ -42,7 +42,8 @@ Usage:
   huedra hdr off [--display N | all]
                                Turn HDR on or off. Without --display, the
                                main display is used. N is the number shown
-                               under Settings > Display > Identify.
+                               under Settings > System > Display >
+                               Identify.
   huedra --version             Show the version.";
 
 /// What the executable was asked to do.

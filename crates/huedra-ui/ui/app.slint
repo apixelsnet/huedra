@@ -119,7 +119,7 @@ export component SettingsWindow inherits Window {
     // Status
     in property <bool> tray-running;
     in property <bool> hdr-on;
-    in property <string> headline: "SDR";
+    in property <string> headline: "HDR is off";
     // One line under the state in the navigation pane.
     in property <string> nav-detail;
     in property <string> detail;
@@ -313,7 +313,7 @@ export component SettingsWindow inherits Window {
                         horizontal-stretch: 1;
                         alignment: center;
                         Text {
-                            text: root.hdr-on ? "HDR on" : "SDR";
+                            text: root.hdr-on ? "HDR on" : "HDR off";
                             font-size: 14px;
                             font-weight: 600;
                             color: Theme.text;
@@ -652,7 +652,7 @@ export component SettingsWindow inherits Window {
                     color: Theme.text;
                 }
                 Text {
-                    text: "Huedra turns Windows HDR on and off for you while games and HDR video run. It changes only the HDR setting that Windows offers under Settings > System > Display.";
+                    text: "Huedra turns Windows HDR on for games and HDR video, and off again afterward. It changes only the HDR switch in Settings > System > Display.";
                     wrap: word-wrap;
                     color: Theme.text;
                 }
@@ -667,7 +667,7 @@ export component SettingsWindow inherits Window {
                     color: Theme.text;
                 }
                 Text {
-                    text: "If a display is left in the wrong mode, turn HDR off under Settings > System > Display, or run: huedra hdr off --display all";
+                    text: "If a display gets stuck in HDR, turn it off in Settings > System > Display, or run: huedra hdr off --display all";
                     wrap: word-wrap;
                     color: Theme.text-muted;
                     font-size: Theme.caption-size;

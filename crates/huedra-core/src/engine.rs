@@ -490,7 +490,7 @@ impl Engine {
             outcome.notes.push(Note {
                 display: display.clone(),
                 kind: NoteKind::Failed,
-                reason: "Windows did not switch the display".to_owned(),
+                reason: "Windows didn't switch the display".to_owned(),
             });
         }
         self.evaluate(now, &mut outcome);
@@ -597,7 +597,7 @@ impl Engine {
                 slot.phase = Phase::HdrExternal;
                 outcome.notes.push(note(
                     NoteKind::External,
-                    "HDR was enabled outside Huedra, so it will not be turned off",
+                    "HDR was already on, so Huedra will leave it on",
                 ));
             }
             (Phase::HdrByHuedra | Phase::Holding { .. } | Phase::HdrExternal, HdrState::Off) => {
@@ -740,10 +740,10 @@ fn closed_reason(
     let kept = if secs == 0 {
         String::new()
     } else {
-        format!("; HDR stayed on for {secs} more {unit}")
+        format!(" (HDR kept on {secs} {unit} longer)")
     };
     match holder {
-        None => format!("Nothing needs HDR any more{kept}"),
+        None => format!("Nothing needs HDR now{kept}"),
         Some(h) if active.contains_key(&h.trigger) => {
             format!("{} moved to another display{kept}", h.label)
         }
@@ -826,7 +826,7 @@ mod tests {
         let out = e.tick(t0 + secs(70));
         assert_eq!(out.actions, off(), "off after hold");
         assert_eq!(
-            out.notes[0].reason, "Cyberpunk 2077 closed; HDR stayed on for 10 more seconds",
+            out.notes[0].reason, "Cyberpunk 2077 closed (HDR kept on 10 seconds longer)",
             "reason"
         );
         assert_eq!(e.next_deadline(), None, "idle");
@@ -936,7 +936,7 @@ mod tests {
         let out = e.tick(t0 + HOLD);
         assert_eq!(out.actions, off(), "restored");
         assert_eq!(
-            out.notes[0].reason, "Nothing needs HDR any more; HDR stayed on for 10 more seconds",
+            out.notes[0].reason, "Nothing needs HDR now (HDR kept on 10 seconds longer)",
             "reason"
         );
     }
@@ -1192,7 +1192,7 @@ mod tests {
         assert_eq!(out.actions[0].display, two, "old display");
         assert_eq!(
             out.notes[0].reason,
-            "Cyberpunk 2077 moved to another display; HDR stayed on for 10 more seconds",
+            "Cyberpunk 2077 moved to another display (HDR kept on 10 seconds longer)",
             "reason"
         );
 

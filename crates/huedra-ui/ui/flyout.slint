@@ -1,5 +1,5 @@
 // The quick panel that opens from the tray icon: the state, the mode, each
-// display, Pause and "Never for" the game running, without the window.
+// display, Pause and "Never use HDR for" the game running, without the window.
 // Feature doc: docs/features/07-tray-hotkeys.md
 
 import { Palette } from "std-widgets.slint";
@@ -98,7 +98,7 @@ export component FlyoutWindow inherits Window {
     in property <int> mode;
     in property <bool> paused;
     in property <[FlyDisplay]> displays;
-    // The game or player "Never for" applies to; empty when none.
+    // The game or player "Never use HDR for" applies to; empty when none.
     in property <string> never;
     // What Report a problem did.
     in property <string> report-note;
@@ -167,7 +167,7 @@ export component FlyoutWindow inherits Window {
                         alignment: center;
                         spacing: 1px;
                         Text {
-                            text: root.hdr-on ? "HDR on" : "SDR";
+                            text: root.hdr-on ? "HDR on" : "HDR off";
                             font-size: 16px;
                             font-weight: 600;
                             color: root.hdr-on ? Theme.hdr-label : Theme.text;
@@ -229,15 +229,13 @@ export component FlyoutWindow inherits Window {
             }
         }
         Divider { }
-        actions := HorizontalLayout {
+        // "Never use HDR for" gets a row of its own, so the game's name fits.
+        actions := VerticalLayout {
             padding: 16px;
             padding-top: 12px;
             padding-bottom: 12px;
             spacing: 8px;
             FlyButton {
-                // Its own width when "Never for" shares the row, which then
-                // takes the rest.
-                horizontal-stretch: root.never != "" ? 0 : 1;
                 glyph: root.paused ? "\u{E768}" : "\u{E769}";
                 text: root.paused ? "Resume" : "Pause 1 hour";
                 enabled: root.tray-running;
@@ -247,7 +245,7 @@ export component FlyoutWindow inherits Window {
             }
             if root.never != "": FlyButton {
                 glyph: "\u{E733}";
-                text: "Never for " + root.never;
+                text: "Never use HDR for " + root.never;
                 clicked => {
                     root.never-for();
                 }

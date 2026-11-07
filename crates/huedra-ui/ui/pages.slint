@@ -635,8 +635,8 @@ export component StatusPage inherits Rectangle {
             }
             if !root.tray-running: InfoBar {
                 kind: "info";
-                title: "Huedra is not running.";
-                text: "HDR is not switched automatically until it starts.";
+                title: "Huedra isn't running.";
+                text: "HDR won't switch on its own until it starts.";
                 ActionButton {
                     text: "Start Huedra";
                     primary: true;
@@ -647,7 +647,7 @@ export component StatusPage inherits Rectangle {
             }
             if root.failure != "": InfoBar {
                 kind: "error";
-                title: "HDR did not switch.";
+                title: "HDR didn't switch.";
                 text: root.failure + " Recent changes and the log have the details.";
                 closable: true;
                 closed => {
@@ -734,7 +734,7 @@ export component StatusPage inherits Rectangle {
                             Caption {
                                 horizontal-stretch: 1;
                                 vertical-alignment: center;
-                                text: "Automatic follows the setting of each game and video player. Always HDR and Always SDR stay in effect until changed.";
+                                text: "Automatic: HDR turns on for games and HDR video, then off again. Always HDR and Always SDR stay until you change them.";
                             }
                             if root.hotkeys: Centered {
                                 KeyCap {
@@ -756,7 +756,7 @@ export component StatusPage inherits Rectangle {
                         min-height: 60px;
                         TwoLines {
                             title: "Pause automatic switching";
-                            text: root.paused ? root.pause-note : "Keeps the displays as they are for 1 hour, then resumes.";
+                            text: root.paused ? root.pause-note : "HDR stays as it is now for one hour.";
                         }
                         if root.hotkeys: Centered {
                             KeyCap {
@@ -880,7 +880,7 @@ component GameDetailPanel inherits Card {
             if root.show-back: HorizontalLayout {
                 alignment: start;
                 ActionButton {
-                    text: "Back to the list";
+                    text: "Back to games";
                     clicked => {
                         root.back();
                     }
@@ -911,13 +911,13 @@ component GameDetailPanel inherits Card {
             VerticalLayout {
                 spacing: 4px;
                 Text {
-                    text: "HDR setting";
+                    text: "When this game runs";
                     font-size: Theme.body-size;
                     color: Theme.text;
                 }
                 Dropdown {
-                    accessible-label: "HDR setting";
-                    model: ["Enable while running", "Do not change", "Game controls HDR"];
+                    accessible-label: "When this game runs";
+                    model: ["Turn HDR on", "Leave HDR alone", "Let the game switch HDR"];
                     current-index: root.detail.setting-index;
                     selected(value) => {
                         root.set-setting(root.detail.id, self.current-index);
@@ -929,13 +929,13 @@ component GameDetailPanel inherits Card {
                 VerticalLayout {
                     spacing: 4px;
                     Text {
-                        text: "Delay before enabling HDR (seconds)";
+                        text: "Wait before turning HDR on (seconds)";
                         font-size: Theme.body-size;
                         color: Theme.text;
                         wrap: word-wrap;
                     }
                     NumberBox {
-                        accessible-label: "Delay before enabling HDR (seconds)";
+                        accessible-label: "Wait before turning HDR on (seconds)";
                         minimum: 0;
                         maximum: 120;
                         value: root.detail.delay;
@@ -966,7 +966,7 @@ component GameDetailPanel inherits Card {
             if root.detail.custom-timing: HorizontalLayout {
                 alignment: start;
                 ActionButton {
-                    text: "Use the default times";
+                    text: "Reset to default times";
                     clicked => {
                         root.reset-timing(root.detail.id);
                     }
@@ -977,10 +977,10 @@ component GameDetailPanel inherits Card {
                 background: Theme.border;
             }
             if root.detail.launch-option != "" || root.detail.shortcut: SectionTitle {
-                text: "Start with HDR";
+                text: "Turn HDR on before the game starts";
             }
             if root.detail.launch-option != "" || root.detail.shortcut: Caption {
-                text: "For games that go wrong when HDR changes while they start, or that gray out their HDR option because HDR was off when they started. HDR is turned on first, then the game starts, and HDR stays on until it closes.";
+                text: "For games that need HDR on before they open, such as ones that otherwise gray out their HDR option. HDR stays on until the game closes.";
             }
             if root.detail.launch-option != "": HorizontalLayout {
                 spacing: 16px;
@@ -988,19 +988,19 @@ component GameDetailPanel inherits Card {
                     horizontal-stretch: 1;
                     spacing: 2px;
                     Text {
-                        text: "Turn HDR on when Steam starts the game";
+                        text: "Turn HDR on when I press Play in Steam";
                         font-size: Theme.body-size;
                         color: Theme.text;
                         wrap: word-wrap;
                     }
                     Caption {
-                        text: "HDR turns on as soon as Steam reports the game running, about a second after you choose Play and before the game's window shows, on the main display until that window appears. Nothing touches the game, so it suits games with anti-cheat.";
+                        text: "HDR turns on about a second after you press Play, before the game opens. Huedra only reads what Steam reports and never touches the game, so it suits games with anti-cheat.";
                     }
                 }
                 Centered {
                     horizontal-stretch: 0;
                     Toggle {
-                        accessible-label: "Turn HDR on when Steam starts the game";
+                        accessible-label: "Turn HDR on when I press Play in Steam";
                         checked: root.detail.steam-start;
                         toggled => {
                             root.set-steam-start(root.detail.id, self.checked);
@@ -1011,7 +1011,7 @@ component GameDetailPanel inherits Card {
             if root.detail.launch-option != "": VerticalLayout {
                 spacing: 6px;
                 Text {
-                    text: "Or the Steam launch option (in Steam: the game's Properties, General, Launch options). Games with anti-cheat may refuse to start this way.";
+                    text: "Another way: paste this into Steam › the game's Properties › General › Launch options. Some anti-cheat games won't start this way.";
                     font-size: Theme.body-size;
                     color: Theme.text;
                     wrap: word-wrap;
@@ -1071,7 +1071,7 @@ component GameDetailPanel inherits Card {
                 }
             }
             if root.detail.looked-up: Caption {
-                text: "Source: PCGamingWiki, licensed CC BY-NC-SA 3.0. Suggestions are never applied automatically.";
+                text: "From PCGamingWiki (CC BY-NC-SA 3.0). Huedra never changes a setting on its own.";
             }
             if root.detail.manual: HorizontalLayout {
                 alignment: start;
@@ -1233,7 +1233,7 @@ export component GamesPage inherits Rectangle {
                 }
             }
             ActionButton {
-                text: "Scan again";
+                text: "Find new games";
                 clicked => {
                     root.rescan();
                 }
@@ -1713,7 +1713,7 @@ component VideoAppLine inherits HorizontalLayout {
             wrap: word-wrap;
         }
         if root.app.active: Caption {
-            text: "Keeping HDR on";
+            text: "HDR on now";
         }
     }
     Centered {
@@ -1786,7 +1786,7 @@ export component VideoPage inherits Rectangle {
                 text: "Video players";
             }
             Caption {
-                text: "HDR turns on while a player shows a file whose name contains one of the words below, and turns off a few seconds after it no longer does.";
+                text: "HDR turns on when a player opens a video whose file name has one of the words below. It turns off a few seconds after that video stops.";
             }
             // The field takes the card's width: the words do not fit beside
             // the description in narrow layouts.
@@ -1796,20 +1796,20 @@ export component VideoPage inherits Rectangle {
                     padding-top: 12px;
                     spacing: 2px;
                     Text {
-                        text: "Words that mark HDR video";
+                        text: "HDR words in file names";
                         font-size: Theme.body-size;
                         color: Theme.text;
                         wrap: word-wrap;
                     }
                     Caption {
-                        text: "Separated by commas; Enter applies them. Whole words count; case, dots, dashes and underscores are ignored. Leave empty for the default words.";
+                        text: "Separate words with commas and press Enter. Only whole words match; capitals, dots, dashes and underscores don't matter. Leave empty to use the defaults.";
                     }
                     Rectangle {
                         height: 8px;
                     }
                     TextBox {
                         value: root.keywords;
-                        label: "Words that mark HDR video";
+                        label: "HDR words in file names";
                         accepted(text) => {
                             root.set-keywords(text);
                         }
@@ -1818,7 +1818,7 @@ export component VideoPage inherits Rectangle {
             }
             SettingRow {
                 title: "Only in full screen";
-                description: "Video in a window leaves the display as it is.";
+                description: "Videos in a window don't switch HDR.";
                 Toggle {
                     accessible-label: "Only in full screen";
                     checked: root.full-screen-only;
@@ -1828,10 +1828,10 @@ export component VideoPage inherits Rectangle {
                 }
             }
             SettingRow {
-                title: "SDR video with RTX Video HDR";
+                title: "Regular video with RTX Video HDR";
                 description: root.rtx-note;
                 Toggle {
-                    accessible-label: "SDR video with RTX Video HDR";
+                    accessible-label: "Regular video with RTX Video HDR";
                     checked: root.sdr-with-rtx;
                     toggled => {
                         root.set-sdr-with-rtx(self.checked);
@@ -1840,7 +1840,7 @@ export component VideoPage inherits Rectangle {
             }
             SettingRow {
                 title: "Keep HDR on after the video ends (seconds)";
-                description: "So the next episode or a skip to another file does not switch the display off and on again. " + (root.hold-custom ? "Used instead of the " + root.default-hold + " s set under Settings › Timing." : "The time set under Settings › Timing.");
+                description: "Stops the screen flickering off and on between episodes. " + (root.hold-custom ? "Replaces the " + root.default-hold + " seconds set under Settings › Timing." : "Uses the time set under Settings › Timing.");
                 if root.hold-custom: ActionButton {
                     text: "Use the default";
                     clicked => {
@@ -1870,11 +1870,11 @@ export component VideoPage inherits Rectangle {
                 text: "Browsers";
             }
             Caption {
-                text: "Browsers turn HDR on through the Huedra browser extension, which marks the tab while an HDR video is open on YouTube or a full-screen video plays on a streaming site below, and for full-screen video with sound when SDR video with RTX Video HDR applies. Otherwise browsers never change the display.";
+                text: "Browsers switch HDR only through the Huedra browser extension. It turns HDR on for HDR videos on YouTube and for full-screen video on the streaming sites you turn on below. With Regular video with RTX Video HDR on, any full-screen video with sound counts too.";
             }
             SettingRow {
                 title: "Huedra browser extension";
-                description: "For Chrome, Edge, Brave, Opera and Vivaldi, from the Chrome Web Store. Firefox loads it from the extension zip of the release; the setup guide has the steps.";
+                description: "For Chrome, Edge, Brave, Opera and Vivaldi, from the Chrome Web Store. For Firefox, see the setup guide.";
                 Centered {
                     ActionButton {
                         primary: true;
@@ -1895,7 +1895,7 @@ export component VideoPage inherits Rectangle {
                 text: "Streaming sites";
             }
             Caption {
-                text: "These sites do not show whether a video is in HDR. For a site turned on here, full-screen video counts as HDR video. Turn a site on only if it streams HDR to your browser.";
+                text: "These sites don't say whether a video is HDR. Turn a site on only if it plays HDR in your browser; then any full-screen video there turns HDR on.";
             }
             for site in root.sites: SettingRow {
                 title: site.name;
@@ -2074,7 +2074,7 @@ export component SetupPage inherits Rectangle {
                         spacing: 14px;
                         TwoLines {
                             title: d.title;
-                            text: d.capable ? "HDR supported" : "No HDR support";
+                            text: d.capable ? "Supports HDR" : "No HDR support";
                             bold: true;
                         }
                         if d.capable: Centered {
@@ -2186,7 +2186,7 @@ export component SetupPage inherits Rectangle {
             }
             if root.step == 2: SettingRow {
                 title: "Start with Windows";
-                description: "Huedra starts in the notification area, next to the clock, without opening a window.";
+                description: "Huedra starts quietly in the tray when you sign in.";
                 Toggle {
                     accessible-label: "Start with Windows";
                     checked: root.start-with-windows;
@@ -2277,7 +2277,7 @@ export component DisplaysPage inherits Rectangle {
                 text: "Displays";
             }
             Caption {
-                text: "Huedra changes HDR only on the displays it controls. Displays connected later are controlled when they support HDR.";
+                text: "Huedra switches only the displays it controls. New HDR displays are controlled automatically.";
             }
             for d in root.displays: Card {
                 HorizontalLayout {
@@ -2342,10 +2342,10 @@ export component DisplaysPage inherits Rectangle {
                 text: "How displays switch";
             }
             SettingRow {
-                title: "Only the display showing the content";
-                description: "A game or video turns HDR on only for the display its window is on, and HDR follows the window to another display. Off: every display Huedra controls switches together.";
+                title: "Switch only the display with the game or video";
+                description: "HDR turns on only where the game or video is, and follows the window if you move it. Off: all displays switch together.";
                 Toggle {
-                    accessible-label: "Only the display showing the content";
+                    accessible-label: "Switch only the display with the game or video";
                     checked: root.content-only;
                     toggled => {
                         root.set-content-only(self.checked);
@@ -2354,7 +2354,7 @@ export component DisplaysPage inherits Rectangle {
             }
             SettingRow {
                 title: "Always HDR on the main display only";
-                description: "Always HDR mode and the shortcut turn HDR on only for the main display, the one Windows uses as the primary display. Off: every display Huedra controls.";
+                description: "Always HDR and the shortcut turn HDR on only for your main display. Off: all displays.";
                 Toggle {
                     accessible-label: "Always HDR on the main display only";
                     checked: root.main-only;
@@ -2364,10 +2364,10 @@ export component DisplaysPage inherits Rectangle {
                 }
             }
             SettingRow {
-                title: "Retry attempts";
-                description: "Some displays reject the first request while the graphics card changes mode.";
+                title: "Retries when a switch fails";
+                description: "Some displays ignore the first try while the screen changes mode.";
                 NumberBox {
-                    accessible-label: "Retry attempts";
+                    accessible-label: "Retries when a switch fails";
                     minimum: 0;
                     maximum: 5;
                     value: root.retries;
@@ -2454,7 +2454,7 @@ export component SettingsPage inherits Rectangle {
             }
             SettingRow {
                 title: "Start with Windows";
-                description: "Huedra starts in the notification area when you sign in, without opening a window.";
+                description: "Starts quietly in the tray.";
                 Toggle {
                     accessible-label: "Start with Windows";
                     checked: root.start-with-windows;
@@ -2465,7 +2465,7 @@ export component SettingsPage inherits Rectangle {
             }
             SettingRow {
                 title: "Closing this window";
-                description: "Keep Huedra running: HDR keeps switching from the notification area. Quit Huedra: displays it turned to HDR go back to SDR. Exit in the tray menu always quits.";
+                description: "Keep Huedra running: HDR keeps switching from the tray. Quit Huedra: closing the window closes Huedra and turns HDR back off. Exit in the tray menu always quits.";
                 Dropdown {
                     accessible-label: "Closing this window";
                     model: ["Keep Huedra running", "Quit Huedra"];
@@ -2476,10 +2476,10 @@ export component SettingsPage inherits Rectangle {
                 }
             }
             SettingRow {
-                title: "Notify me when HDR does not switch";
-                description: "A Windows notification, only when a switch fails after Huedra's retries. Normal switches never notify. During a full-screen game Windows may hold it in the notification center.";
+                title: "Notify me when HDR doesn't switch";
+                description: "Only when a switch fails after Huedra's retries. Normal switches never notify. During a full-screen game, Windows may hold it in the notification center.";
                 Toggle {
-                    accessible-label: "Notify me when HDR does not switch";
+                    accessible-label: "Notify me when HDR doesn't switch";
                     checked: root.notify-failures;
                     toggled => {
                         root.set-notify-failures(self.checked);
@@ -2488,7 +2488,7 @@ export component SettingsPage inherits Rectangle {
             }
             SettingRow {
                 title: "Updates";
-                description: "Checks once a day for a new signed release. Your settings are kept." + (root.update-note != "" ? " " + root.update-note : "");
+                description: "Checks once a day for a new signed release. Ask before installing: you choose when. Install automatically: installs when no game or video is running. Your settings are kept." + (root.update-note != "" ? " " + root.update-note : "");
                 Dropdown {
                     accessible-label: "Updates";
                     model: ["Install automatically", "Ask before installing", "Off"];
@@ -2502,11 +2502,11 @@ export component SettingsPage inherits Rectangle {
                 glyph: "\u{E823}";
                 title: "Timing";
                 summary: "Keep HDR on " + root.hold + " s after a game or video ends · "
-                    + (root.delay == 0 ? "no delay before enabling" : root.delay + " s delay before enabling");
+                    + (root.delay == 0 ? "no wait before turning HDR on" : "wait " + root.delay + " s before turning HDR on");
                 SubRow {
                     first: true;
                     title: "Keep HDR on after a game or video ends (seconds)";
-                    description: "So restarting the game or playing the next video does not switch the display off and on again. Games and the Video players page can set their own time.";
+                    description: "Stops the screen flickering off and on when you restart a game or play the next video. Games and video players can set their own time.";
                     NumberBox {
                         accessible-label: "Keep HDR on after a game or video ends (seconds)";
                         minimum: 0;
@@ -2518,10 +2518,10 @@ export component SettingsPage inherits Rectangle {
                     }
                 }
                 SubRow {
-                    title: "Default delay before enabling HDR (seconds)";
-                    description: "Used for games without their own setting.";
+                    title: "Default wait before turning HDR on (seconds)";
+                    description: "For games that don't set their own.";
                     NumberBox {
-                        accessible-label: "Default delay before enabling HDR (seconds)";
+                        accessible-label: "Default wait before turning HDR on (seconds)";
                         minimum: 0;
                         maximum: 120;
                         value: root.delay;
@@ -2550,15 +2550,15 @@ export component SettingsPage inherits Rectangle {
             Expander {
                 glyph: "\u{E9E9}";
                 title: "Advanced";
-                summary: "\"Start with HDR\" in the menu of programs: " + (root.context-menu ? "on" : "off")
-                    + " · window titles in the log: " + (root.log-titles ? "on" : "off")
+                summary: "\"Start with HDR\" in the right-click menu: " + (root.context-menu ? "on" : "off")
+                    + " · tab and file names in the log: " + (root.log-titles ? "on" : "off")
                     + " · game information: " + (root.game-info ? "on" : "off");
                 SubRow {
                     first: true;
-                    title: "\"Start with HDR\" in the menu of programs";
-                    description: "Right-click a program in File Explorer and choose Show more options, then Start with HDR. HDR turns on before the program starts and stays on until it closes.";
+                    title: "Add \"Start with HDR\" to the right-click menu";
+                    description: "Right-click a program in File Explorer › Show more options › Start with HDR. HDR stays on until the program closes.";
                     Toggle {
-                        accessible-label: "\"Start with HDR\" in the menu of programs";
+                        accessible-label: "Add \"Start with HDR\" to the right-click menu";
                         checked: root.context-menu;
                         toggled => {
                             root.set-context-menu(self.checked);
@@ -2566,10 +2566,10 @@ export component SettingsPage inherits Rectangle {
                     }
                 }
                 SubRow {
-                    title: "Record window titles in the log";
-                    description: "When off, browser tab names and file names are not written to the log.";
+                    title: "Write tab and file names to the log";
+                    description: "Turn off to keep them out of the log.";
                     Toggle {
-                        accessible-label: "Record window titles in the log";
+                        accessible-label: "Write tab and file names to the log";
                         checked: root.log-titles;
                         toggled => {
                             root.set-log-titles(self.checked);
@@ -2578,7 +2578,7 @@ export component SettingsPage inherits Rectangle {
                 }
                 SubRow {
                     title: "Game information and icons";
-                    description: "Looks up HDR support on pcgamingwiki.com, which receives the Steam ID or the name of each game, and icons in Discord's public list of games. Results are stored for 30 days. When off, icons come from the games' own programs.";
+                    description: "Gets HDR details from PCGamingWiki and icons from Discord's public game list. Only the game's name or Steam ID is sent. Results are saved for 30 days. When off, icons come from the games themselves.";
                     Toggle {
                         accessible-label: "Game information and icons";
                         checked: root.game-info;
@@ -2605,7 +2605,7 @@ export component SettingsPage inherits Rectangle {
                 SubRow {
                     first: true;
                     title: "Support Huedra";
-                    description: "A star on GitHub or a coffee through Buy Me a Coffee helps the project continue. Supporters are thanked by name and get preview builds before each release. Every feature stays free.";
+                    description: "Like Huedra? A GitHub star or a coffee helps keep it going. Supporters are thanked by name and get early builds. Every feature stays free.";
                     if root.has-project-page: ActionButton {
                         text: "Star on GitHub";
                         clicked => {

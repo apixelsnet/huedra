@@ -169,29 +169,35 @@ pub fn start(config: PathBuf, now: LocalTime) {
         entry(
             now,
             74,
-            "Returned to SDR",
+            "HDR turned off",
             "HDR video in VLC ended",
             HistoryKind::Sdr,
         ),
-        entry(now, 88, "HDR enabled", "HDR video in VLC", HistoryKind::Hdr),
+        entry(
+            now,
+            88,
+            "HDR turned on",
+            "HDR video in VLC",
+            HistoryKind::Hdr,
+        ),
         entry(
             now,
             96,
-            "Switch failed",
-            "Display 2 did not switch after 3 attempts",
+            "Couldn't switch",
+            "Windows didn't switch the display",
             HistoryKind::Failed,
         ),
         entry(
             now,
             1300,
-            "Returned to SDR",
+            "HDR turned off",
             "Elden Ring closed",
             HistoryKind::Sdr,
         ),
         entry(
             now,
             1405,
-            "HDR enabled",
+            "HDR turned on",
             "Elden Ring started",
             HistoryKind::Hdr,
         ),
@@ -205,7 +211,7 @@ pub fn start(config: PathBuf, now: LocalTime) {
         entry(
             now,
             1613,
-            "HDR enabled",
+            "HDR turned on",
             "Forza Horizon 5 started",
             HistoryKind::Hdr,
         ),
@@ -225,7 +231,7 @@ pub fn start(config: PathBuf, now: LocalTime) {
             entry(
                 now,
                 2,
-                "HDR enabled",
+                "HDR turned on",
                 "Cyberpunk 2077 started",
                 HistoryKind::Hdr,
             ),
@@ -237,8 +243,8 @@ pub fn start(config: PathBuf, now: LocalTime) {
             entry(
                 now,
                 1,
-                "Switch failed",
-                "Display 2 did not switch to HDR after 3 attempts",
+                "Couldn't switch",
+                "Windows didn't switch the display",
                 HistoryKind::Failed,
             ),
         );
@@ -291,7 +297,7 @@ impl Sim {
         }
         match self.mode {
             Mode::Automatic if !self.on.is_empty() => "Cyberpunk 2077 is running".to_owned(),
-            Mode::Automatic => "No HDR content".to_owned(),
+            Mode::Automatic => "Nothing needs HDR right now".to_owned(),
             mode => format!("{} mode", mode.label()),
         }
     }
@@ -311,9 +317,9 @@ impl Sim {
         }
         let now = huedra_win::clock::now();
         let (title, kind) = if wanted.is_empty() {
-            ("Returned to SDR", HistoryKind::Sdr)
+            ("HDR turned off", HistoryKind::Sdr)
         } else {
-            ("HDR enabled", HistoryKind::Hdr)
+            ("HDR turned on", HistoryKind::Hdr)
         };
         let detail = match self.mode {
             Mode::Automatic if wanted.is_empty() => "Cyberpunk 2077 closed".to_owned(),
@@ -377,7 +383,7 @@ pub fn status() -> Option<StatusReport> {
         mode: sim.mode,
         paused_minutes: sim.paused(),
         hdr_on,
-        summary: format!("{} · {reason}", if hdr_on { "HDR on" } else { "SDR" }),
+        summary: format!("{} · {reason}", if hdr_on { "HDR on" } else { "HDR off" }),
         active_games: if sim.mode == Mode::Automatic && hdr_on {
             vec![GameId::new(RUNNING.1, RUNNING.0).as_str().to_owned()]
         } else {

@@ -39,7 +39,7 @@ pub enum Request {
         /// HDR on or off.
         on: bool,
     },
-    /// Never change HDR for the game or player active now, as "Never for"
+    /// Never change HDR for the game or player active now, as "Never use HDR for"
     /// in the tray menu does ([`StatusReport::never`] names it).
     NeverForActive,
     /// Read the settings file again.
@@ -102,7 +102,7 @@ pub struct StatusReport {
     pub busy: bool,
     /// Managed displays.
     pub displays: Vec<DisplayReport>,
-    /// The game or player "Never for" would apply to; empty when none.
+    /// The game or player "Never use HDR for" would apply to; empty when none.
     #[serde(default)]
     pub never: String,
     /// Recent changes, newest first.
@@ -144,7 +144,7 @@ pub struct HistoryEntry {
     /// Local day, `YYYY-MM-DD`; empty from a tray of an earlier version.
     #[serde(default)]
     pub day: String,
-    /// Short title, for example "HDR enabled".
+    /// Short title, for example "HDR turned on".
     pub title: String,
     /// Reason.
     pub detail: String,

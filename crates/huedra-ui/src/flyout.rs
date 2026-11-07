@@ -1,6 +1,6 @@
 //! The quick panel: a small window without a frame that opens beside the
 //! tray icon (`huedra flyout`, started by a click on the icon). It shows the
-//! state, the mode, each display with its HDR switch, Pause and "Never for"
+//! state, the mode, each display with its HDR switch, Pause and "Never use HDR for"
 //! the game running, and closes when it loses the focus or on Escape.
 //! Feature doc: `docs/features/07-tray-hotkeys.md`.
 
@@ -195,7 +195,7 @@ fn snapshot(config: &Path) -> Snapshot {
     }
 }
 
-/// "Cyberpunk 2077 · on since 21:14", "No HDR content".
+/// "Cyberpunk 2077 · on since 21:14", "Nothing needs HDR right now".
 fn detail(report: &StatusReport) -> String {
     let since = report
         .history
@@ -221,7 +221,7 @@ fn show(ui: &FlyoutWindow, snapshot: &Snapshot) {
     ));
     ui.set_detail(
         report
-            .map_or_else(|| "Huedra is not running.".to_owned(), detail)
+            .map_or_else(|| "Huedra isn't running.".to_owned(), detail)
             .into(),
     );
     if let Some(report) = report {
@@ -254,7 +254,7 @@ fn show(ui: &FlyoutWindow, snapshot: &Snapshot) {
                 .into(),
                 line: format!(
                     "{} · {}",
-                    if on { "HDR" } else { "SDR" },
+                    if on { "HDR on" } else { "HDR off" },
                     if controlled {
                         "controlled by Huedra"
                     } else {
@@ -355,7 +355,7 @@ fn wire(ui: &FlyoutWindow, locations: &Locations, place: Option<Place>) {
     ui.on_dismiss(|| {
         let _ = slint::quit_event_loop();
     });
-    // The panel grows or shrinks (a "Never for" button, a display more):
+    // The panel grows or shrinks (a "Never use HDR for" button, a display more):
     // its edge stays by the taskbar.
     let weak = ui.as_weak();
     ui.on_resized(move || {
