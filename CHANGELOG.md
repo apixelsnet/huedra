@@ -8,6 +8,7 @@ Changes that matter to people using Huedra (not the project's own build and work
 - **Status** is a dashboard: **Now running** names the game or player that holds HDR, with a link to its settings; **Displays** shows each display's state and whether Huedra controls it; **Pause** sits in the **Mode** card with the shortcuts as key labels; **Recent changes** are grouped by day, with the latest five shown first.
 - **Games** says more: an **HDR support** column from PCGamingWiki, the setting reads **Default** unless a game has its own, a violet marker where PCGamingWiki suggests another setting, and filters for **Supports HDR**, **Own setting** and **Suggestions**. A notice offers to review the suggestions or apply them all at once. A **cover grid** can replace the list (the buttons beside Scan again).
 - A quick panel opens from the tray icon with a left click: the state, the mode, a switch per display, Pause and **Never for** the game running, without opening the window. Long names slide into view when pointed at. The right button keeps the menu.
+- A Windows notification when HDR did not switch on a display after Huedra's retries (never for normal switches). **Settings › Notify me when HDR does not switch** turns it off.
 - On Windows 11 22H2 and later the navigation pane takes the Mica tint of the desktop, as Windows' own apps do.
 - One kind of notice for everything the window has to tell: Huedra not running, a switch that failed, and a new version (**See what's new**).
 

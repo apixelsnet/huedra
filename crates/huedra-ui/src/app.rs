@@ -1551,6 +1551,7 @@ fn show_settings(ui: &SettingsWindow, state: &State) {
     ui.set_delay(secs(g.start_delay));
     ui.set_hotkeys(g.hotkeys);
     ui.set_log_titles(g.log_window_titles);
+    ui.set_notify_failures(g.notify_failures);
 }
 
 fn wire_settings(ui: &SettingsWindow) {
@@ -1646,8 +1647,12 @@ fn wire_settings(ui: &SettingsWindow) {
     ui.on_set_hotkeys(move |on| {
         c(&|c| c.general.hotkeys = on);
     });
+    let c = change.clone();
     ui.on_set_log_titles(move |on| {
-        change(&|c| c.general.log_window_titles = on);
+        c(&|c| c.general.log_window_titles = on);
+    });
+    ui.on_set_notify_failures(move |on| {
+        change(&|c| c.general.notify_failures = on);
     });
 }
 

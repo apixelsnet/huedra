@@ -263,6 +263,8 @@ impl App {
             // The quick panel, beside the icon; the menu stays on the
             // right button and is the keyboard and screen reader path too.
             Event::TrayClick => crate::open_flyout(self.tray.rect()),
+            // A failure notice: the window shows it on Status.
+            Event::NoticeClick => crate::open_settings(),
             Event::TrayMenu => {
                 if self.on_menu(host, now) == Flow::Exit {
                     self.shutdown();
@@ -1278,6 +1280,16 @@ impl App {
             let same = self.history.front().is_some_and(|last| {
                 last.time == time && last.title == title && last.detail == note.reason
             });
+            if !same && kind == HistoryKind::Failed && self.config.general.notify_failures {
+                self.tray.notify(
+                    &format!("{display} did not switch"),
+                    &format!(
+                        "{}. Huedra tried {} more times. Recent changes on the Status page have the details.",
+                        note.reason,
+                        self.config.general.retry_attempts
+                    ),
+                );
+            }
             if !same {
                 self.history.push_front(HistoryEntry {
                     time,

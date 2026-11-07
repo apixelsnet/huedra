@@ -189,6 +189,7 @@ The **Settings** page sits at the foot of the navigation pane. It was called **G
 | --- | --- |
 | **Start with Windows** | Starts Huedra in the notification area when you sign in, without opening the window. |
 | **Closing this window** | **Keep Huedra running** (the default): closing the window leaves Huedra switching HDR from the notification area. **Quit Huedra**: closing the window closes Huedra too, and displays it turned to HDR go back to SDR. **Exit** in the tray menu always quits. |
+| **Notify me when HDR does not switch** | A Windows notification when a display did not switch after Huedra's retries; normal switches never notify. On by default. |
 | **Updates** | Ask before installing (the default), Install automatically, or Off (see [Updates](#10-updates)). |
 | **Timing › Keep HDR on after a game or video ends** | Seconds HDR stays on after a game closes or a video ends, so restarting the game or playing the next video does not switch the display off and on again. Games and the Video players page can set their own time. |
 | **Timing › Default delay before enabling HDR** | Seconds to wait after a game starts, unless set per game. |

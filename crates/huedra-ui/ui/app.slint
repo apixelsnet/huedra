@@ -208,6 +208,7 @@ export component SettingsWindow inherits Window {
     in property <bool> hotkeys;
     in property <string> hotkey-note;
     in property <bool> log-titles;
+    in property <bool> notify-failures;
     in property <string> version;
     in property <string> data-folder;
     in property <string> update-note;
@@ -247,6 +248,7 @@ export component SettingsWindow inherits Window {
     callback set-delay(int);
     callback set-hotkeys(bool);
     callback set-log-titles(bool);
+    callback set-notify-failures(bool);
 
     HorizontalLayout {
         // Navigation pane; an icon rail in the compact layout.
@@ -557,6 +559,7 @@ export component SettingsWindow inherits Window {
                 hotkeys: root.hotkeys;
                 hotkey-note: root.hotkey-note;
                 log-titles: root.log-titles;
+                notify-failures: root.notify-failures;
                 version: root.version;
                 data-folder: root.data-folder;
                 update-note: root.update-note;
@@ -609,6 +612,9 @@ export component SettingsWindow inherits Window {
                 }
                 set-log-titles(on) => {
                     root.set-log-titles(on);
+                }
+                set-notify-failures(on) => {
+                    root.set-notify-failures(on);
                 }
             }
         }

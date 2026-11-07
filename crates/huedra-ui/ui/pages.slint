@@ -2040,6 +2040,7 @@ export component SettingsPage inherits Rectangle {
     in property <bool> hotkeys;
     in property <string> hotkey-note;
     in property <bool> log-titles;
+    in property <bool> notify-failures;
     in property <string> version;
     in property <string> data-folder;
     in property <string> update-note;
@@ -2065,6 +2066,7 @@ export component SettingsPage inherits Rectangle {
     callback set-delay(int);
     callback set-hotkeys(bool);
     callback set-log-titles(bool);
+    callback set-notify-failures(bool);
 
     page := ScrollView {
         // At least the preferred height, so rows keep their wrapped text
@@ -2116,6 +2118,17 @@ export component SettingsPage inherits Rectangle {
                     current-index: root.close-action;
                     selected(value) => {
                         root.set-close-action(self.current-index);
+                    }
+                }
+            }
+            SettingRow {
+                title: "Notify me when HDR does not switch";
+                description: "A Windows notification, only when a switch fails after Huedra's retries. Normal switches never notify. During a full-screen game Windows may hold it in the notification center.";
+                Toggle {
+                    accessible-label: "Notify me when HDR does not switch";
+                    checked: root.notify-failures;
+                    toggled => {
+                        root.set-notify-failures(self.checked);
                     }
                 }
             }
