@@ -147,9 +147,10 @@ pub fn run(locations: Locations, page: Page) -> Result<(), slint::PlatformError>
     let selector = slint::BackendSelector::new()
         .backend_name("winit".into())
         .renderer_name("software".into());
-    // Mica: Windows tints the navigation pane with the wallpaper, as in its
-    // own apps. Windows 11 22H2 (build 22621) and later; earlier builds
-    // would show the transparent pane black. Sample builds leave it out
+    // Mica: Windows tints the window's backdrop (the navigation pane and
+    // behind the pages) with the wallpaper, as in its own apps; the cards
+    // stay solid. Windows 11 22H2 (build 22621) and later; earlier builds
+    // would show the transparent backdrop black. Sample builds leave it out
     // unless asked (`HUEDRA_SAMPLE_MICA`): captures of a hidden window
     // cannot show it.
     let mica = registry::windows_build().is_some_and(|build| build >= MICA_BUILD)

@@ -185,6 +185,13 @@ pub fn is_helper_program(file_name: &str) -> bool {
     NOT_GAMES.iter().any(|n| file_name.starts_with(n))
 }
 
+/// Whether a folder is the Windows folder or inside it (`C:\Windows`).
+fn is_windows_folder(folder: &NormPath) -> bool {
+    let path = folder.as_str();
+    path.get(1..)
+        .is_some_and(|rest| rest == r":\windows" || rest.starts_with(r":\windows\"))
+}
+
 /// A set of games prepared for fast matching.
 #[derive(Debug, Default, Clone)]
 pub struct Library {
@@ -243,7 +250,10 @@ impl Library {
     }
 
     /// The game a running program belongs to: an exact program match first,
-    /// otherwise the game with the deepest install folder containing it.
+    /// otherwise the game with the deepest install folder containing it. A
+    /// game added by hand matches only its own program, since its folder
+    /// (System32, Downloads, the desktop) is often shared with other
+    /// programs; and nothing inside the Windows folder matches by folder.
     pub fn find(&self, exe_path: &str) -> Option<&Game> {
         let exe = NormPath::new(exe_path);
         let name = exe.file_name();
@@ -256,7 +266,12 @@ impl Library {
         self.folders
             .iter()
             .enumerate()
-            .filter(|(_, folder)| folder.as_str().len() > 3 && exe.is_within(folder))
+            .filter(|(i, folder)| {
+                folder.as_str().len() > 3
+                    && !is_windows_folder(folder)
+                    && self.games.get(*i).is_some_and(|g| g.store != Store::Manual)
+                    && exe.is_within(folder)
+            })
             .max_by_key(|(_, folder)| folder.as_str().len())
             .and_then(|(i, _)| self.games.get(i))
     }
@@ -306,8 +321,8 @@ mod tests {
         );
         assert_eq!(
             found(r"C:\Tools\Other.exe"),
-            Some("manual:tool".into()),
-            "folder of manual entry"
+            None,
+            "another program beside a game added by hand"
         );
         assert_eq!(found(r"C:\Windows\explorer.exe"), None, "unrelated");
         assert_eq!(
@@ -315,6 +330,31 @@ mod tests {
             None,
             "uninstaller ignored"
         );
+    }
+
+    #[test]
+    fn windows_programs_never_match_by_folder() {
+        let library = Library::new(vec![
+            game(
+                Store::Manual,
+                "charmap",
+                r"C:\Windows\System32",
+                Some(r"C:\Windows\System32\charmap.exe"),
+            ),
+            game(Store::GameBar, "x", r"C:\Windows", None),
+        ]);
+        let found = |p: &str| library.find(p).map(|g| g.id.as_str().to_owned());
+        assert_eq!(
+            found(r"C:\Windows\System32\charmap.exe"),
+            Some("manual:charmap".into()),
+            "the program itself"
+        );
+        assert_eq!(
+            found(r"C:\Windows\System32\SystemSettingsBroker.exe"),
+            None,
+            "a Windows helper"
+        );
+        assert_eq!(found(r"C:\Windows\explorer.exe"), None, "Windows folder");
     }
 
     #[test]

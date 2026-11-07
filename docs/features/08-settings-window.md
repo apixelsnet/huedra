@@ -227,3 +227,7 @@ Decided 2026-11-07 (owner): people who used Huedra before the new window never s
 - **Show setup** opens the three setup screens over the window, filled with the current settings; it and the close button both write `new_look_seen = true`, so the notice never returns.
 - The first acceptance of the disclaimer writes `new_look_seen = true` too: new users get the setup, never the notice.
 - An older version that rewrites the settings file drops the key (unknown keys are ignored), so after going back and forth the notice can show once more.
+
+## Result (2026-11-07) — Mica behind the pages too
+Code: the page area's background in `crates/huedra-ui/ui/app.slint` (`root.mica`), the comment in `run` (`crates/huedra-ui/src/app.rs`).
+- Owner's request: the navigation pane showed Mica while the pages kept the plain background, a visible change of color. With Mica the page area is now transparent as well, so the whole window shares one backdrop, as in Windows' own apps; the cards keep their solid surface. Without Mica (before Windows 11 22H2) nothing changes.

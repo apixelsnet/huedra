@@ -368,10 +368,11 @@ export component SettingsWindow inherits Window {
             }
         }
 
-        // Pages cross-fade and rise 8 px when the page changes.
+        // Pages cross-fade and rise 8 px when the page changes. With Mica
+        // the pages sit on the same backdrop as the navigation pane.
         Rectangle {
             horizontal-stretch: 1;
-            background: Theme.background;
+            background: root.mica ? transparent : Theme.background;
             status := StatusPage {
                 property <bool> active: root.page == 0;
                 opacity: active ? 1 : 0;
