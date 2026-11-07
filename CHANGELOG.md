@@ -14,6 +14,7 @@ Changes that matter to people using Huedra (not the project's own build and work
 - One kind of notice for everything the window has to tell: Huedra not running, a switch that failed, and a new version (**See what's new**).
 
 ### Changed
+- **Always SDR** turns HDR off on every display Huedra controls when you choose it or when Huedra starts in it, also where HDR was turned on outside Huedra. HDR you switch on in Windows afterward stays on.
 - **General** is now **Settings**, pinned at the foot of the navigation pane, as in Windows 11's own apps. `huedra settings settings` opens it; `huedra settings general` still works. Timing, keyboard shortcuts, the advanced settings and About fold into sections that sum up their values.
 - **Managed** is now the switch **Let Huedra control HDR**, and each display says **Controlled by Huedra**, **Not controlled by Huedra** or **No HDR support**.
 - Pages stop at 1000 pixels wide, so on a maximized window the switches stay close to their labels.

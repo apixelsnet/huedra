@@ -904,6 +904,17 @@ component GameDetailPanel inherits Card {
                     vertical-alignment: center;
                     wrap: word-wrap;
                 }
+                // Beside the list the pane closes here; on narrow layouts
+                // "Back to games" does it.
+                if !root.show-back: Centered {
+                    IconButton {
+                        glyph: "\u{E711}";
+                        label: "Close " + root.detail.name;
+                        clicked => {
+                            root.back();
+                        }
+                    }
+                }
             }
             Caption {
                 text: root.detail.store + " · " + root.detail.path;

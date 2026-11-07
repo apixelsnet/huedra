@@ -1724,6 +1724,7 @@ fn wire_settings(ui: &SettingsWindow) {
 
 fn restore_geometry(ui: &SettingsWindow) {
     let Some(geometry) = with_state(|s| WindowGeometry::load(&s.locations.window)).flatten() else {
+        fit_first_size(ui);
         return;
     };
     let window = ui.window();
@@ -1733,6 +1734,32 @@ fn restore_geometry(ui: &SettingsWindow) {
     }
     if geometry.maximized {
         window.set_maximized(true);
+    }
+}
+
+/// The first window keeps its default size (wide enough for Status's two
+/// cards side by side) unless that leaves no room on a small screen: then
+/// it takes nine tenths of the main display's work area.
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "window sizes are small and positive"
+)]
+fn fit_first_size(ui: &SettingsWindow) {
+    let Some(screen) = huedra_win::monitor::at(0, 0) else {
+        return;
+    };
+    // `preferred-width` and `preferred-height` in app.slint.
+    let (width, height) = (1100.0_f32, 780.0_f32);
+    let wanted = |side: f32| (side * screen.scale).round() as u32;
+    let room = |side: i32| (f64::from(side) * 0.9) as u32;
+    let (wanted_width, wanted_height) = (wanted(width), wanted(height));
+    let (room_width, room_height) = (room(screen.work.width()), room(screen.work.height()));
+    if wanted_width > room_width || wanted_height > room_height {
+        ui.window().set_size(PhysicalSize::new(
+            wanted_width.min(room_width),
+            wanted_height.min(room_height),
+        ));
     }
 }
 

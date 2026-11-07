@@ -4,7 +4,7 @@ The Slint window, run as its own process (`huedra settings`).
 
 ## Scope
 - Pages: Status, Games, Video players, Displays, and Settings pinned at the foot of the navigation (General before 2026-11-07).
-- Resizable: default 1040 x 680, minimum 520 x 560. Layouts: wide (1000 px and up), medium (680 to 999), compact (below 680, icon rail).
+- Resizable: default 1100 x 780 (smaller on a small screen), minimum 520 x 560. Layouts: wide (1000 px and up), medium (680 to 999), compact (below 680, icon rail).
 - Size, position and maximized state remembered. Per-monitor DPI awareness v2; follows the Windows text size.
 - Palette from the BT.2020 primaries; spectrum only while HDR is on, gray in SDR.
 - Motion: HDR fade 400 ms, page change 150 ms, controls 120 ms, hover 80 ms; none when Windows "Animation effects" is off.
@@ -215,3 +215,8 @@ Code: the texts this branch added in `pages.slint`, `flyout.slint`, `crates/hued
 
 Verified on this PC with the sample build on a hidden desktop: every page in dark at 1100 px, light at 780 px and the compact rail at 600 px; Always SDR, Pause, Resume, Automatic; Display 2's control off and on (config written, Status followed); Timing, Advanced and the shortcuts switch (config written); Apply all suggestions; cover grid and the game pane; Notify me when HDR doesn't switch and Write tab and file names to the log (config written); the failure and update notices and closing the failure notice; the search box ("elden" leaves one game); setup with Next, Back, Skip setup and Always SDR (config written); recent changes grouped by day with Show fewer. The real build's window against the released 1.1.2 tray: Status, `huedra settings general`, `huedra status`; `huedra flyout 1 2 3` is refused. CI green (136 tests), Defender clean.
 Not verified: a description that wraps to two lines leaves little space under it at 600 px, on main too.
+
+## Result (2026-11-07) — default size and closing the game pane
+Code: `preferred-width`/`preferred-height` in `crates/huedra-ui/ui/app.slint`, `fit_first_size` in `crates/huedra-ui/src/app.rs`, the close button in `GameDetailPanel` (`pages.slint`).
+- Owner's request: the first window is 1100 x 780, so Status shows **Now running** and **Displays** side by side (the cards pair up from 760 px of page width; 1040 x 680 left 744). A saved size still wins. When 1100 x 780 at the display's scale is more than nine tenths of the main display's work area, the first window takes nine tenths instead.
+- Owner's report: beside the list, a game's pane had no way to close. It now has a close button (X, spoken "Close Cyberpunk 2077") at the right of its title; narrow layouts keep **Back to games**.

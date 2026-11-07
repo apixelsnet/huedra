@@ -261,6 +261,7 @@ impl Engine {
             active: BTreeMap::new(),
             manual,
         };
+        engine.take_over_for_sdr();
         let mut outcome = Outcome::default();
         engine.evaluate(now, &mut outcome);
         (engine, outcome)
@@ -362,7 +363,22 @@ impl Engine {
     /// Changes the mode.
     pub fn set_mode(&mut self, now: Instant, mode: Mode) -> Outcome {
         self.mode = mode;
+        self.take_over_for_sdr();
         self.run(now)
+    }
+
+    /// Choosing Always SDR, or starting in it, means HDR off: HDR turned on
+    /// outside Huedra counts as Huedra's, so Always SDR turns it off. HDR
+    /// turned on outside Huedra later, while Always SDR stays, is left on.
+    fn take_over_for_sdr(&mut self) {
+        if self.mode != Mode::AlwaysSdr {
+            return;
+        }
+        for slot in self.slots.values_mut() {
+            if slot.phase == Phase::HdrExternal {
+                slot.phase = Phase::HdrByHuedra;
+            }
+        }
     }
 
     /// Stops all automatic switching until `until`; the current state is kept.
@@ -897,10 +913,31 @@ mod tests {
             "not turned off"
         );
         assert!(e.tick(t0 + secs(3600)).actions.is_empty(), "ever");
+    }
+
+    #[test]
+    fn always_sdr_turns_off_external_hdr() {
+        let (mut e, t0) = engine(HdrState::On, false);
+        assert_eq!(phase(&e), Phase::HdrExternal, "external at start");
+        assert_eq!(e.set_mode(t0, Mode::AlwaysSdr).actions, off(), "chosen");
+        e.observe(t0, &display(), HdrState::Off);
         assert!(
-            e.set_mode(t0, Mode::AlwaysSdr).actions.is_empty(),
-            "not even by Always SDR"
+            e.observe(t0 + secs(5), &display(), HdrState::On)
+                .actions
+                .is_empty(),
+            "turned on again in Windows: left on"
         );
+        assert!(e.tick(t0 + secs(60)).actions.is_empty(), "and stays");
+
+        let (_, start) = Engine::new(
+            Mode::AlwaysSdr,
+            HOLD,
+            &[(display(), HdrState::On)],
+            &[],
+            Target::All,
+            t0,
+        );
+        assert_eq!(start.actions, off(), "starting in Always SDR");
     }
 
     #[test]

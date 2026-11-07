@@ -96,7 +96,7 @@ Huedra lives in the tray (the notification area, next to the clock). If you do n
 
 Change the mode from the tray menu, the **Status** page, or with **Win+Alt+O**.
 
-Huedra only ever turns off HDR that it turned on itself. If you switched HDR on in Windows yourself, Huedra leaves it on.
+In Automatic and Always HDR, Huedra only turns off HDR that it turned on itself: if you switched HDR on in Windows yourself, Huedra leaves it on. Choosing **Always SDR**, or starting Huedra in it, turns HDR off on every display Huedra controls, whoever turned it on. If you then switch HDR on in Windows while Always SDR stays selected, Huedra leaves it on.
 
 ## 6. Games
 
