@@ -119,6 +119,8 @@ struct Sim {
     paused_until: Option<Instant>,
     /// Numbers of the displays in HDR.
     on: Vec<usize>,
+    /// Set by the quick panel's display switches until the mode changes.
+    forced: Option<Vec<usize>>,
     history: Vec<HistoryEntry>,
     config: PathBuf,
 }
@@ -212,6 +214,7 @@ pub fn start(config: PathBuf, now: LocalTime) {
         mode,
         paused_until: None,
         on: Vec::new(),
+        forced: None,
         history,
         config,
     };
@@ -302,7 +305,7 @@ impl Sim {
         if self.paused().is_some() {
             return;
         }
-        let wanted = self.wanted(config);
+        let wanted = self.forced.clone().unwrap_or_else(|| self.wanted(config));
         if wanted == self.on {
             return;
         }
@@ -394,6 +397,11 @@ pub fn status() -> Option<StatusReport> {
             })
             .collect(),
         history: sim.history.clone(),
+        never: if sim.mode == Mode::Automatic && hdr_on && sim.forced.is_none() {
+            "Cyberpunk 2077".to_owned()
+        } else {
+            String::new()
+        },
     })
 }
 
@@ -404,7 +412,33 @@ pub fn handle(request: &Request) {
         return;
     };
     match request {
-        Request::SetMode { mode } => sim.mode = *mode,
+        Request::SetMode { mode } => {
+            sim.mode = *mode;
+            sim.forced = None;
+        }
+        Request::SetDisplayHdr { display, on } => {
+            let Some(number) = (1..=DISPLAYS.len()).find(|n| display_id(*n).as_str() == display)
+            else {
+                return;
+            };
+            let mut set = sim.on.clone();
+            set.retain(|n| *n != number);
+            if *on {
+                set.push(number);
+                set.sort_unstable();
+            }
+            match sim.mode {
+                Mode::AlwaysSdr if *on => sim.mode = Mode::Automatic,
+                Mode::AlwaysHdr if !*on => sim.mode = Mode::Automatic,
+                _ => {}
+            }
+            sim.forced = Some(set);
+        }
+        Request::NeverForActive => {
+            let mut config = sim.load();
+            config.game_mut(&GameId::new(RUNNING.1, RUNNING.0)).hdr = GameHdr::DoNotChange;
+            let _ = config.save(&sim.config);
+        }
         Request::Pause { minutes } => {
             sim.paused_until = Some(Instant::now() + Duration::from_secs(u64::from(*minutes) * 60));
         }

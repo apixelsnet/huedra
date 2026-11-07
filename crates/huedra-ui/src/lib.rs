@@ -9,6 +9,8 @@
 #[cfg(windows)]
 mod app;
 #[cfg(windows)]
+mod flyout;
+#[cfg(windows)]
 mod icons;
 #[cfg(windows)]
 mod lookups;
@@ -31,3 +33,5 @@ mod ui {
 
 #[cfg(windows)]
 pub use app::{Page, run};
+#[cfg(windows)]
+pub use flyout::{TITLE as FLYOUT_TITLE, is_open as flyout_open, run as run_flyout};

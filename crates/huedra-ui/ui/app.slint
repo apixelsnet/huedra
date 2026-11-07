@@ -10,6 +10,9 @@ import {
     GameRow, GameDetail, DisplayRow, HistoryRow, NowRow, StoreChip, VideoAppRow, SiteRow, UpdateNote
 } from "pages.slint";
 
+import { FlyoutWindow, FlyDisplay } from "flyout.slint";
+
+export { FlyoutWindow, FlyDisplay }
 export { Theme, GameRow, GameDetail, DisplayRow, HistoryRow, NowRow, StoreChip, VideoAppRow, SiteRow, UpdateNote }
 
 component NavItem inherits Rectangle {
@@ -78,7 +81,9 @@ export component SettingsWindow inherits Window {
     preferred-height: 680px;
     min-width: 520px;
     min-height: 560px;
-    background: Theme.background;
+    // Windows 11 22H2 and later: the navigation pane shows the Mica backdrop.
+    in property <bool> mica;
+    background: root.mica ? transparent : Theme.background;
     default-font-family: "Segoe UI Variable Text";
     default-font-size: Theme.body-size;
 

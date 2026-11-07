@@ -113,6 +113,18 @@ pub fn string(hive: Hive, path: &str, name: &str) -> Option<String> {
     read_string(&open(hive, path)?, name)
 }
 
+/// The Windows build number, for example 26100.
+pub fn windows_build() -> Option<u32> {
+    string(
+        Hive::LocalMachine,
+        r"SOFTWARE\Microsoft\Windows NT\CurrentVersion",
+        "CurrentBuild",
+    )?
+    .trim()
+    .parse()
+    .ok()
+}
+
 /// Every subkey of `path` with the requested string values.
 pub fn subkeys(hive: Hive, path: &str, names: &[&str]) -> Vec<RegistryEntry> {
     let Some(parent) = open(hive, path) else {

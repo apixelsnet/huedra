@@ -72,7 +72,7 @@ Huedra lives in the notification area next to the clock. If you do not see it, o
 | Colored gamut shape | HDR is on |
 | Gray outline | SDR |
 
-- **Left-click** opens the Huedra window.
+- **Left-click** opens the quick panel beside the icon: whether HDR is on and why, the mode, each display with a switch that turns its HDR on or off now (as Win+Alt+H; the next game or video takes over again), **Pause 1 hour**, **Never for** the game running, and **Open Huedra**. It closes when you click elsewhere, press Escape, or click the icon again.
 - **Right-click** opens the menu:
 
 | Menu item | What it does |

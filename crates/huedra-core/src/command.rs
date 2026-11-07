@@ -16,6 +16,8 @@ Usage:
                                opening the window, as Start with Windows does.
   huedra settings [page]       Open the settings window, optionally on a page:
                                status, games, video, displays or settings.
+  huedra flyout                Open the quick panel, as a click on the tray
+                               icon does.
   huedra status                Show what the running Huedra is doing.
   huedra games                 List the games found in every store.
   huedra mode automatic|hdr|sdr
@@ -50,6 +52,9 @@ pub enum Command {
     Tray(TrayStart),
     /// Open the settings window, optionally on a named page.
     Settings(Option<String>),
+    /// Open the quick panel, beside the tray icon at the given place (left,
+    /// top, right, bottom in physical pixels) or beside the pointer.
+    Flyout(Option<crate::flyout::Rect>),
     /// Print the version.
     Version,
     /// Print the help text.
@@ -188,6 +193,15 @@ where
         "--version" | "-V" => Command::Version,
         "--help" | "-h" | "help" | "/?" => Command::Help,
         "settings" => Command::Settings(args.next()),
+        "flyout" => {
+            let rest: Vec<String> = args.collect();
+            if rest.is_empty() {
+                return Ok(Command::Flyout(None));
+            }
+            return crate::flyout::Rect::parse(&rest)
+                .map(|rect| Command::Flyout(Some(rect)))
+                .ok_or_else(|| UsageError::UnexpectedArgument(rest.join(" ")));
+        }
         "hdr" => Command::Hdr(parse_hdr(&mut args)?),
         "status" => Command::Remote(Request::Status),
         "games" => Command::Games,
@@ -332,6 +346,18 @@ mod tests {
         assert_eq!(run("--version"), Ok(Command::Version), "version");
         assert_eq!(run("-h"), Ok(Command::Help), "help");
         assert_eq!(run("settings"), Ok(Command::Settings(None)), "settings");
+        assert_eq!(run("flyout"), Ok(Command::Flyout(None)), "flyout");
+        assert_eq!(
+            run("flyout 1 2 3 4"),
+            Ok(Command::Flyout(Some(crate::flyout::Rect {
+                left: 1,
+                top: 2,
+                right: 3,
+                bottom: 4
+            }))),
+            "flyout at the icon"
+        );
+        assert!(run("flyout 1 2").is_err(), "flyout needs four numbers");
         assert_eq!(
             run("settings games"),
             Ok(Command::Settings(Some("games".into()))),

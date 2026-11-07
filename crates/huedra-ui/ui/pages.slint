@@ -308,7 +308,7 @@ component TwoLines inherits VerticalLayout {
 }
 
 // A three-way segmented control for the mode; Left and Right change it.
-component ModeSelector inherits Rectangle {
+export component ModeSelector inherits Rectangle {
     in property <int> mode;
     callback chosen(int);
     height: Theme.button-height + 4px;

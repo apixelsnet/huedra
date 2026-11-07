@@ -14,7 +14,8 @@ use windows::Win32::Graphics::Gdi::{
 use windows::Win32::UI::HiDpi::{GetDpiForSystem, GetSystemMetricsForDpi};
 use windows::Win32::UI::Shell::{
     NIF_ICON, NIF_MESSAGE, NIF_SHOWTIP, NIF_TIP, NIM_ADD, NIM_DELETE, NIM_MODIFY, NIM_SETVERSION,
-    NOTIFYICON_VERSION_4, NOTIFYICONDATAW, Shell_NotifyIconW,
+    NOTIFYICON_VERSION_4, NOTIFYICONDATAW, NOTIFYICONIDENTIFIER, Shell_NotifyIconGetRect,
+    Shell_NotifyIconW,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateIconIndirect, DestroyIcon, HICON, ICONINFO, SM_CXSMICON,
@@ -83,6 +84,29 @@ impl Tray {
             }
         }
         self.shown = Some((icon, tip.to_owned()));
+    }
+
+    /// Where the icon is on screen, in physical pixels: on the taskbar, or
+    /// in the overflow area while that is open. `None` while it is not
+    /// shown.
+    pub fn rect(&self) -> Option<huedra_core::flyout::Rect> {
+        if !self.added {
+            return None;
+        }
+        let id = NOTIFYICONIDENTIFIER {
+            cbSize: u32::try_from(size_of::<NOTIFYICONIDENTIFIER>()).unwrap_or(0),
+            hWnd: self.hwnd,
+            uID: ICON_ID,
+            ..Default::default()
+        };
+        // SAFETY: `id` names this object's icon and outlives the call.
+        let r = unsafe { Shell_NotifyIconGetRect(&id) }.ok()?;
+        Some(huedra_core::flyout::Rect {
+            left: r.left,
+            top: r.top,
+            right: r.right,
+            bottom: r.bottom,
+        })
     }
 
     /// Adds the icon again after Explorer restarted.

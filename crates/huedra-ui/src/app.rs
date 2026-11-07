@@ -46,6 +46,8 @@ const WINDOW_CLAIM: &str = "Huedra-settings-window";
 /// before bringing it to the front: a while after sign-in, when the PC is
 /// busy and the first window is slow to open.
 const WAIT_FOR_WINDOW: Duration = Duration::from_secs(10);
+/// The first Windows build with the Mica backdrop for apps (22H2).
+const MICA_BUILD: u32 = 22_621;
 /// How often the Status page asks the tray process for its state.
 const STATUS_POLL: Duration = Duration::from_secs(1);
 const SPECTRUM_W: u32 = 640;
@@ -139,11 +141,31 @@ pub fn run(locations: Locations, page: Page) -> Result<(), slint::PlatformError>
     }
     // The software renderer needs a tenth of the memory of OpenGL and starts
     // faster; this window has nothing it cannot draw.
-    slint::BackendSelector::new()
+    let selector = slint::BackendSelector::new()
         .backend_name("winit".into())
-        .renderer_name("software".into())
-        .select()?;
+        .renderer_name("software".into());
+    // Mica: Windows tints the navigation pane with the wallpaper, as in its
+    // own apps. Windows 11 22H2 (build 22621) and later; earlier builds
+    // would show the transparent pane black. Sample builds leave it out
+    // unless asked (`HUEDRA_SAMPLE_MICA`): captures of a hidden window
+    // cannot show it.
+    let mica = registry::windows_build().is_some_and(|build| build >= MICA_BUILD)
+        && (!cfg!(feature = "sample") || std::env::var_os("HUEDRA_SAMPLE_MICA").is_some());
+    let selector = if mica {
+        selector.with_winit_window_attributes_hook(|attributes| {
+            use slint::winit_030::winit::platform::windows::{
+                BackdropType, WindowAttributesExtWindows as _,
+            };
+            attributes
+                .with_transparent(true)
+                .with_system_backdrop(BackdropType::MainWindow)
+        })
+    } else {
+        selector
+    };
+    selector.select()?;
     let ui = SettingsWindow::new()?;
+    ui.set_mica(mica);
     let theme = ui.global::<Theme>();
     theme.set_motion(shell::animations_enabled());
     theme.set_spectrum_image(rgba_image(
@@ -321,7 +343,7 @@ fn limit_size_once_shown(attempt: u32) {
     });
 }
 
-fn rgba_image(rgba: &[u8], width: u32, height: u32) -> Image {
+pub(crate) fn rgba_image(rgba: &[u8], width: u32, height: u32) -> Image {
     Image::from_rgba8(SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(
         rgba, width, height,
     ))
@@ -390,7 +412,7 @@ fn wire_status(ui: &SettingsWindow) {
 
 /// Asks the tray process. With the `sample` feature the simulated tray
 /// answers instead, so a sample window never reaches a real tray.
-fn tray(request: &Request) -> Result<Response, pipe::PipeError> {
+pub(crate) fn tray(request: &Request) -> Result<Response, pipe::PipeError> {
     #[cfg(feature = "sample")]
     {
         if *request == Request::Status {
@@ -408,7 +430,7 @@ fn tray(request: &Request) -> Result<Response, pipe::PipeError> {
 }
 
 /// Every display with its state now.
-fn read_displays() -> Option<Vec<Display>> {
+pub(crate) fn read_displays() -> Option<Vec<Display>> {
     #[cfg(feature = "sample")]
     return Some(sample::displays());
     #[cfg(not(feature = "sample"))]

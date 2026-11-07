@@ -14,6 +14,7 @@ pub mod config;
 pub mod display;
 pub mod engine;
 pub mod files;
+pub mod flyout;
 pub mod gameinfo;
 pub mod geometry;
 pub mod icon;
