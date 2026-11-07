@@ -675,8 +675,9 @@ export component StatusPage inherits Rectangle {
             }
             if root.two-columns: HorizontalLayout {
                 spacing: Theme.gap;
+                // Equal halves whatever they hold.
                 NowCard {
-                    horizontal-stretch: 1;
+                    width: (min(page.visible-width, Theme.page-width) - 2 * Theme.page-padding - Theme.gap) / 2;
                     now: root.now;
                     idle: root.idle;
                     open-game(id) => {
@@ -687,7 +688,7 @@ export component StatusPage inherits Rectangle {
                     }
                 }
                 DisplaysCard {
-                    horizontal-stretch: 1;
+                    width: (min(page.visible-width, Theme.page-width) - 2 * Theme.page-padding - Theme.gap) / 2;
                     displays: root.displays;
                     open-displays => {
                         root.open-page(3);

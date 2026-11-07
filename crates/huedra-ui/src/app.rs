@@ -185,6 +185,12 @@ pub fn run(locations: Locations, page: Page) -> Result<(), slint::PlatformError>
     }
     ui.set_page(page as i32);
     ui.set_version(huedra_core::VERSION.into());
+    // Screenshots from a sample build name a release, not the workspace's
+    // 0.1.0.
+    #[cfg(feature = "sample")]
+    if let Ok(version) = std::env::var("HUEDRA_SAMPLE_VERSION") {
+        ui.set_version(version.into());
+    }
     ui.set_update_note(update_note(&locations.update).into());
     #[cfg(feature = "sample")]
     ui.set_data_folder(sample::DATA_FOLDER.into());
@@ -1914,6 +1920,9 @@ fn offer_update(ui: &SettingsWindow, force: bool) {
 fn update_note(path: &std::path::Path) -> String {
     use huedra_core::update::{self, UpdateState};
 
+    if cfg!(feature = "sample") {
+        return "Last checked an hour ago.".to_owned();
+    }
     if !update::is_available() {
         return "This build has no release address, so no checks are made.".to_owned();
     }
