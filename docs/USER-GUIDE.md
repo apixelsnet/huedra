@@ -51,7 +51,7 @@ The first time Huedra starts, its window shows a disclaimer. Huedra changes a Wi
 - **Accept and continue** starts Huedra; the window stays open.
 - **Exit** closes Huedra without changing anything.
 
-Until the disclaimer is accepted, Huedra does not run and never changes HDR. You can read it again at any time under **Settings › About › Disclaimer**.
+After you accept it the first time, a short setup asks which displays Huedra may control, whether to look up your games' HDR support on PCGamingWiki, and which mode to use; **Skip setup** keeps the defaults. Until the disclaimer is accepted, Huedra does not run and never changes HDR. You can read it again at any time under **Settings › About › Disclaimer**.
 
 After that, Huedra:
 

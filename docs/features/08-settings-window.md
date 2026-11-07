@@ -184,3 +184,11 @@ Code: `crates/huedra-ui/src/covers.rs`, `steam_cached_cover` and `shrink` in `cr
 Verified on this PC with a build without the update key on a hidden desktop: the grid of this PC's library showed the art of the Steam games that have it and icons for the rest; a test for `shrink`; CI green (136 tests), exe 11,082,752 bytes without the update key.
 Not verified: a large library (memory and time to load), art that Steam has not cached yet.
 
+## Result (2026-11-07) — first-run setup (UI review, idea 8b)
+Decided 2026-11-07: yes, after the plan's mockup. Code: `SetupPage` and `ModeCard` in `pages.slint`, the overlay in `app.slint`, `on_setup_mode` and the first acceptance in `crates/huedra-ui/src/app.rs`.
+- After **Accept and continue** on the first start, three short screens follow over the window: **Choose your displays** (the "Let Huedra control HDR" switch per HDR display, "Not available" for the others), **Your games** (how many were found and in which stores, the first three with their HDR badge, and the PCGamingWiki look-up switch, so the one network look-up is a visible choice on day one), **Choose a mode** (Automatic, marked Recommended, Always HDR, Always SDR, as cards; Start with Windows). Every choice is saved at once, the mode also to the settings file in case the tray is still starting; **Skip setup** keeps the defaults; Back and Next move between the screens. The disclaimer opened again later from About shows no setup.
+- Cost: about 250 KB of exe (Slint expands each control); the exe with the update key is 11,399,168 bytes of the 12,000,000 limit.
+
+Verified on this PC with the sample build (`HUEDRA_SAMPLE_SETUP=1`) on a hidden desktop: all three screens; Always SDR chosen through UI Automation wrote `mode = "always-sdr"`; Done closed the setup. CI green (136 tests); Defender clean.
+Not verified: the real first start (disclaimer, then setup, then the tray starting).
+

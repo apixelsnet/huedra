@@ -1912,6 +1912,343 @@ export component VideoPage inherits Rectangle {
     }
 }
 
+// ---- First-run setup --------------------------------------------------
+
+// A choice among the modes, as a card with a round mark.
+component ModeCard inherits Card {
+    in property <string> title;
+    in property <string> text;
+    in property <bool> selected;
+    in property <bool> recommended;
+    callback chosen();
+    border-color: root.selected ? Theme.accent : Theme.border;
+    border-width: root.selected ? 2px : 1px;
+    min-height: 64px;
+    forward-focus: keys;
+    accessible-role: radio-button;
+    accessible-label: root.title;
+    accessible-description: root.text;
+    accessible-checked: root.selected;
+    accessible-action-default => {
+        root.chosen();
+    }
+    touch := TouchArea {
+        clicked => {
+            root.chosen();
+        }
+    }
+    keys := FocusScope {
+        x: 0;
+        width: 0px;
+        key-pressed(event) => {
+            if event.text == Key.Space || event.text == Key.Return {
+                root.chosen();
+                return accept;
+            }
+            reject
+        }
+    }
+    HorizontalLayout {
+        padding: 14px;
+        padding-left: 16px;
+        spacing: 14px;
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 18px;
+                height: 18px;
+                border-radius: 9px;
+                border-width: root.selected ? 5px : 1px;
+                border-color: root.selected ? Theme.accent : Theme.text-muted;
+            }
+        }
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            spacing: 2px;
+            HorizontalLayout {
+                spacing: 8px;
+                alignment: start;
+                Text {
+                    text: root.title;
+                    font-weight: 600;
+                    color: Theme.text;
+                }
+                if root.recommended: Rectangle {
+                    height: 18px;
+                    width: rec.preferred-width + 10px;
+                    border-radius: 3px;
+                    border-width: 1px;
+                    border-color: Theme.accent;
+                    rec := Text {
+                        text: "Recommended";
+                        font-size: 11px;
+                        font-weight: 600;
+                        color: Theme.accent;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+            Caption {
+                text: root.text;
+            }
+        }
+    }
+    if keys.has-focus: FocusRing {
+        x: -3px;
+        y: -3px;
+        width: parent.width + 6px;
+        height: parent.height + 6px;
+        border-radius: Theme.radius-card + 3px;
+    }
+}
+
+// Three short screens after the disclaimer is accepted for the first time:
+// which displays Huedra controls, the games it found, and the mode. Each
+// choice is saved at once; Skip setup keeps the defaults.
+export component SetupPage inherits Rectangle {
+    in property <[DisplayRow]> displays;
+    in property <[GameRow]> games;
+    in property <[StoreChip]> chips;
+    in property <int> total;
+    in property <bool> game-info;
+    in property <int> mode;
+    in property <bool> start-with-windows;
+    callback set-controlled(string, bool);
+    callback set-game-info(bool);
+    callback set-mode(int);
+    callback set-start-with-windows(bool);
+    callback done();
+
+    property <int> step: 0;
+    // "Steam, Xbox and GOG": the stores that found games.
+    property <string> stores: root.chips.length <= 1 ? "your launchers"
+        : root.chips.length == 2 ? root.chips[1].label
+        : root.chips.length == 3 ? root.chips[1].label + " and " + root.chips[2].label
+        : root.chips[1].label + ", " + root.chips[2].label + " and " + (root.chips.length - 3 == 1 ? root.chips[3].label : "others");
+
+    background: Theme.background;
+    border-radius: Theme.radius-card;
+    border-width: 1px;
+    border-color: Theme.border;
+    clip: true;
+    VerticalLayout {
+        VerticalLayout {
+            vertical-stretch: 1;
+            padding: 28px;
+            padding-top: 22px;
+            spacing: 10px;
+            alignment: start;
+            HorizontalLayout {
+                spacing: 6px;
+                alignment: start;
+                for i in 3: VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        width: 26px;
+                        height: 4px;
+                        border-radius: 2px;
+                        background: i <= root.step ? Theme.accent : Theme.border;
+                    }
+                }
+                Text {
+                    text: "Step " + (root.step + 1) + " of 3";
+                    font-size: Theme.caption-size;
+                    color: Theme.text-muted;
+                }
+            }
+            PageTitle {
+                text: root.step == 0 ? "Choose your displays" : root.step == 1 ? "Your games" : "Choose a mode";
+            }
+            if root.step == 0: Caption {
+                text: "Huedra changes HDR only on the displays you choose. You can change this later in Displays.";
+            }
+            if root.step == 0: VerticalLayout {
+                spacing: 8px;
+                for d in root.displays: Card {
+                    min-height: 60px;
+                    HorizontalLayout {
+                        padding: 12px;
+                        padding-left: 16px;
+                        spacing: 14px;
+                        TwoLines {
+                            title: d.title;
+                            text: d.capable ? "HDR supported" : "No HDR support";
+                            bold: true;
+                        }
+                        if d.capable: Centered {
+                            Toggle {
+                                text: "Let Huedra control HDR";
+                                spoken-text: "Let Huedra control HDR on " + d.title;
+                                checked: d.controlled;
+                                toggled => {
+                                    root.set-controlled(d.id, self.checked);
+                                }
+                            }
+                        }
+                        if !d.capable: Centered {
+                            Caption {
+                                text: "Not available";
+                            }
+                        }
+                    }
+                }
+            }
+            if root.step == 1: Caption {
+                text: root.total == 0
+                    ? "Huedra found no games yet. Games installed later are found when Huedra starts, and Add game on the Games page picks any program."
+                    : "Huedra found " + root.total + (root.total == 1 ? " game" : " games") + " in " + root.stores + ". HDR turns on while each one runs. You can change any game later in Games.";
+            }
+            if root.step == 1 && root.total > 0: Card {
+                VerticalLayout {
+                    padding-top: 4px;
+                    padding-bottom: 4px;
+                    for game[i] in root.games: VerticalLayout {
+                        if i < 3 && i > 0: Rectangle {
+                            height: 1px;
+                            background: Theme.border;
+                        }
+                        if i < 3: HorizontalLayout {
+                            padding-left: 16px;
+                            padding-right: 16px;
+                            padding-top: 6px;
+                            padding-bottom: 6px;
+                            spacing: 12px;
+                            Centered {
+                                GameIcon {
+                                    icon: game.icon;
+                                    initial: game.initial;
+                                }
+                            }
+                            TwoLines {
+                                title: game.name;
+                                text: game.store;
+                            }
+                            if game.hdr != "": Centered {
+                                HdrBadge {
+                                    support: game.hdr;
+                                }
+                            }
+                        }
+                    }
+                    if root.total > 3: HorizontalLayout {
+                        padding-left: 16px;
+                        height: 30px;
+                        Caption {
+                            vertical-alignment: center;
+                            text: "And " + (root.total - 3) + " more on the Games page.";
+                        }
+                    }
+                }
+            }
+            if root.step == 1: SettingRow {
+                title: "Look up HDR support on PCGamingWiki";
+                description: "Sends the Steam ID or the name of each game to pcgamingwiki.com to learn which games support HDR, and looks up icons in Discord's public list. You can change this later in Settings › Advanced.";
+                Toggle {
+                    accessible-label: "Look up HDR support on PCGamingWiki";
+                    checked: root.game-info;
+                    toggled => {
+                        root.set-game-info(self.checked);
+                    }
+                }
+            }
+            if root.step == 2: Caption {
+                text: "You can change the mode at any time from the tray icon, the Status page or Win+Alt+O.";
+            }
+            if root.step == 2: VerticalLayout {
+                spacing: 8px;
+                ModeCard {
+                    title: "Automatic";
+                    text: "HDR turns on for games and HDR video, and off when they end.";
+                    recommended: true;
+                    selected: root.mode == 0;
+                    chosen => {
+                        root.set-mode(0);
+                    }
+                }
+                ModeCard {
+                    title: "Always HDR";
+                    text: "HDR stays on, on the main display or every display Huedra controls.";
+                    selected: root.mode == 1;
+                    chosen => {
+                        root.set-mode(1);
+                    }
+                }
+                ModeCard {
+                    title: "Always SDR";
+                    text: "HDR stays off.";
+                    selected: root.mode == 2;
+                    chosen => {
+                        root.set-mode(2);
+                    }
+                }
+            }
+            if root.step == 2: SettingRow {
+                title: "Start with Windows";
+                description: "Huedra starts in the notification area, next to the clock, without opening a window.";
+                Toggle {
+                    accessible-label: "Start with Windows";
+                    checked: root.start-with-windows;
+                    toggled => {
+                        root.set-start-with-windows(self.checked);
+                    }
+                }
+            }
+        }
+        Rectangle {
+            height: 60px;
+            background: Theme.surface;
+            Rectangle {
+                y: 0;
+                height: 1px;
+                background: Theme.border;
+            }
+            HorizontalLayout {
+                padding-left: 28px;
+                padding-right: 28px;
+                spacing: 8px;
+                Centered {
+                    ActionButton {
+                        text: "Skip setup";
+                        clicked => {
+                            root.done();
+                        }
+                    }
+                }
+                Rectangle {
+                    horizontal-stretch: 1;
+                }
+                if root.step > 0: Centered {
+                    ActionButton {
+                        text: "Back";
+                        clicked => {
+                            root.step -= 1;
+                        }
+                    }
+                }
+                Centered {
+                    next := ActionButton {
+                        min-width: 96px;
+                        text: root.step < 2 ? "Next" : "Done";
+                        primary: true;
+                        clicked => {
+                            if root.step < 2 {
+                                root.step += 1;
+                            } else {
+                                root.done();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    init => {
+        next.focus();
+    }
+}
+
 // ---- Displays ---------------------------------------------------------
 
 export component DisplaysPage inherits Rectangle {

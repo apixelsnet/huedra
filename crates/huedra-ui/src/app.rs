@@ -194,6 +194,9 @@ pub fn run(locations: Locations, page: Page) -> Result<(), slint::PlatformError>
     if let Ok(version) = std::env::var("HUEDRA_SAMPLE_VERSION") {
         ui.set_version(version.into());
     }
+    // A sample window can open on the first-run setup.
+    #[cfg(feature = "sample")]
+    ui.set_show_setup(std::env::var_os("HUEDRA_SAMPLE_SETUP").is_some());
     ui.set_update_note(update_note(&locations.update).into());
     #[cfg(feature = "sample")]
     ui.set_data_folder(sample::DATA_FOLDER.into());
@@ -412,6 +415,21 @@ fn wire_status(ui: &SettingsWindow) {
             });
             ui.set_failure("".into());
         }
+    });
+    // Setup chooses the mode while the tray may still be starting: the
+    // choice is saved as well as sent.
+    let weak = ui.as_weak();
+    ui.on_setup_mode(move |index| {
+        let mode = match index {
+            1 => Mode::AlwaysHdr,
+            2 => Mode::AlwaysSdr,
+            _ => Mode::Automatic,
+        };
+        if let Some(ui) = weak.upgrade() {
+            ui.set_mode(index);
+        }
+        with_state(|s| edit(s, |c| c.mode = mode));
+        send(Request::SetMode { mode });
     });
     // This window is open already, so Huedra starts in the background.
     ui.on_start_huedra(|| {
@@ -1883,6 +1901,8 @@ fn wire_about(ui: &SettingsWindow) {
             return;
         }
         ui.set_disclaimer_accepted(true);
+        // The first acceptance: three short screens of setup follow.
+        ui.set_show_setup(true);
         let setup = with_state(|s| {
             edit(s, |c| c.general.disclaimer_accepted = true);
             !s.locations.portable && s.config.general.start_with_windows

@@ -6,7 +6,7 @@ import { Palette } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 import { FocusRing, ActionButton } from "controls.slint";
 import {
-    StatusPage, GamesPage, VideoPage, DisplaysPage, SettingsPage,
+    StatusPage, GamesPage, VideoPage, DisplaysPage, SettingsPage, SetupPage,
     GameRow, GameDetail, DisplayRow, HistoryRow, NowRow, StoreChip, VideoAppRow, SiteRow, UpdateNote
 } from "pages.slint";
 
@@ -239,6 +239,9 @@ export component SettingsWindow inherits Window {
     in-out property <bool> show-disclaimer;
     in property <bool> disclaimer-accepted;
     callback accept-disclaimer();
+    // First-run setup, after the disclaimer is first accepted.
+    in-out property <bool> show-setup;
+    callback setup-mode(int);
     callback decline-disclaimer();
     callback set-start-with-windows(bool);
     callback set-context-menu(bool);
@@ -693,8 +696,41 @@ export component SettingsWindow inherits Window {
             }
         }
     }
+    // First-run setup, over the pages.
+    if root.show-setup && !root.show-disclaimer: Rectangle {
+        background: #000000a0;
+        TouchArea {
+            // Takes the clicks meant for the window behind.
+        }
+        SetupPage {
+            width: min(parent.width - 48px, 720px);
+            height: min(parent.height - 48px, 640px);
+            displays: root.displays;
+            games: root.games;
+            chips: root.chips;
+            total: root.game-total;
+            game-info: root.game-info;
+            mode: root.mode;
+            start-with-windows: root.start-with-windows;
+            set-controlled(id, on) => {
+                root.set-controlled(id, on);
+            }
+            set-game-info(on) => {
+                root.set-game-info(on);
+            }
+            set-mode(i) => {
+                root.setup-mode(i);
+            }
+            set-start-with-windows(on) => {
+                root.set-start-with-windows(on);
+            }
+            done => {
+                root.show-setup = false;
+            }
+        }
+    }
     // The update dialog, over everything but the disclaimer.
-    if root.show-update && !root.show-disclaimer: Rectangle {
+    if root.show-update && !root.show-disclaimer && !root.show-setup: Rectangle {
         background: #000000a0;
         TouchArea {
             // Takes the clicks meant for the window behind.
