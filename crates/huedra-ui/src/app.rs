@@ -98,6 +98,9 @@ struct State {
     displays: Vec<Display>,
     running: Vec<String>,
     icons: HashMap<GameId, Image>,
+    /// Portrait art for the cover grid, loaded once the grid is shown.
+    covers: HashMap<GameId, Image>,
+    covers_started: bool,
     search: String,
     filter: String,
     selected: Option<GameId>,
@@ -231,6 +234,8 @@ pub fn run(locations: Locations, page: Page) -> Result<(), slint::PlatformError>
         locations,
         running: Vec::new(),
         icons: HashMap::new(),
+        covers: HashMap::new(),
+        covers_started: false,
         search: String::new(),
         filter: "all".into(),
         selected: None,
@@ -830,6 +835,7 @@ fn show_games(ui: &SettingsWindow, state: &State) {
                 suggestion: c.suggestion.map(GameHdr::label).unwrap_or_default().into(),
                 running,
                 tint: tint(&g.name),
+                cover: state.covers.get(&g.id).cloned().unwrap_or_default(),
             }
         })
         .collect();
@@ -1147,6 +1153,12 @@ fn wire_games(ui: &SettingsWindow) {
             }
         });
     });
+    let weak = ui.as_weak();
+    ui.on_games_grid_shown(move || {
+        if let Some(ui) = weak.upgrade() {
+            start_covers(&ui);
+        }
+    });
     ui.on_open_wiki(|url| {
         shell::open_web_page(url.as_str());
     });
@@ -1221,6 +1233,34 @@ fn wire_games(ui: &SettingsWindow) {
 
 fn reload_games(state: &mut State) {
     state.games = scan_games(&state.config);
+}
+
+/// Loads the cover grid's art once, the first time the grid is shown. A
+/// sample build shows no third-party art.
+fn start_covers(ui: &SettingsWindow) {
+    if cfg!(feature = "sample") {
+        return;
+    }
+    let Some(games) = with_state(|s| {
+        if s.covers_started {
+            return None;
+        }
+        s.covers_started = true;
+        Some(s.games.clone())
+    })
+    .flatten() else {
+        return;
+    };
+    let weak = ui.as_weak();
+    crate::covers::spawn(games, move |cover| {
+        let _ = weak.upgrade_in_event_loop(move |ui| {
+            with_state(|s| {
+                let image = rgba_image(&cover.rgba, cover.width, cover.height);
+                s.covers.insert(cover.id, image);
+                show_games(&ui, s);
+            });
+        });
+    });
 }
 
 /// Finds icons for the games that have none yet; icons kept from earlier

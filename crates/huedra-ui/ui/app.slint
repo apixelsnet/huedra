@@ -160,6 +160,7 @@ export component SettingsWindow inherits Window {
     callback add-game();
     callback rescan();
     callback apply-all-suggestions();
+    callback games-grid-shown();
     callback set-game-setting(string, int);
     callback set-game-delay(string, int);
     callback set-game-hold(string, int);
@@ -449,6 +450,9 @@ export component SettingsWindow inherits Window {
                 }
                 apply-all-suggestions => {
                     root.apply-all-suggestions();
+                }
+                grid-shown => {
+                    root.games-grid-shown();
                 }
                 set-setting(id, i) => {
                     root.set-game-setting(id, i);

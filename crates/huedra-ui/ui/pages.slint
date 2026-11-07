@@ -26,6 +26,8 @@ export struct GameRow {
     running: bool,
     // 0 to 5: the tint of its tile in the cover grid.
     tint: int,
+    // Portrait art for the grid (Steam's library image), or none.
+    cover: image,
 }
 
 // What holds HDR now: a game, a video player, or nothing (kind "none").
@@ -1152,6 +1154,13 @@ export component GamesPage inherits Rectangle {
     callback add-game();
     callback rescan();
     callback apply-all-suggestions();
+    // The grid was shown: its art can be loaded.
+    callback grid-shown();
+    changed grid => {
+        if root.grid {
+            root.grid-shown();
+        }
+    }
     callback set-setting(string, int);
     callback set-delay(string, int);
     callback set-hold(string, int);
@@ -1578,11 +1587,19 @@ export component GamesPage inherits Rectangle {
                             border-width: selected ? 2px : 0px;
                             border-color: Theme.accent;
                             tint: game.tint;
+                            clip: true;
+                            if game.cover.width > 0: Image {
+                                width: parent.width;
+                                height: parent.height;
+                                source: game.cover;
+                                image-fit: cover;
+                                accessible-role: none;
+                            }
                             Rectangle {
                                 background: tile-touch.has-hover ? #FFFFFF14 : transparent;
                                 border-radius: parent.border-radius;
                             }
-                            GameIcon {
+                            if game.cover.width == 0: GameIcon {
                                 size: min(64px, parent.width / 2);
                                 icon: game.icon;
                                 initial: game.initial;

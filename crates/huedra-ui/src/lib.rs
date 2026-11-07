@@ -9,6 +9,8 @@
 #[cfg(windows)]
 mod app;
 #[cfg(windows)]
+mod covers;
+#[cfg(windows)]
 mod flyout;
 #[cfg(windows)]
 mod icons;
