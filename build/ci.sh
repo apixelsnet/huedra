@@ -21,6 +21,11 @@ cargo clippy --workspace --all-targets $locked -- -D warnings
 step "clippy (windows)"
 cargo xwin clippy --workspace --all-targets --target "$target" $locked -- -D warnings
 
+step "clippy (windows, sample data)"
+# The test-only sample mode of the settings window (huedra-ui feature
+# `sample`); release builds leave it out.
+cargo xwin clippy -p huedra --features sample --target "$target" $locked -- -D warnings
+
 step "deny"
 cargo deny --workspace check
 

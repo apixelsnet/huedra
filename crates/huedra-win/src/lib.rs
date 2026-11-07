@@ -31,6 +31,8 @@ pub mod job;
 #[cfg(windows)]
 pub mod menu;
 #[cfg(windows)]
+pub mod monitor;
+#[cfg(windows)]
 pub mod pipe;
 #[cfg(windows)]
 pub mod process;

@@ -7,6 +7,10 @@ rust-version.workspace = true
 publish.workspace = true
 license.workspace = true
 
+[features]
+# The settings window with sample data (see huedra-ui). Test builds only.
+sample = ["huedra-ui/sample"]
+
 [dependencies]
 huedra-core.workspace = true
 huedra-win.workspace = true

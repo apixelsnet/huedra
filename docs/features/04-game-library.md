@@ -44,3 +44,11 @@ Verified on this PC: `huedra games` (build of this change) lists 30 games in 93 
 Epic: with Undying installed through the Epic Games Launcher, `huedra games` lists it as an Epic game (`C:\Program Files\Epic Games\Undying`, program `Undying.exe` from its manifest); 31 games in 14 ms.
 Verified by the owner on this PC (2026-11-03): tested the build of this change and reported that it works.
 Not verified: Battle.net games, Amazon Games, itch.io and Heroic (not installed here; covered by parser tests with sample data in the documented formats); the SQLite reader against a real database.
+
+## Result (2026-11-07) — games added by hand match only their program
+Code: `Library::find` and `is_windows_folder` in `crates/huedra-core/src/library/mod.rs`; tests `finds_by_folder_and_exe`, `windows_programs_never_match_by_folder`.
+- Owner's report: Character Map (a test game added by hand from `C:\Windows\System32`) showed as running and turned HDR on when Windows Settings was opened, though Character Map never ran. A game added by hand counted every program in its folder, so a Windows helper started by Settings from System32 was taken for it. The same would happen for a game added from Downloads or the desktop.
+- Now a game added by hand matches only its own program. Store games still match any program in their install folder (those folders are theirs alone), but nothing inside the Windows folder matches by folder. A launcher that starts another program is still followed by the tracker.
+
+Verified: unit tests (the program itself still matches; another program beside it, a Windows helper and the Windows folder do not); CI green.
+Not verified: on this PC with Windows Settings opened against the test copy's Character Map entry.

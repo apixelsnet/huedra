@@ -23,16 +23,18 @@ use huedra_core::library::{self, Game, GameId, Store};
 use huedra_core::locations::Locations;
 use huedra_core::paths::{NormPath, display_name};
 use huedra_core::video::{self, StreamingSite, VideoApp};
-use huedra_win::{display, instance, pipe, registry, shell, stores};
+use huedra_win::{instance, pipe, registry, shell};
 use slint::{
     CloseRequestResponse, ComponentHandle, Image, Model, ModelRc, PhysicalPosition, PhysicalSize,
-    Rgba8Pixel, SharedPixelBuffer, VecModel,
+    Rgba8Pixel, SharedPixelBuffer, SharedString, VecModel,
 };
 
 use crate::icons;
 use crate::lookups::{self, Lookup};
+#[cfg(feature = "sample")]
+use crate::sample;
 use crate::ui::{
-    DisplayRow, GameDetail, GameRow, HistoryRow, SettingsWindow, SiteRow, StoreChip, Theme,
+    DisplayRow, GameDetail, GameRow, HistoryRow, NowRow, SettingsWindow, SiteRow, StoreChip, Theme,
     UpdateNote, VideoAppRow,
 };
 
@@ -44,6 +46,8 @@ const WINDOW_CLAIM: &str = "Huedra-settings-window";
 /// before bringing it to the front: a while after sign-in, when the PC is
 /// busy and the first window is slow to open.
 const WAIT_FOR_WINDOW: Duration = Duration::from_secs(10);
+/// The first Windows build with the Mica backdrop for apps (22H2).
+const MICA_BUILD: u32 = 22_621;
 /// How often the Status page asks the tray process for its state.
 const STATUS_POLL: Duration = Duration::from_secs(1);
 const SPECTRUM_W: u32 = 640;
@@ -61,19 +65,21 @@ pub enum Page {
     Video = 2,
     /// Displays.
     Displays = 3,
-    /// General.
-    General = 4,
+    /// Settings (named General before 1.2).
+    Settings = 4,
 }
 
 impl Page {
-    /// Parses a page name as given on the command line.
+    /// Parses a page name as given on the command line. `general`, the
+    /// Settings page's earlier name, still works, so shortcuts made for it
+    /// keep opening the page.
     pub fn from_name(name: &str) -> Option<Self> {
         match name.to_ascii_lowercase().as_str() {
             "status" => Some(Self::Status),
             "games" => Some(Self::Games),
             "video" => Some(Self::Video),
             "displays" => Some(Self::Displays),
-            "general" => Some(Self::General),
+            "settings" | "general" => Some(Self::Settings),
             _ => None,
         }
     }
@@ -92,6 +98,9 @@ struct State {
     displays: Vec<Display>,
     running: Vec<String>,
     icons: HashMap<GameId, Image>,
+    /// Portrait art for the cover grid, loaded once the grid is shown.
+    covers: HashMap<GameId, Image>,
+    covers_started: bool,
     search: String,
     filter: String,
     selected: Option<GameId>,
@@ -99,6 +108,10 @@ struct State {
     launch_note: Option<(GameId, String)>,
     /// The version the update dialog was last shown for in this window.
     update_shown: Option<huedra_core::update::Version>,
+    /// The failed switch whose notice was closed (its day, time and reason).
+    failure_closed: Option<String>,
+    /// The failed switch shown in the notice, if any.
+    failure: Option<String>,
 }
 
 thread_local! {
@@ -131,11 +144,32 @@ pub fn run(locations: Locations, page: Page) -> Result<(), slint::PlatformError>
     }
     // The software renderer needs a tenth of the memory of OpenGL and starts
     // faster; this window has nothing it cannot draw.
-    slint::BackendSelector::new()
+    let selector = slint::BackendSelector::new()
         .backend_name("winit".into())
-        .renderer_name("software".into())
-        .select()?;
+        .renderer_name("software".into());
+    // Mica: Windows tints the window's backdrop (the navigation pane and
+    // behind the pages) with the wallpaper, as in its own apps; the cards
+    // stay solid. Windows 11 22H2 (build 22621) and later; earlier builds
+    // would show the transparent backdrop black. Sample builds leave it out
+    // unless asked (`HUEDRA_SAMPLE_MICA`): captures of a hidden window
+    // cannot show it.
+    let mica = registry::windows_build().is_some_and(|build| build >= MICA_BUILD)
+        && (!cfg!(feature = "sample") || std::env::var_os("HUEDRA_SAMPLE_MICA").is_some());
+    let selector = if mica {
+        selector.with_winit_window_attributes_hook(|attributes| {
+            use slint::winit_030::winit::platform::windows::{
+                BackdropType, WindowAttributesExtWindows as _,
+            };
+            attributes
+                .with_transparent(true)
+                .with_system_backdrop(BackdropType::MainWindow)
+        })
+    } else {
+        selector
+    };
+    selector.select()?;
     let ui = SettingsWindow::new()?;
+    ui.set_mica(mica);
     let theme = ui.global::<Theme>();
     theme.set_motion(shell::animations_enabled());
     theme.set_spectrum_image(rgba_image(
@@ -148,9 +182,26 @@ pub fn run(locations: Locations, page: Page) -> Result<(), slint::PlatformError>
     registry::watch_light_theme(move |light| {
         let _ = weak.upgrade_in_event_loop(move |ui| ui.set_light_theme(light));
     });
+    // A sample window can be shown in either theme without changing Windows.
+    #[cfg(feature = "sample")]
+    if let Ok(theme) = std::env::var("HUEDRA_SAMPLE_THEME") {
+        ui.set_light_theme(theme == "light");
+    }
     ui.set_page(page as i32);
     ui.set_version(huedra_core::VERSION.into());
+    // Screenshots from a sample build name a release, not the workspace's
+    // 0.1.0.
+    #[cfg(feature = "sample")]
+    if let Ok(version) = std::env::var("HUEDRA_SAMPLE_VERSION") {
+        ui.set_version(version.into());
+    }
+    // A sample window can open on the first-run setup.
+    #[cfg(feature = "sample")]
+    ui.set_show_setup(std::env::var_os("HUEDRA_SAMPLE_SETUP").is_some());
     ui.set_update_note(update_note(&locations.update).into());
+    #[cfg(feature = "sample")]
+    ui.set_data_folder(sample::DATA_FOLDER.into());
+    #[cfg(not(feature = "sample"))]
     ui.set_data_folder(
         locations
             .config
@@ -163,25 +214,41 @@ pub fn run(locations: Locations, page: Page) -> Result<(), slint::PlatformError>
     let config = Config::load(&locations.config).unwrap_or_default();
     ui.set_disclaimer_accepted(config.general.disclaimer_accepted);
     ui.set_show_disclaimer(!config.general.disclaimer_accepted);
-    ui.set_can_check_updates(huedra_core::update::is_available());
+    // Someone who used Huedra before this window: once, until closed.
+    ui.set_new_look(config.general.disclaimer_accepted && !config.general.new_look_seen);
+    ui.set_can_check_updates(!cfg!(feature = "sample") && huedra_core::update::is_available());
     ui.set_has_project_page(huedra_core::update::project_page().is_some());
     ui.set_install_version(install_version(&locations.update).into());
-    let mut games = config.manual_games();
-    games.extend(stores::scan());
-    let games = library::without_repeats(games);
+    // A sample window can show the update notice for a made-up version.
+    #[cfg(feature = "sample")]
+    if let Ok(version) = std::env::var("HUEDRA_SAMPLE_UPDATE") {
+        ui.set_install_version(version.into());
+    }
+    #[cfg(feature = "sample")]
+    let info = {
+        sample::start(locations.config.clone(), huedra_win::clock::now());
+        sample::info()
+    };
+    #[cfg(not(feature = "sample"))]
+    let info = Cache::load(&locations.game_info);
+    let games = scan_games(&config);
     let state = State {
-        info: Cache::load(&locations.game_info),
-        displays: display::displays().unwrap_or_default(),
+        info,
+        displays: read_displays().unwrap_or_default(),
         games,
         config,
         locations,
         running: Vec::new(),
         icons: HashMap::new(),
+        covers: HashMap::new(),
+        covers_started: false,
         search: String::new(),
         filter: "all".into(),
         selected: None,
         launch_note: None,
         update_shown: None,
+        failure_closed: None,
+        failure: None,
     };
     STATE.set(Some(state));
 
@@ -189,14 +256,14 @@ pub fn run(locations: Locations, page: Page) -> Result<(), slint::PlatformError>
         show_games(&ui, s);
         show_video(&ui, s);
         show_displays(&ui, s);
-        show_general(&ui, s);
+        show_settings(&ui, s);
         show_status(&ui, s, None);
     });
     wire_status(&ui);
     wire_games(&ui);
     wire_video(&ui);
     wire_displays(&ui);
-    wire_general(&ui);
+    wire_settings(&ui);
     wire_about(&ui);
     restore_geometry(&ui);
     start_status_polling(&ui);
@@ -217,7 +284,7 @@ pub fn run(locations: Locations, page: Page) -> Result<(), slint::PlatformError>
         // "Closing this window: Quit Huedra" closes the tray as well, which
         // returns the displays it turned to HDR to SDR.
         if with_state(|s| s.config.general.on_close) == Some(CloseAction::Quit) {
-            let _ = pipe::call(&Request::Exit);
+            let _ = tray(&Request::Exit);
         }
         CloseRequestResponse::HideWindow
     });
@@ -293,7 +360,7 @@ fn limit_size_once_shown(attempt: u32) {
     });
 }
 
-fn rgba_image(rgba: &[u8], width: u32, height: u32) -> Image {
+pub(crate) fn rgba_image(rgba: &[u8], width: u32, height: u32) -> Image {
     Image::from_rgba8(SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(
         rgba, width, height,
     ))
@@ -312,7 +379,7 @@ fn edit(state: &mut State, change: impl FnOnce(&mut Config)) {
     change(&mut state.config);
     if state.config.save(&state.locations.config).is_ok() {
         thread::spawn(|| {
-            let _ = pipe::call(&Request::Reload);
+            let _ = tray(&Request::Reload);
         });
     }
 }
@@ -343,6 +410,37 @@ fn wire_status(ui: &SettingsWindow) {
             Request::Pause { minutes: 60 }
         });
     });
+    let weak = ui.as_weak();
+    ui.on_close_failure(move || {
+        if let Some(ui) = weak.upgrade() {
+            with_state(|s| {
+                s.failure_closed = s.failure.take();
+            });
+            ui.set_failure("".into());
+        }
+    });
+    let weak = ui.as_weak();
+    ui.on_close_new_look(move || {
+        if let Some(ui) = weak.upgrade() {
+            ui.set_new_look(false);
+            with_state(|s| edit(s, |c| c.general.new_look_seen = true));
+        }
+    });
+    // Setup chooses the mode while the tray may still be starting: the
+    // choice is saved as well as sent.
+    let weak = ui.as_weak();
+    ui.on_setup_mode(move |index| {
+        let mode = match index {
+            1 => Mode::AlwaysHdr,
+            2 => Mode::AlwaysSdr,
+            _ => Mode::Automatic,
+        };
+        if let Some(ui) = weak.upgrade() {
+            ui.set_mode(index);
+        }
+        with_state(|s| edit(s, |c| c.mode = mode));
+        send(Request::SetMode { mode });
+    });
     // This window is open already, so Huedra starts in the background.
     ui.on_start_huedra(|| {
         if let Ok(exe) = std::env::current_exe() {
@@ -351,11 +449,49 @@ fn wire_status(ui: &SettingsWindow) {
     });
 }
 
+/// Asks the tray process. With the `sample` feature the simulated tray
+/// answers instead, so a sample window never reaches a real tray.
+pub(crate) fn tray(request: &Request) -> Result<Response, pipe::PipeError> {
+    #[cfg(feature = "sample")]
+    {
+        if *request == Request::Status {
+            return sample::status()
+                .map(Response::Status)
+                .ok_or(pipe::PipeError::NotRunning);
+        }
+        sample::handle(request);
+        Ok(Response::Done {
+            message: String::new(),
+        })
+    }
+    #[cfg(not(feature = "sample"))]
+    pipe::call(request)
+}
+
+/// Every display with its state now.
+pub(crate) fn read_displays() -> Option<Vec<Display>> {
+    #[cfg(feature = "sample")]
+    return Some(sample::displays());
+    #[cfg(not(feature = "sample"))]
+    huedra_win::display::displays().ok()
+}
+
+/// The games of every store and those added by hand.
+fn scan_games(config: &Config) -> Vec<Game> {
+    #[cfg(feature = "sample")]
+    let found = sample::games();
+    #[cfg(not(feature = "sample"))]
+    let found = huedra_win::stores::scan();
+    let mut games = config.manual_games();
+    games.extend(found);
+    library::without_repeats(games)
+}
+
 /// Sends a request without blocking the window; the next status poll shows
 /// the result.
 fn send(request: Request) {
     thread::spawn(move || {
-        let _ = pipe::call(&request);
+        let _ = tray(&request);
     });
 }
 
@@ -370,7 +506,7 @@ fn start_status_polling(ui: &SettingsWindow) {
             // closes when it ends.
             let mut tray_seen = false;
             loop {
-                let answer = pipe::call(&Request::Status);
+                let answer = tray(&Request::Status);
                 // Only a missing pipe means the tray has ended; a busy or
                 // failed call does not.
                 let tray_gone = matches!(answer, Err(pipe::PipeError::NotRunning));
@@ -378,13 +514,24 @@ fn start_status_polling(ui: &SettingsWindow) {
                     Ok(Response::Status(report)) => Some(report),
                     _ => None,
                 };
+                // Read here, off the window's thread: every display with its
+                // state now, for the Status and Displays pages.
+                let displays = read_displays();
                 tray_seen |= report.is_some();
                 let close = tray_seen && tray_gone;
                 let delivered = weak.upgrade_in_event_loop(move |ui| {
                     if close {
                         close_with_tray(&ui);
                     }
-                    with_state(|s| show_status(&ui, s, report.as_ref()));
+                    with_state(|s| {
+                        if let Some(displays) = displays
+                            && displays != s.displays
+                        {
+                            s.displays = displays;
+                            show_displays(&ui, s);
+                        }
+                        show_status(&ui, s, report.as_ref());
+                    });
                     offer_update(&ui, false);
                 });
                 if delivered.is_err() {
@@ -405,6 +552,9 @@ fn show_status(ui: &SettingsWindow, state: &mut State, report: Option<&StatusRep
         ui.set_detail("Automatic switching is off until Huedra starts.".into());
         ui.set_caption(caption(state, on).into());
         ui.set_history(ModelRc::default());
+        ui.set_now(ModelRc::default());
+        ui.set_idle("Huedra isn't running.".into());
+        ui.set_failure("".into());
         set_running(ui, state, Vec::new());
         return;
     };
@@ -452,10 +602,18 @@ fn show_status(ui: &SettingsWindow, state: &mut State, report: Option<&StatusRep
             .unwrap_or_default()
             .into(),
     );
+    let today = huedra_win::clock::now().date();
+    let mut last_day: Option<&str> = None;
     let history: Vec<HistoryRow> = report
         .history
         .iter()
         .map(|h| HistoryRow {
+            group: if last_day.replace(h.day.as_str()) == Some(h.day.as_str()) {
+                String::new()
+            } else {
+                huedra_core::clock::day_label(&h.day, &today)
+            }
+            .into(),
             time: h.time.as_str().into(),
             title: h.title.as_str().into(),
             detail: h.detail.as_str().into(),
@@ -469,7 +627,88 @@ fn show_status(ui: &SettingsWindow, state: &mut State, report: Option<&StatusRep
         })
         .collect();
     ui.set_history(ModelRc::new(VecModel::from(history)));
+    // The newest change is a failed switch: a notice until it is closed.
+    state.failure = report
+        .history
+        .first()
+        .filter(|h| h.kind == HistoryKind::Failed)
+        .map(|h| format!("{} {} {}", h.day, h.time, h.detail));
+    let failure = report
+        .history
+        .first()
+        .filter(|_| state.failure.is_some() && state.failure != state.failure_closed)
+        .map(|h| sentence(&h.detail))
+        .unwrap_or_default();
+    ui.set_failure(failure.into());
+    ui.set_now(ModelRc::new(VecModel::from(now_rows(state, report))));
+    ui.set_idle(report.reason.as_str().into());
     set_running(ui, state, report.active_games.clone());
+}
+
+/// A reason as a sentence: capitalized, with a full stop.
+fn sentence(text: &str) -> String {
+    let mut chars = text.trim().chars();
+    let Some(first) = chars.next() else {
+        return String::new();
+    };
+    let mut out: String = first.to_uppercase().chain(chars).collect();
+    if !out.ends_with('.') {
+        out.push('.');
+    }
+    out
+}
+
+/// The games and players holding HDR, for the Now running card.
+fn now_rows(state: &State, report: &StatusReport) -> Vec<NowRow> {
+    let mut rows = Vec::new();
+    for id in &report.active_games {
+        if let Some(game) = state.games.iter().find(|g| g.id.as_str() == id) {
+            let setting = setting_of(state, &game.id);
+            let custom = state
+                .config
+                .game(&game.id)
+                .is_some_and(|s| s.start_delay.is_some() || s.hold.is_some());
+            rows.push(NowRow {
+                kind: "game".into(),
+                id: game.id.as_str().into(),
+                name: game.name.as_str().into(),
+                icon: state.icons.get(&game.id).cloned().unwrap_or_default(),
+                initial: initial(&game.name).into(),
+                detail: format!(
+                    "{} · {}{}",
+                    store_label(game.store),
+                    setting.label(),
+                    if custom { " · own times" } else { "" }
+                )
+                .into(),
+            });
+        } else if let Some(app) = video::app_of(&TriggerId::new(id.as_str())) {
+            if rows
+                .iter()
+                .any(|r| r.kind == "video" && r.name == app.label())
+            {
+                continue;
+            }
+            rows.push(NowRow {
+                kind: "video".into(),
+                id: app.key().into(),
+                name: app.label().into(),
+                icon: Image::default(),
+                initial: SharedString::default(),
+                detail: "HDR video".into(),
+            });
+        }
+    }
+    rows
+}
+
+/// A store's name as the Games page shows it.
+fn store_label(store: Store) -> &'static str {
+    if store == Store::Manual {
+        "Added by you"
+    } else {
+        store.label()
+    }
 }
 
 /// The line under the state in the navigation pane, for example
@@ -526,6 +765,68 @@ fn setting_of(state: &State, id: &GameId) -> GameHdr {
     state.config.game(id).map(|s| s.hdr).unwrap_or_default()
 }
 
+/// What the list shows about a game, used for its row and the filters.
+struct Cues {
+    /// HDR support: hdr, limited, no, mod, unknown, pending, or empty.
+    hdr: &'static str,
+    /// Whether it has its own setting (not the default).
+    own: bool,
+    /// The suggested setting where it differs from the current one.
+    suggestion: Option<GameHdr>,
+}
+
+fn cues(state: &State, game: &Game) -> Cues {
+    use huedra_core::gameinfo::WikiHdr;
+    let setting = setting_of(state, &game.id);
+    let info = state
+        .config
+        .general
+        .game_info
+        .then(|| state.info.get(&game.id))
+        .flatten();
+    let hdr = if !state.config.general.game_info || game.store == Store::Manual {
+        ""
+    } else {
+        match info {
+            None => "pending",
+            Some(i) if i.page.is_none() => "unknown",
+            Some(i) => match i.hdr {
+                WikiHdr::Supported => "hdr",
+                WikiHdr::Limited => "limited",
+                WikiHdr::NotSupported => "no",
+                WikiHdr::Hackable => "mod",
+                WikiHdr::Unknown => "unknown",
+            },
+        }
+    };
+    Cues {
+        hdr,
+        own: setting != GameHdr::default(),
+        suggestion: info
+            .and_then(|i| i.hdr.suggestion())
+            .filter(|s| *s != setting),
+    }
+}
+
+/// Whether a game passes the chosen filter: a store, or one of the cues.
+fn passes(filter: &str, game: &Game, cues: &Cues) -> bool {
+    match filter {
+        "all" => true,
+        "hdr" => matches!(cues.hdr, "hdr" | "limited"),
+        "own" => cues.own,
+        "suggest" => cues.suggestion.is_some(),
+        store => game.store.key() == store,
+    }
+}
+
+/// One of six tints for a game's tile, the same for a name every time.
+fn tint(name: &str) -> i32 {
+    let sum = name
+        .bytes()
+        .fold(0_u32, |acc, b| acc.wrapping_add(u32::from(b)));
+    i32::try_from(sum % 6).unwrap_or(0)
+}
+
 fn info_text(state: &State, id: &GameId) -> String {
     if !state.config.general.game_info {
         return "Game info is off".to_owned();
@@ -539,38 +840,69 @@ fn info_text(state: &State, id: &GameId) -> String {
 
 fn show_games(ui: &SettingsWindow, state: &State) {
     let search = state.search.to_lowercase();
-    let mut rows: Vec<GameRow> = state
-        .games
+    let all: Vec<(&Game, Cues)> = state.games.iter().map(|g| (g, cues(state, g))).collect();
+    let mut rows: Vec<GameRow> = all
         .iter()
-        .filter(|g| state.filter == "all" || g.store.key() == state.filter)
-        .filter(|g| search.is_empty() || g.name.to_lowercase().contains(&search))
-        .map(|g| {
+        .filter(|(g, c)| passes(&state.filter, g, c))
+        .filter(|(g, _)| search.is_empty() || g.name.to_lowercase().contains(&search))
+        .map(|(g, c)| {
             let running = state.running.iter().any(|r| r == g.id.as_str());
-            let info = info_text(state, &g.id);
+            let store = store_label(g.store);
             GameRow {
                 id: g.id.as_str().into(),
                 name: g.name.as_str().into(),
                 icon: state.icons.get(&g.id).cloned().unwrap_or_default(),
                 initial: initial(&g.name).into(),
-                store: (if g.store == Store::Manual {
-                    "Added by you"
+                store: if running {
+                    format!("Running · {store}")
                 } else {
-                    g.store.label()
-                })
-                .into(),
-                detail: if running {
-                    format!("Running · {info}")
-                } else {
-                    info
+                    store.to_owned()
                 }
                 .into(),
-                setting: setting_of(state, &g.id).label().into(),
+                hdr: c.hdr.into(),
+                setting: if c.own {
+                    setting_of(state, &g.id).label()
+                } else {
+                    "Default"
+                }
+                .into(),
+                own: c.own,
+                suggestion: c.suggestion.map(GameHdr::label).unwrap_or_default().into(),
                 running,
+                tint: tint(&g.name),
+                cover: state.covers.get(&g.id).cloned().unwrap_or_default(),
             }
         })
         .collect();
     rows.sort_by_key(|r| r.name.to_lowercase());
     ui.set_games(ModelRc::new(VecModel::from(rows)));
+
+    let cue_count = |f: &dyn Fn(&Cues) -> bool| count(all.iter().filter(|(_, c)| f(c)).count());
+    let suggest = cue_count(&|c| c.suggestion.is_some());
+    let mut cue_chips = Vec::new();
+    if state.config.general.game_info {
+        cue_chips.push(StoreChip {
+            key: "hdr".into(),
+            label: "Supports HDR".into(),
+            count: cue_count(&|c| matches!(c.hdr, "hdr" | "limited")),
+        });
+    }
+    cue_chips.push(StoreChip {
+        key: "own".into(),
+        label: "Own setting".into(),
+        count: cue_count(&|c| c.own),
+    });
+    if state.config.general.game_info {
+        cue_chips.push(StoreChip {
+            key: "suggest".into(),
+            label: "Suggestions".into(),
+            count: suggest,
+        });
+    }
+    if !ui.get_cue_chips().iter().eq(cue_chips.iter().cloned()) {
+        ui.set_cue_chips(ModelRc::new(VecModel::from(cue_chips)));
+    }
+    ui.set_suggest_count(suggest);
 
     let mut chips = vec![StoreChip {
         key: "all".into(),
@@ -598,12 +930,7 @@ fn show_games(ui: &SettingsWindow, state: &State) {
         if n > 0 {
             chips.push(StoreChip {
                 key: store.key().into(),
-                label: (if store == Store::Manual {
-                    "Added by you"
-                } else {
-                    store.label()
-                })
-                .into(),
+                label: store_label(store).into(),
                 count: count(n),
             });
         }
@@ -722,6 +1049,9 @@ fn detail_of(state: &State, game: &Game) -> GameDetail {
 
 /// This program's path, for launch options, shortcuts and menu entries.
 fn huedra_exe() -> Option<String> {
+    #[cfg(feature = "sample")]
+    return Some(sample::EXE.to_owned());
+    #[cfg(not(feature = "sample"))]
     std::env::current_exe()
         .ok()
         .map(|exe| exe.display().to_string())
@@ -839,6 +1169,32 @@ fn wire_games(ui: &SettingsWindow) {
             }
         });
     });
+    let r = refresh.clone();
+    let weak = ui.as_weak();
+    ui.on_apply_all_suggestions(move || {
+        renew_detail(&weak);
+        r(&|s| {
+            let changes: Vec<(GameId, GameHdr)> = s
+                .games
+                .iter()
+                .filter_map(|g| cues(s, g).suggestion.map(|hdr| (g.id.clone(), hdr)))
+                .collect();
+            edit(s, |c| {
+                for (id, hdr) in &changes {
+                    c.game_mut(id).hdr = *hdr;
+                }
+            });
+            if s.filter == "suggest" {
+                s.filter = "all".into();
+            }
+        });
+    });
+    let weak = ui.as_weak();
+    ui.on_games_grid_shown(move || {
+        if let Some(ui) = weak.upgrade() {
+            start_covers(&ui);
+        }
+    });
     ui.on_open_wiki(|url| {
         shell::open_web_page(url.as_str());
     });
@@ -906,20 +1262,49 @@ fn wire_games(ui: &SettingsWindow) {
                 show_games(&ui, s);
             });
             start_icons(&ui);
-            let _ = pipe::call(&Request::Reload);
+            let _ = tray(&Request::Reload);
         }
     });
 }
 
 fn reload_games(state: &mut State) {
-    let mut games = state.config.manual_games();
-    games.extend(stores::scan());
-    state.games = library::without_repeats(games);
+    state.games = scan_games(&state.config);
+}
+
+/// Loads the cover grid's art once, the first time the grid is shown. A
+/// sample build shows no third-party art.
+fn start_covers(ui: &SettingsWindow) {
+    if cfg!(feature = "sample") {
+        return;
+    }
+    let Some(games) = with_state(|s| {
+        if s.covers_started {
+            return None;
+        }
+        s.covers_started = true;
+        Some(s.games.clone())
+    })
+    .flatten() else {
+        return;
+    };
+    let weak = ui.as_weak();
+    crate::covers::spawn(games, move |cover| {
+        let _ = weak.upgrade_in_event_loop(move |ui| {
+            with_state(|s| {
+                let image = rgba_image(&cover.rgba, cover.width, cover.height);
+                s.covers.insert(cover.id, image);
+                show_games(&ui, s);
+            });
+        });
+    });
 }
 
 /// Finds icons for the games that have none yet; icons kept from earlier
 /// runs arrive first. Discord's list is used only while online lookups are on.
 fn start_icons(ui: &SettingsWindow) {
+    if cfg!(feature = "sample") {
+        return;
+    }
     let Some((games, folder, online)) = with_state(|s| {
         let games: Vec<Game> = s
             .games
@@ -947,6 +1332,9 @@ fn start_icons(ui: &SettingsWindow) {
 }
 
 fn start_lookups(ui: &SettingsWindow) {
+    if cfg!(feature = "sample") {
+        return;
+    }
     let Some((items, path)) = with_state(|s| {
         if !s.config.general.game_info {
             return None;
@@ -983,17 +1371,40 @@ fn show_displays(ui: &SettingsWindow, state: &State) {
         .displays
         .iter()
         .map(|d| {
-            let mut parts = vec![match d.support {
-                HdrSupport::Supported => "Supports HDR".to_owned(),
-                HdrSupport::LimitedByPolicy => "HDR limited by Windows policy".to_owned(),
-                HdrSupport::Unsupported => "No HDR support".to_owned(),
-            }];
-            if let Some(peak) = d.peak.filter(|_| d.support.is_capable()) {
-                parts.push(format!("up to {peak}"));
-            }
+            let capable = d.support.is_capable();
+            let controlled = capable && state.config.is_managed(d.id.as_str());
+            let mut parts = Vec::new();
             if d.primary {
-                parts.push("main display".to_owned());
+                parts.push("Main display".to_owned());
             }
+            match d.support {
+                HdrSupport::Supported => {}
+                HdrSupport::LimitedByPolicy => {
+                    parts.push("HDR limited by Windows policy".to_owned());
+                }
+                HdrSupport::Unsupported => {}
+            }
+            if let Some(peak) = d.peak.filter(|_| capable) {
+                parts.push(format!("Up to {peak}"));
+            }
+            let mut detail = parts.join(" · ");
+            if !detail.is_empty() {
+                detail.push_str(". ");
+            }
+            detail.push_str(if !capable {
+                "No HDR support, so Huedra can't change it."
+            } else if controlled {
+                "Huedra turns HDR on and off here."
+            } else {
+                "Huedra doesn't change this display. HDR stays as you set it in Windows."
+            });
+            let control = if !capable {
+                "No HDR support"
+            } else if controlled {
+                "Controlled by Huedra"
+            } else {
+                "Not controlled by Huedra"
+            };
             DisplayRow {
                 id: d.id.as_str().into(),
                 number: i32::try_from(d.number).unwrap_or(0),
@@ -1003,13 +1414,26 @@ fn show_displays(ui: &SettingsWindow, state: &State) {
                     format!("Display {} · {}", d.number, d.name)
                 }
                 .into(),
-                detail: parts.join(" · ").into(),
-                capable: d.support.is_capable(),
-                managed: d.support.is_capable() && state.config.is_managed(d.id.as_str()),
+                detail: detail.into(),
+                capable,
+                controlled,
                 hdr_on: d.state == HdrState::On,
+                status: if d.primary {
+                    // "Main display · controlled by Huedra": only the
+                    // first word gives up its capital.
+                    format!(
+                        "Main display · {}{}",
+                        control[..1].to_lowercase(),
+                        &control[1..]
+                    )
+                } else {
+                    control.to_owned()
+                }
+                .into(),
             }
         })
         .collect();
+    ui.set_status_displays(ModelRc::new(VecModel::from(rows.clone())));
     ui.set_displays(ModelRc::new(VecModel::from(rows)));
     ui.set_retries(i32::try_from(state.config.general.retry_attempts).unwrap_or(0));
     ui.set_content_only(state.config.displays.content_only);
@@ -1028,17 +1452,21 @@ fn wire_displays(ui: &SettingsWindow) {
         };
         with_state(|s| edit(s, |c| c.displays.manual = manual));
     });
-    ui.on_set_managed(|id, managed| {
+    let weak = ui.as_weak();
+    ui.on_set_controlled(move |id, controlled| {
         with_state(|s| {
             let id = id.to_string();
             edit(s, |c| {
                 c.displays
                     .unmanaged
                     .retain(|d| !d.eq_ignore_ascii_case(&id));
-                if !managed {
+                if !controlled {
                     c.displays.unmanaged.push(id);
                 }
             });
+            if let Some(ui) = weak.upgrade() {
+                show_displays(&ui, s);
+            }
         });
     });
     ui.on_set_retries(|n| {
@@ -1168,7 +1596,7 @@ fn wire_video(ui: &SettingsWindow) {
     });
 }
 
-// ---- General ----------------------------------------------------------
+// ---- Settings ---------------------------------------------------------
 
 /// Whether the start-up entry starts this program. An entry for another
 /// copy of Huedra (an installed one, seen from a portable copy) does not
@@ -1179,7 +1607,7 @@ fn starts_with_windows() -> bool {
     })
 }
 
-fn show_general(ui: &SettingsWindow, state: &State) {
+fn show_settings(ui: &SettingsWindow, state: &State) {
     let g = &state.config.general;
     ui.set_start_with_windows(starts_with_windows());
     ui.set_context_menu(registry::context_menu_command().is_some());
@@ -1197,15 +1625,20 @@ fn show_general(ui: &SettingsWindow, state: &State) {
     ui.set_delay(secs(g.start_delay));
     ui.set_hotkeys(g.hotkeys);
     ui.set_log_titles(g.log_window_titles);
+    ui.set_notify_failures(g.notify_failures);
 }
 
-fn wire_general(ui: &SettingsWindow) {
+fn wire_settings(ui: &SettingsWindow) {
     let weak = ui.as_weak();
     ui.on_set_start_with_windows(move |on| {
         let command = std::env::current_exe()
             .ok()
             .map(|exe| command::startup_command(&exe));
-        let result = registry::set_startup(if on { command.as_deref() } else { None });
+        let result = if cfg!(feature = "sample") {
+            Ok(())
+        } else {
+            registry::set_startup(if on { command.as_deref() } else { None })
+        };
         with_state(|s| {
             edit(s, |c| c.general.start_with_windows = on && result.is_ok());
         });
@@ -1225,7 +1658,9 @@ fn wire_general(ui: &SettingsWindow) {
             }),
             _ => None,
         };
-        let _ = registry::set_context_menu(entry);
+        if !cfg!(feature = "sample") {
+            let _ = registry::set_context_menu(entry);
+        }
         if let Some(ui) = weak.upgrade() {
             ui.set_context_menu(registry::context_menu_command().is_some());
         }
@@ -1251,11 +1686,21 @@ fn wire_general(ui: &SettingsWindow) {
             });
         });
     });
+    // These change what the expanders sum up in their headers (and the
+    // shortcut labels on Status), so the page is shown again after each.
     let weak = ui.as_weak();
-    ui.on_set_game_info(move |on| {
+    let change = std::rc::Rc::new(move |change: &dyn Fn(&mut Config)| {
         with_state(|s| {
-            edit(s, |c| c.general.game_info = on);
+            edit(s, change);
+            if let Some(ui) = weak.upgrade() {
+                show_settings(&ui, s);
+            }
         });
+    });
+    let weak = ui.as_weak();
+    let c = change.clone();
+    ui.on_set_game_info(move |on| {
+        c(&|c| c.general.game_info = on);
         if let Some(ui) = weak.upgrade() {
             with_state(|s| show_games(&ui, s));
             if on {
@@ -1264,29 +1709,24 @@ fn wire_general(ui: &SettingsWindow) {
             }
         }
     });
-    ui.on_set_hold(|v| {
-        with_state(|s| {
-            edit(s, |c| {
-                c.general.hold = seconds(v, huedra_core::config::MAX_HOLD)
-            });
-        });
+    let c = change.clone();
+    ui.on_set_hold(move |v| {
+        c(&|c| c.general.hold = seconds(v, huedra_core::config::MAX_HOLD));
     });
-    ui.on_set_delay(|v| {
-        with_state(|s| {
-            edit(s, |c| {
-                c.general.start_delay = seconds(v, huedra_core::config::MAX_DELAY)
-            });
-        });
+    let c = change.clone();
+    ui.on_set_delay(move |v| {
+        c(&|c| c.general.start_delay = seconds(v, huedra_core::config::MAX_DELAY));
     });
-    ui.on_set_hotkeys(|on| {
-        with_state(|s| {
-            edit(s, |c| c.general.hotkeys = on);
-        });
+    let c = change.clone();
+    ui.on_set_hotkeys(move |on| {
+        c(&|c| c.general.hotkeys = on);
     });
-    ui.on_set_log_titles(|on| {
-        with_state(|s| {
-            edit(s, |c| c.general.log_window_titles = on);
-        });
+    let c = change.clone();
+    ui.on_set_log_titles(move |on| {
+        c(&|c| c.general.log_window_titles = on);
+    });
+    ui.on_set_notify_failures(move |on| {
+        change(&|c| c.general.notify_failures = on);
     });
 }
 
@@ -1294,6 +1734,7 @@ fn wire_general(ui: &SettingsWindow) {
 
 fn restore_geometry(ui: &SettingsWindow) {
     let Some(geometry) = with_state(|s| WindowGeometry::load(&s.locations.window)).flatten() else {
+        fit_first_size(ui);
         return;
     };
     let window = ui.window();
@@ -1303,6 +1744,32 @@ fn restore_geometry(ui: &SettingsWindow) {
     }
     if geometry.maximized {
         window.set_maximized(true);
+    }
+}
+
+/// The first window keeps its default size (wide enough for Status's two
+/// cards side by side) unless that leaves no room on a small screen: then
+/// it takes nine tenths of the main display's work area.
+#[expect(
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss,
+    reason = "window sizes are small and positive"
+)]
+fn fit_first_size(ui: &SettingsWindow) {
+    let Some(screen) = huedra_win::monitor::at(0, 0) else {
+        return;
+    };
+    // `preferred-width` and `preferred-height` in app.slint.
+    let (width, height) = (1100.0_f32, 780.0_f32);
+    let wanted = |side: f32| (side * screen.scale).round() as u32;
+    let room = |side: i32| (f64::from(side) * 0.9) as u32;
+    let (wanted_width, wanted_height) = (wanted(width), wanted(height));
+    let (room_width, room_height) = (room(screen.work.width()), room(screen.work.height()));
+    if wanted_width > room_width || wanted_height > room_height {
+        ui.window().set_size(PhysicalSize::new(
+            wanted_width.min(room_width),
+            wanted_height.min(room_height),
+        ));
     }
 }
 
@@ -1477,8 +1944,15 @@ fn wire_about(ui: &SettingsWindow) {
             return;
         }
         ui.set_disclaimer_accepted(true);
+        // The first acceptance: three short screens of setup follow.
+        ui.set_show_setup(true);
         let setup = with_state(|s| {
-            edit(s, |c| c.general.disclaimer_accepted = true);
+            edit(s, |c| {
+                c.general.disclaimer_accepted = true;
+                // A new user gets the setup, not the notice about the new
+                // window.
+                c.general.new_look_seen = true;
+            });
             !s.locations.portable && s.config.general.start_with_windows
         });
         // What the tray did on its first start before there was a
@@ -1488,10 +1962,13 @@ fn wire_about(ui: &SettingsWindow) {
             && registry::startup_command().is_none()
             && let Ok(exe) = std::env::current_exe()
         {
-            let _ = registry::set_startup(Some(&command::startup_command(&exe)));
+            if !cfg!(feature = "sample") {
+                let _ = registry::set_startup(Some(&command::startup_command(&exe)));
+            }
             ui.set_start_with_windows(starts_with_windows());
         }
-        if !matches!(pipe::call(&Request::Status), Ok(Response::Status(_)))
+        if !cfg!(feature = "sample")
+            && !matches!(tray(&Request::Status), Ok(Response::Status(_)))
             && let Ok(exe) = std::env::current_exe()
         {
             // The window is open already; the tray only joins it.
@@ -1551,29 +2028,25 @@ fn offer_update(ui: &SettingsWindow, force: bool) {
     ui.set_show_update(true);
 }
 
-/// The Updates row's extra sentence: whether this build checks, when it
-/// last did, and what is waiting.
+/// The Updates row's extra sentence: whether this build checks, and when
+/// it last did. A version waiting shows in its own notice.
 fn update_note(path: &std::path::Path) -> String {
-    use huedra_core::update::{self, UpdateState, Version};
+    use huedra_core::update::{self, UpdateState};
 
+    if cfg!(feature = "sample") {
+        return "Last checked an hour ago.".to_owned();
+    }
     if !update::is_available() {
         return "This build can't check for updates.".to_owned();
     }
     let state = UpdateState::load(path);
-    let mut note = if state.last_check == 0 {
-        "Not checked yet.".to_owned()
-    } else {
-        let now = update::unix_secs(std::time::SystemTime::now());
-        match now.saturating_sub(state.last_check) / 3600 {
-            0 => "Last checked less than an hour ago.".to_owned(),
-            1 => "Last checked an hour ago.".to_owned(),
-            hours => format!("Last checked {hours} hours ago."),
-        }
-    };
-    if let Some(version) = state.waiting(Version::current()) {
-        note.push_str(&format!(
-            " Huedra {version} is available: choose Install under About, or in the tray menu."
-        ));
+    if state.last_check == 0 {
+        return "Not checked yet.".to_owned();
     }
-    note
+    let now = update::unix_secs(std::time::SystemTime::now());
+    match now.saturating_sub(state.last_check) / 3600 {
+        0 => "Last checked less than an hour ago.".to_owned(),
+        1 => "Last checked an hour ago.".to_owned(),
+        hours => format!("Last checked {hours} hours ago."),
+    }
 }

@@ -269,6 +269,57 @@ pub fn steam_cached_icon(steam_root: &Path, app_id: u32) -> Option<PathBuf> {
     })
 }
 
+/// Largest cover file read: Steam's 600 x 900 library images are about
+/// 100 KB.
+pub const MAX_COVER_BYTES: u64 = 2 << 20;
+
+/// The portrait art Steam keeps for a game in its library cache:
+/// `appcache\librarycache\<app id>\library_600x900.jpg`, or
+/// `<app id>_library_600x900.jpg` in older versions of Steam.
+pub fn steam_cached_cover(steam_root: &Path, app_id: u32) -> Option<PathBuf> {
+    let cache = steam_root.join("appcache").join("librarycache");
+    [
+        cache.join(app_id.to_string()).join("library_600x900.jpg"),
+        cache.join(format!("{app_id}_library_600x900.jpg")),
+    ]
+    .into_iter()
+    .find(|path| path.is_file())
+}
+
+/// Shrinks RGBA pixels `width` x `height` by a whole `factor`, averaging
+/// each block, so a 600 x 900 cover becomes 200 x 300 for the grid. Returns
+/// the pixels and the new size; `None` for a factor of 0 or pixels that do
+/// not match the size.
+pub fn shrink(rgba: &[u8], width: u32, height: u32, factor: u32) -> Option<(Vec<u8>, u32, u32)> {
+    let (w, h, f) = (
+        usize::try_from(width).ok()?,
+        usize::try_from(height).ok()?,
+        usize::try_from(factor).ok()?,
+    );
+    if f == 0 || rgba.len() != w.checked_mul(h)?.checked_mul(4)? {
+        return None;
+    }
+    let (nw, nh) = (w / f, h / f);
+    let mut out = Vec::with_capacity(nw * nh * 4);
+    for y in 0..nh {
+        for x in 0..nw {
+            let mut sum = [0_u32; 4];
+            for dy in 0..f {
+                let row = (y * f + dy) * w;
+                for dx in 0..f {
+                    let at = (row + x * f + dx) * 4;
+                    for (c, s) in sum.iter_mut().enumerate() {
+                        *s += u32::from(rgba[at + c]);
+                    }
+                }
+            }
+            let n = u32::try_from(f * f).ok()?;
+            out.extend(sum.iter().map(|s| u8::try_from(s / n).unwrap_or(u8::MAX)));
+        }
+    }
+    Some((out, u32::try_from(nw).ok()?, u32::try_from(nh).ok()?))
+}
+
 /// The game's main program in its folder: one of `hints` (from Discord's
 /// list) when present; otherwise, among the programs that are not
 /// installers, uninstallers or crash reporters, the largest whose name
@@ -352,6 +403,26 @@ fn collect_programs(folder: &Path) -> Vec<Program> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn shrinks_covers() {
+        // 2 x 2 pixels: black, white, white, black.
+        let px = [
+            0, 0, 0, 255, 255, 255, 255, 255, 255, 255, 255, 255, 0, 0, 0, 255,
+        ];
+        assert_eq!(
+            super::shrink(&px, 2, 2, 2),
+            Some((vec![127, 127, 127, 255], 1, 1)),
+            "averaged"
+        );
+        assert_eq!(
+            super::shrink(&px, 2, 2, 1).map(|s| s.1),
+            Some(2),
+            "factor 1"
+        );
+        assert_eq!(super::shrink(&px, 3, 2, 2), None, "size mismatch");
+        assert_eq!(super::shrink(&px, 2, 2, 0), None, "factor 0");
+    }
+
     use super::*;
     use crate::library::Store;
 

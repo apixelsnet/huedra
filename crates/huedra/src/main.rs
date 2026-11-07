@@ -61,11 +61,18 @@ fn run(command: Command) -> anyhow::Result<ExitCode> {
             let page = match page.as_deref() {
                 None => huedra_ui::Page::default(),
                 Some(name) => huedra_ui::Page::from_name(name).ok_or_else(|| {
-                    anyhow::anyhow!("unknown page `{name}`; use status, games, displays or general")
+                    anyhow::anyhow!(
+                        "unknown page `{name}`; use status, games, video, displays or settings"
+                    )
                 })?,
             };
             huedra_win::console::release_own_console();
             huedra_ui::run(huedra_core::locations::Locations::resolve()?, page)?;
+        }
+        Command::Flyout(icon) => {
+            record_crashes("quick panel");
+            huedra_win::console::release_own_console();
+            huedra_ui::run_flyout(huedra_core::locations::Locations::resolve()?, icon)?;
         }
     }
     Ok(ExitCode::SUCCESS)
@@ -107,6 +114,29 @@ fn run(command: Command) -> anyhow::Result<ExitCode> {
         _ => anyhow::bail!("Huedra runs on Windows only"),
     }
     Ok(ExitCode::SUCCESS)
+}
+
+/// Opens the quick panel as its own process, beside the tray icon at
+/// `icon`. A click while one is open closes it instead (when the click took
+/// its focus it is closing already).
+#[cfg(windows)]
+pub fn open_flyout(icon: Option<huedra_core::flyout::Rect>) {
+    use std::os::windows::process::CommandExt as _;
+    /// `CREATE_NO_WINDOW`: no console window for the child process.
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    if huedra_ui::flyout_open() {
+        huedra_win::instance::close_window(huedra_ui::FLYOUT_TITLE);
+        return;
+    }
+    huedra_win::instance::pass_on_foreground();
+    if let Ok(exe) = std::env::current_exe() {
+        let mut command = std::process::Command::new(exe);
+        command.arg("flyout").creation_flags(CREATE_NO_WINDOW);
+        if let Some(icon) = icon {
+            command.args(icon.to_args());
+        }
+        let _ = command.spawn();
+    }
 }
 
 /// Opens the settings window as its own process, or brings the open one to

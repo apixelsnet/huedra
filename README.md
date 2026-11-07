@@ -21,7 +21,7 @@
 > Huedra changes a Windows display setting; please read the [disclaimer](#disclaimer) before using it.
 
 <p align="center">
-  <img src="docs/assets/huedra-tour.gif" width="820" alt="The Huedra window: status, games, video players, displays and general settings">
+  <img src="docs/assets/huedra-tour.gif" width="820" alt="The Huedra window, shown with sample data: HDR turning on for a game on the Status page, the Games list and cover grid, video players, displays, settings, and the quick panel from the tray icon">
 </p>
 
 ## Why Huedra
@@ -35,13 +35,14 @@ Windows HDR makes HDR games and video look as intended, but it makes the desktop
 | **Games, found automatically** | Reads the libraries of Steam, Epic Games, GOG, Xbox, Ubisoft Connect, EA app, Rockstar Games, Battle.net, Riot Games, HoYoPlay, Amazon Games, itch.io and Heroic Games Launcher, plus the games the Xbox Game Bar recognized. HDR turns on while a game runs, with an optional delay per game and a time to keep HDR on after it closes. |
 | **HDR video** | VLC, mpv, MPC-HC, MPC-BE and PotPlayer, by the title of the file playing. YouTube and streaming sites through the Huedra browser extension. RTX Video HDR aware. |
 | **The right display** | Only the display showing the game or video switches, and HDR follows the window to another display. Always HDR mode and the shortcut switch only the main display, unless you choose every display. |
+| **Quick panel** | A click on the tray icon shows whether HDR is on and why, the mode, and a switch per display, with Pause and Never use HDR for the game running, without opening the window. |
 | **Start with HDR** | For games that misbehave when HDR changes while they start: a Steam launch option, a desktop shortcut, or a File Explorer menu entry turns HDR on first. |
 | **Light on the system** | One small executable, no installer, no background polling: Huedra waits for Windows to report a change. About 2 MB of memory. |
 | **Safe by design** | Runs without administrator rights. Never reads or writes another program's memory. Updates install only with a valid signature, and keep your settings. |
 | **Private** | No accounts and no telemetry. See [PRIVACY.md](PRIVACY.md). |
 
 <p align="center">
-  <img src="docs/assets/screenshot-games.png" width="820" alt="The Games page, listing installed games with their HDR settings">
+  <img src="docs/assets/screenshot-games.png" width="820" alt="The Games page with sample data: each game's HDR support, its setting, and PCGamingWiki's suggestions">
 </p>
 
 ## Getting started
@@ -78,7 +79,7 @@ If Huedra is useful to you:
 - **Support development** on [Buy Me a Coffee](https://buymeacoffee.com/pixelsthecoder).
 - **Report problems and test** on hardware the project has not seen yet.
 
-Both links are also in the app, under **General › About**, and Buy Me a Coffee is in the tray menu.
+Both links are also in the app, under **Settings › About**, and Buy Me a Coffee is in the tray menu.
 
 ### Supporters
 

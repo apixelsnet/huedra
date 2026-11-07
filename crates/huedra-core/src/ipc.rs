@@ -32,6 +32,16 @@ pub enum Request {
     Resume,
     /// Turn HDR on or off now, as the shortcut does.
     ToggleHdr,
+    /// Turn HDR on or off on one display now (the quick panel's switch).
+    SetDisplayHdr {
+        /// Device path, as in [`DisplayReport::id`].
+        display: String,
+        /// HDR on or off.
+        on: bool,
+    },
+    /// Never change HDR for the game or player active now, as "Never use HDR for"
+    /// in the tray menu does ([`StatusReport::never`] names it).
+    NeverForActive,
     /// Read the settings file again.
     Reload,
     /// Turn HDR on for a program about to start through `huedra launch`,
@@ -92,6 +102,9 @@ pub struct StatusReport {
     pub busy: bool,
     /// Managed displays.
     pub displays: Vec<DisplayReport>,
+    /// The game or player "Never use HDR for" would apply to; empty when none.
+    #[serde(default)]
+    pub never: String,
     /// Recent changes, newest first.
     pub history: Vec<HistoryEntry>,
 }
@@ -128,6 +141,9 @@ pub enum HistoryKind {
 pub struct HistoryEntry {
     /// Local time, `HH:MM`.
     pub time: String,
+    /// Local day, `YYYY-MM-DD`; empty from a tray of an earlier version.
+    #[serde(default)]
+    pub day: String,
     /// Short title, for example "HDR turned on".
     pub title: String,
     /// Reason.

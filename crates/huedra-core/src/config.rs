@@ -137,9 +137,15 @@ pub struct General {
     pub log_window_titles: bool,
     /// Register the keyboard shortcuts.
     pub hotkeys: bool,
+    /// A Windows notification when a switch fails (never for normal ones).
+    pub notify_failures: bool,
     /// The disclaimer shown on the first start was accepted. Until then the
     /// tray does not start and HDR is never changed.
     pub disclaimer_accepted: bool,
+    /// The "Huedra has a new look" notice was closed, or never applied:
+    /// set on the first acceptance of the disclaimer, so only people who
+    /// used Huedra before the new window see it once.
+    pub new_look_seen: bool,
 }
 
 impl Default for General {
@@ -154,7 +160,9 @@ impl Default for General {
             retry_attempts: 2,
             log_window_titles: false,
             hotkeys: true,
+            notify_failures: true,
             disclaimer_accepted: false,
+            new_look_seen: false,
         }
     }
 }
@@ -583,6 +591,17 @@ mod tests {
         assert_eq!(config.general.on_close, CloseAction::Quit, "quit");
         let text = config.to_toml().expect("serialize");
         assert!(text.contains("on_close = \"quit\""), "written as {text}");
+    }
+
+    #[test]
+    fn new_look_is_unseen_in_older_files() {
+        let older = Config::parse("[general]\ndisclaimer_accepted = true").expect("parse");
+        assert!(older.general.disclaimer_accepted, "accepted before");
+        assert!(!older.general.new_look_seen, "notice not seen yet");
+        let mut seen = older;
+        seen.general.new_look_seen = true;
+        let text = seen.to_toml().expect("serialize");
+        assert!(text.contains("new_look_seen = true"), "written as {text}");
     }
 
     #[test]

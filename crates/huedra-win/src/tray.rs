@@ -13,8 +13,9 @@ use windows::Win32::Graphics::Gdi::{
 };
 use windows::Win32::UI::HiDpi::{GetDpiForSystem, GetSystemMetricsForDpi};
 use windows::Win32::UI::Shell::{
-    NIF_ICON, NIF_MESSAGE, NIF_SHOWTIP, NIF_TIP, NIM_ADD, NIM_DELETE, NIM_MODIFY, NIM_SETVERSION,
-    NOTIFYICON_VERSION_4, NOTIFYICONDATAW, Shell_NotifyIconW,
+    NIF_ICON, NIF_INFO, NIF_MESSAGE, NIF_SHOWTIP, NIF_TIP, NIIF_RESPECT_QUIET_TIME, NIIF_USER,
+    NIM_ADD, NIM_DELETE, NIM_MODIFY, NIM_SETVERSION, NOTIFYICON_VERSION_4, NOTIFYICONDATAW,
+    NOTIFYICONIDENTIFIER, Shell_NotifyIconGetRect, Shell_NotifyIconW,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateIconIndirect, DestroyIcon, HICON, ICONINFO, SM_CXSMICON,
@@ -85,6 +86,45 @@ impl Tray {
         self.shown = Some((icon, tip.to_owned()));
     }
 
+    /// Shows a Windows notification from the icon. Windows holds it while
+    /// quiet hours or a full-screen game ask for quiet, and keeps it in the
+    /// notification center.
+    pub fn notify(&self, title: &str, text: &str) {
+        let Some((icon, tip)) = self.shown.as_ref().filter(|_| self.added) else {
+            return;
+        };
+        let mut data = self.data(*icon, tip);
+        data.uFlags |= NIF_INFO;
+        data.dwInfoFlags = NIIF_USER | NIIF_RESPECT_QUIET_TIME;
+        copy_text(&mut data.szInfoTitle, title);
+        copy_text(&mut data.szInfo, text);
+        // SAFETY: `data` is fully initialized for this window and id.
+        let _ = unsafe { Shell_NotifyIconW(NIM_MODIFY, &data) };
+    }
+
+    /// Where the icon is on screen, in physical pixels: on the taskbar, or
+    /// in the overflow area while that is open. `None` while it is not
+    /// shown.
+    pub fn rect(&self) -> Option<huedra_core::flyout::Rect> {
+        if !self.added {
+            return None;
+        }
+        let id = NOTIFYICONIDENTIFIER {
+            cbSize: u32::try_from(size_of::<NOTIFYICONIDENTIFIER>()).unwrap_or(0),
+            hWnd: self.hwnd,
+            uID: ICON_ID,
+            ..Default::default()
+        };
+        // SAFETY: `id` names this object's icon and outlives the call.
+        let r = unsafe { Shell_NotifyIconGetRect(&id) }.ok()?;
+        Some(huedra_core::flyout::Rect {
+            left: r.left,
+            top: r.top,
+            right: r.right,
+            bottom: r.bottom,
+        })
+    }
+
     /// Adds the icon again after Explorer restarted.
     pub fn restore(&mut self) {
         self.added = false;
@@ -106,11 +146,16 @@ impl Tray {
             },
             ..Default::default()
         };
-        let room = data.szTip.len() - 1;
-        for (slot, unit) in data.szTip.iter_mut().zip(tip.encode_utf16().take(room)) {
-            *slot = unit;
-        }
+        copy_text(&mut data.szTip, tip);
         data
+    }
+}
+
+/// Copies `text` into a fixed buffer, cut to leave room for the closing zero.
+fn copy_text(buffer: &mut [u16], text: &str) {
+    let room = buffer.len().saturating_sub(1);
+    for (slot, unit) in buffer.iter_mut().zip(text.encode_utf16().take(room)) {
+        *slot = unit;
     }
 }
 

@@ -1,0 +1,295 @@
+// The quick panel that opens from the tray icon: the state, the mode, each
+// display, Pause and "Never use HDR for" the game running, without the window.
+// Feature doc: docs/features/07-tray-hotkeys.md
+
+import { Palette } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+import { Toggle, IconButton, LinkButton, Marquee, FlyButton } from "controls.slint";
+import { ModeSelector } from "pages.slint";
+
+// One display in the panel. Displays without HDR are not listed.
+export struct FlyDisplay {
+    id: string,
+    name: string,
+    // "HDR · controlled by Huedra".
+    line: string,
+    // Huedra may change it: only then it has a switch.
+    controlled: bool,
+    hdr-on: bool,
+}
+
+component Divider inherits Rectangle {
+    height: 1px;
+    background: Theme.border;
+}
+
+component DisplayLine inherits Rectangle {
+    in property <FlyDisplay> display;
+    callback set(bool);
+    min-height: 44px;
+    // Behind the row: pointing at the name slides a long one into view.
+    hover := TouchArea { }
+    HorizontalLayout {
+        spacing: 12px;
+        VerticalLayout {
+            alignment: center;
+            Text {
+                width: 18px;
+                text: "\u{E7F4}";
+                font-family: Theme.icons;
+                font-size: 16px;
+                color: Theme.text;
+                horizontal-alignment: center;
+                accessible-role: none;
+            }
+        }
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            spacing: 1px;
+            Marquee {
+                text: root.display.name;
+                active: hover.has-hover;
+            }
+            Text {
+                text: root.display.line;
+                font-size: Theme.caption-size;
+                color: root.display.hdr-on ? Theme.hdr-label : Theme.text-muted;
+                overflow: elide;
+            }
+        }
+        if root.display.controlled: VerticalLayout {
+            alignment: center;
+            Toggle {
+                spoken-text: "HDR on " + root.display.name;
+                checked: root.display.hdr-on;
+                toggled => {
+                    root.set(self.checked);
+                }
+            }
+        }
+    }
+}
+
+export component FlyoutWindow inherits Window {
+    title: "Huedra quick panel";
+    no-frame: true;
+    width: 360px;
+    height: min(body.preferred-height, root.room-height);
+    background: Theme.surface;
+    default-font-family: "Segoe UI Variable Text";
+    default-font-size: Theme.body-size;
+
+    // The room above the taskbar, set before the panel opens.
+    in property <length> room-height: 4000px;
+    out property <length> wanted-height: body.preferred-height;
+    in property <bool> light-theme: true;
+    changed light-theme => {
+        Palette.color-scheme = root.light-theme ? ColorScheme.light : ColorScheme.dark;
+    }
+    init => {
+        Palette.color-scheme = root.light-theme ? ColorScheme.light : ColorScheme.dark;
+        keys.focus();
+    }
+
+    in property <bool> tray-running: true;
+    in property <bool> hdr-on;
+    in property <string> detail;
+    in property <int> mode;
+    in property <bool> paused;
+    in property <[FlyDisplay]> displays;
+    // The game or player "Never use HDR for" applies to; empty when none.
+    in property <string> never;
+    // What Report a problem did.
+    in property <string> report-note;
+    callback set-mode(int);
+    callback toggle-pause();
+    callback set-display(string, bool);
+    callback never-for();
+    callback open-huedra();
+    callback report();
+    callback dismiss();
+    // The height changed: the panel moves to keep its edge by the taskbar.
+    callback resized();
+    changed height => {
+        root.resized();
+    }
+
+    // The room the display list may take before it scrolls.
+    property <length> list-room: max(88px, root.room-height - top.preferred-height - actions.preferred-height - foot.preferred-height - 50px);
+
+    // Escape closes the panel.
+    keys := FocusScope {
+        key-pressed(event) => {
+            if event.text == Key.Escape {
+                root.dismiss();
+                return accept;
+            }
+            reject
+        }
+    }
+
+    body := VerticalLayout {
+        Rectangle {
+            // Behind the state: pointing at it slides a long line into view.
+            state-hover := TouchArea { }
+            top := VerticalLayout {
+                padding: 16px;
+                padding-top: 14px;
+                spacing: 12px;
+                HorizontalLayout {
+                    spacing: 12px;
+                    VerticalLayout {
+                        alignment: center;
+                        Rectangle {
+                            width: 32px;
+                            height: 32px;
+                            Image {
+                                source: Theme.logo-sdr;
+                                width: parent.width;
+                                height: parent.height;
+                                opacity: root.hdr-on ? 0 : 1;
+                                animate opacity { duration: Theme.fade; easing: ease-in-out; }
+                                accessible-role: none;
+                            }
+                            Image {
+                                source: Theme.logo-hdr;
+                                width: parent.width;
+                                height: parent.height;
+                                opacity: root.hdr-on ? 1 : 0;
+                                animate opacity { duration: Theme.fade; easing: ease-in-out; }
+                                accessible-role: none;
+                            }
+                        }
+                    }
+                    VerticalLayout {
+                        horizontal-stretch: 1;
+                        alignment: center;
+                        spacing: 1px;
+                        Text {
+                            text: root.hdr-on ? "HDR on" : "HDR off";
+                            font-size: 16px;
+                            font-weight: 600;
+                            color: root.hdr-on ? Theme.hdr-label : Theme.text;
+                            animate color { duration: Theme.fade; }
+                        }
+                        Marquee {
+                            text: root.detail;
+                            active: state-hover.has-hover;
+                            text-color: Theme.text-muted;
+                            font-size: Theme.caption-size;
+                        }
+                    }
+                    VerticalLayout {
+                        alignment: center;
+                        IconButton {
+                            glyph: "\u{E713}";
+                            label: "Open Huedra";
+                            clicked => {
+                                root.open-huedra();
+                            }
+                        }
+                    }
+                }
+                ModeSelector {
+                    mode: root.mode;
+                    chosen(i) => {
+                        root.set-mode(i);
+                    }
+                }
+            }
+        }
+        if root.displays.length > 0: Divider { }
+        if root.displays.length > 0: VerticalLayout {
+            padding-left: 16px;
+            padding-right: 16px;
+            padding-top: 10px;
+            padding-bottom: 10px;
+            spacing: 4px;
+            Text {
+                text: "Displays";
+                font-size: Theme.caption-size;
+                font-weight: 600;
+                color: Theme.text-muted;
+            }
+            Flickable {
+                height: min(list.preferred-height, root.list-room);
+                content-width: self.width;
+                content-height: list.preferred-height;
+                interactive: list.preferred-height > root.list-room;
+                list := VerticalLayout {
+                    width: parent.width;
+                    for d in root.displays: DisplayLine {
+                        display: d;
+                        set(on) => {
+                            root.set-display(d.id, on);
+                        }
+                    }
+                }
+            }
+        }
+        Divider { }
+        // "Never use HDR for" gets a row of its own, so the game's name fits.
+        actions := VerticalLayout {
+            padding: 16px;
+            padding-top: 12px;
+            padding-bottom: 12px;
+            spacing: 8px;
+            FlyButton {
+                glyph: root.paused ? "\u{E768}" : "\u{E769}";
+                text: root.paused ? "Resume" : "Pause 1 hour";
+                enabled: root.tray-running;
+                clicked => {
+                    root.toggle-pause();
+                }
+            }
+            if root.never != "": FlyButton {
+                glyph: "\u{E733}";
+                text: "Never use HDR for " + root.never;
+                clicked => {
+                    root.never-for();
+                }
+            }
+        }
+        foot := Rectangle {
+            height: 44px;
+            background: Theme.background;
+            Divider {
+                y: 0;
+            }
+            HorizontalLayout {
+                padding-left: 16px;
+                padding-right: 16px;
+                LinkButton {
+                    text: "Open Huedra";
+                    clicked => {
+                        root.open-huedra();
+                    }
+                }
+                Rectangle {
+                    horizontal-stretch: 1;
+                }
+                VerticalLayout {
+                    alignment: center;
+                    Text {
+                        text: root.report-note != "" ? root.report-note : "Report a problem";
+                        font-size: Theme.caption-size;
+                        color: report-touch.has-hover ? Theme.text : Theme.text-muted;
+                        accessible-role: button;
+                        accessible-label: "Report a problem";
+                        accessible-description: "Copies the details for a problem report to the clipboard.";
+                        accessible-action-default => {
+                            root.report();
+                        }
+                        report-touch := TouchArea {
+                            mouse-cursor: pointer;
+                            clicked => {
+                                root.report();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

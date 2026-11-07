@@ -2,7 +2,26 @@
 
 Changes that matter to people using Huedra (not the project's own build and workflow changes). Versions follow `MAJOR.MINOR.PATCH`; the updater installs only versions newer than the running one.
 
-## Unreleased
+## 1.2.0 — 2026-11-07
+
+### Added
+- **Status** is a dashboard: **Now running** names the game or player that holds HDR, with a link to its settings; **Displays** shows each display's state and whether Huedra controls it; **Pause** sits in the **Mode** card with the shortcuts as key labels; **Recent changes** are grouped by day, with the latest five shown first.
+- **Games** says more: an **HDR support** column from PCGamingWiki, the setting reads **Default** unless a game has its own, a violet marker where PCGamingWiki suggests another setting, and filters for **Supports HDR**, **Own setting** and **Suggestions**. A notice offers to review the suggestions or apply them all at once. A **cover grid** can replace the list (the buttons beside **Find new games**), with the portrait art Steam keeps on your PC for Steam games.
+- A quick panel opens from the tray icon with a left click: the state, the mode, a switch per display, Pause and **Never use HDR for** the game running, without opening the window. Long names slide into view when pointed at. The right button keeps the menu.
+- After updating, a one-time notice on **Status** says Huedra has a new look: a click on the tray icon opens the quick panel, and Settings is at the foot of the menu. **Show setup** opens the setup screens with your current settings. Closing it hides it for good.
+- A short setup after the disclaimer on the first start: which displays Huedra controls, the games it found and whether to look up their HDR support on PCGamingWiki, and the mode. **Skip setup** keeps the defaults.
+- A Windows notification when HDR didn't switch on a display after Huedra's retries (never for normal switches). **Settings › Notify me when HDR doesn't switch** turns it off.
+- On Windows 11 22H2 and later the window takes the Mica tint of the desktop behind the navigation pane and the pages, as Windows' own apps do.
+- One kind of notice for everything the window has to tell: Huedra not running, a switch that failed, and a new version (**See what's new**).
+
+### Changed
+- **Always SDR** turns HDR off on every display Huedra controls when you choose it or when Huedra starts in it, also where HDR was turned on outside Huedra. HDR you switch on in Windows afterward stays on.
+- **General** is now **Settings**, pinned at the foot of the navigation pane, as in Windows 11's own apps. `huedra settings settings` opens it; `huedra settings general` still works. Timing, keyboard shortcuts, the advanced settings and About fold into sections that sum up their values.
+- **Managed** is now the switch **Let Huedra control HDR**, and each display says **Controlled by Huedra**, **Not controlled by Huedra** or **No HDR support**.
+- Pages stop at 1000 pixels wide, so on a maximized window the switches stay close to their labels.
+
+### Fixed
+- A game added by hand counted every program in its folder, so a game added from System32, Downloads or the desktop could turn HDR on when another program from there ran (for example when Windows Settings opened). It now counts only its own program.
 
 ## 1.1.2 — 2026-11-04
 

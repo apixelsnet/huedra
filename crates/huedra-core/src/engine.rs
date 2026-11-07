@@ -261,6 +261,7 @@ impl Engine {
             active: BTreeMap::new(),
             manual,
         };
+        engine.take_over_for_sdr();
         let mut outcome = Outcome::default();
         engine.evaluate(now, &mut outcome);
         (engine, outcome)
@@ -362,7 +363,22 @@ impl Engine {
     /// Changes the mode.
     pub fn set_mode(&mut self, now: Instant, mode: Mode) -> Outcome {
         self.mode = mode;
+        self.take_over_for_sdr();
         self.run(now)
+    }
+
+    /// Choosing Always SDR, or starting in it, means HDR off: HDR turned on
+    /// outside Huedra counts as Huedra's, so Always SDR turns it off. HDR
+    /// turned on outside Huedra later, while Always SDR stays, is left on.
+    fn take_over_for_sdr(&mut self) {
+        if self.mode != Mode::AlwaysSdr {
+            return;
+        }
+        for slot in self.slots.values_mut() {
+            if slot.phase == Phase::HdrExternal {
+                slot.phase = Phase::HdrByHuedra;
+            }
+        }
     }
 
     /// Stops all automatic switching until `until`; the current state is kept.
@@ -429,6 +445,37 @@ impl Engine {
                     "Turned on with the shortcut",
                 );
             }
+        }
+        self.evaluate(now, &mut outcome);
+        outcome
+    }
+
+    /// Turns HDR on or off on one display now, as the shortcut does for all
+    /// of them (the switch beside each display in the tray's quick panel).
+    /// Turning it off silences the triggers that want it in HDR; HDR turned
+    /// on this way is the user's and is not turned off automatically. The
+    /// next game or video that starts or ends takes over again. A mode that
+    /// would undo the change is replaced by Automatic.
+    pub fn set_display(&mut self, now: Instant, display: &DisplayId, state: HdrState) -> Outcome {
+        let mut outcome = Outcome::default();
+        if !self.slots.contains_key(display) {
+            return outcome;
+        }
+        match state {
+            HdrState::On if self.mode == Mode::AlwaysSdr => self.mode = Mode::Automatic,
+            HdrState::Off if self.mode == Mode::AlwaysHdr => self.mode = Mode::Automatic,
+            _ => {}
+        }
+        if state == HdrState::Off {
+            self.suppress_covering(display);
+        }
+        if let Some(slot) = self.slots.get_mut(display) {
+            let (phase, reason) = match state {
+                HdrState::On => (Phase::HdrExternal, "Turned on from the tray"),
+                HdrState::Off => (Phase::Sdr, "Turned off from the tray"),
+            };
+            slot.phase = phase;
+            switch(&mut outcome, display, slot, state, reason);
         }
         self.evaluate(now, &mut outcome);
         outcome
@@ -866,10 +913,31 @@ mod tests {
             "not turned off"
         );
         assert!(e.tick(t0 + secs(3600)).actions.is_empty(), "ever");
+    }
+
+    #[test]
+    fn always_sdr_turns_off_external_hdr() {
+        let (mut e, t0) = engine(HdrState::On, false);
+        assert_eq!(phase(&e), Phase::HdrExternal, "external at start");
+        assert_eq!(e.set_mode(t0, Mode::AlwaysSdr).actions, off(), "chosen");
+        e.observe(t0, &display(), HdrState::Off);
         assert!(
-            e.set_mode(t0, Mode::AlwaysSdr).actions.is_empty(),
-            "not even by Always SDR"
+            e.observe(t0 + secs(5), &display(), HdrState::On)
+                .actions
+                .is_empty(),
+            "turned on again in Windows: left on"
         );
+        assert!(e.tick(t0 + secs(60)).actions.is_empty(), "and stays");
+
+        let (_, start) = Engine::new(
+            Mode::AlwaysSdr,
+            HOLD,
+            &[(display(), HdrState::On)],
+            &[],
+            Target::All,
+            t0,
+        );
+        assert_eq!(start.actions, off(), "starting in Always SDR");
     }
 
     #[test]
@@ -970,6 +1038,70 @@ mod tests {
         e.set_mode(t0, Mode::AlwaysHdr);
         e.toggle(t0);
         assert_eq!(e.mode(), Mode::Automatic, "Always HDR gives way");
+    }
+
+    #[test]
+    fn display_switch_is_the_users_choice() {
+        let (mut e, t0) = engine(HdrState::Off, false);
+        assert_eq!(
+            e.set_display(t0, &display(), HdrState::On).actions,
+            on(),
+            "on"
+        );
+        assert_eq!(phase(&e), Phase::HdrExternal, "never auto-off");
+        assert!(e.owned().is_empty(), "not recorded as Huedra's");
+        assert!(e.tick(t0 + secs(60)).actions.is_empty(), "stays on");
+        assert_eq!(
+            e.set_display(t0, &display(), HdrState::Off).actions,
+            off(),
+            "off"
+        );
+
+        let id = TriggerId::new("a");
+        let started = e.trigger_started(t0, id.clone(), game(0));
+        assert_eq!(started.actions, on(), "game turns it on");
+        assert_eq!(
+            e.set_display(t0, &display(), HdrState::Off).actions,
+            off(),
+            "off during the game"
+        );
+        assert!(e.tick(t0 + secs(5)).actions.is_empty(), "game silenced");
+        assert!(
+            e.trigger_ended(t0 + secs(6), &id).actions.is_empty(),
+            "nothing to undo when it ends"
+        );
+        assert_eq!(
+            e.trigger_started(t0 + secs(7), TriggerId::new("b"), game(0))
+                .actions,
+            on(),
+            "the next game takes over"
+        );
+
+        assert!(
+            e.set_display(t0, &DisplayId::new("elsewhere"), HdrState::On)
+                .actions
+                .is_empty(),
+            "unknown display"
+        );
+    }
+
+    #[test]
+    fn display_switch_gives_way_to_automatic() {
+        let (mut e, t0) = engine(HdrState::Off, false);
+        e.set_mode(t0, Mode::AlwaysHdr);
+        assert_eq!(
+            e.set_display(t0, &display(), HdrState::Off).actions,
+            off(),
+            "off in Always HDR"
+        );
+        assert_eq!(e.mode(), Mode::Automatic, "Always HDR gives way");
+        e.set_mode(t0, Mode::AlwaysSdr);
+        assert_eq!(
+            e.set_display(t0, &display(), HdrState::On).actions,
+            on(),
+            "on in Always SDR"
+        );
+        assert_eq!(e.mode(), Mode::Automatic, "Always SDR gives way");
     }
 
     #[test]

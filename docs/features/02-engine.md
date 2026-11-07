@@ -51,3 +51,12 @@ Code: `reload` in `crates/huedra/src/app.rs`.
 - On reload, a display Huedra owned that is no longer managed and is still connected is returned to SDR, with the reason "Huedra no longer manages this display". A display that was unplugged is left out (switching it would fail).
 
 Verified on this PC through the settings window: Always HDR with every display, then Automatic (display 2 holding), then Display 2 not managed: Display 2 went to SDR; Always HDR afterwards turned on Display 1 only.
+
+## Result (2026-11-07) — Always SDR turns HDR off
+Code: `take_over_for_sdr` in `crates/huedra-core/src/engine.rs` (called by `set_mode` and `Engine::new`); test `always_sdr_turns_off_external_hdr`.
+- Owner's report: HDR was on, the mode was Always SDR, and HDR stayed on. HDR turned on outside Huedra (Windows Settings, Win+Alt+H, the quick panel's display switch, or already on when Huedra started) was never turned off, not even by Always SDR, while the window promises "Always SDR: HDR stays off".
+- Now choosing Always SDR, or starting in it, counts such HDR as Huedra's and turns it off on every display Huedra controls. HDR switched on in Windows afterward, while Always SDR stays selected, is left on, so Huedra never fights the user. Automatic and Always HDR keep the rule: only HDR Huedra turned on is turned off.
+- Displays Huedra does not control are never touched.
+
+Verified: unit test (choosing Always SDR turns off external HDR; turning it on again in Windows is left on; starting in Always SDR with HDR on turns it off); CI green.
+Not verified on this PC's displays (the test tray was not run with a real switch).

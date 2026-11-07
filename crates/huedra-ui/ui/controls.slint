@@ -667,3 +667,621 @@ export component CopyField inherits HorizontalLayout {
         }
     }
 }
+
+// A small button that shows only an icon, such as Close on an InfoBar.
+export component IconButton inherits Rectangle {
+    in property <string> glyph;
+    in property <string> label;
+    in property <bool> selected;
+    callback clicked();
+    width: Theme.button-height;
+    height: Theme.button-height;
+    border-radius: Theme.radius-control;
+    background: root.selected ? Theme.accent
+        : touch.pressed ? Theme.border : touch.has-hover ? Theme.hover : transparent;
+    animate background { duration: Theme.hover-time; }
+    forward-focus: focus;
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-item-selected: root.selected;
+    accessible-action-default => {
+        root.clicked();
+    }
+    Text {
+        text: root.glyph;
+        font-family: Theme.icons;
+        font-size: 14px;
+        color: root.selected ? Theme.on-accent : Theme.text;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        accessible-role: none;
+    }
+    touch := TouchArea {
+        clicked => {
+            root.clicked();
+        }
+    }
+    focus := FocusScope {
+        x: 0;
+        width: 0px;
+        key-pressed(event) => {
+            if event.text == Key.Space || event.text == Key.Return {
+                root.clicked();
+                return accept;
+            }
+            reject
+        }
+    }
+    if focus.has-focus: FocusRing {
+        x: -3px;
+        y: -3px;
+        width: parent.width + 6px;
+        height: parent.height + 6px;
+        border-radius: Theme.radius-control + 3px;
+    }
+}
+
+// Text in the accent that acts as a link, with an arrow after it.
+export component LinkButton inherits Rectangle {
+    in property <string> text;
+    callback clicked();
+    height: Theme.button-height;
+    min-width: layout.preferred-width;
+    horizontal-stretch: 0;
+    forward-focus: focus;
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-action-default => {
+        root.clicked();
+    }
+    layout := HorizontalLayout {
+        spacing: 4px;
+        Text {
+            text: root.text;
+            font-size: Theme.body-size;
+            color: touch.has-hover ? Theme.accent.brighter(0.15) : Theme.accent;
+            vertical-alignment: center;
+            accessible-role: none;
+        }
+        Text {
+            text: "\u{E76C}";
+            font-family: Theme.icons;
+            font-size: 10px;
+            color: Theme.accent;
+            vertical-alignment: center;
+            accessible-role: none;
+        }
+    }
+    touch := TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.clicked();
+        }
+    }
+    focus := FocusScope {
+        x: 0;
+        width: 0px;
+        key-pressed(event) => {
+            if event.text == Key.Space || event.text == Key.Return {
+                root.clicked();
+                return accept;
+            }
+            reject
+        }
+    }
+    if focus.has-focus: FocusRing {
+        x: -4px;
+        y: 2px;
+        width: parent.width + 8px;
+        height: parent.height - 4px;
+        border-radius: Theme.radius-control;
+    }
+}
+
+// A keyboard shortcut drawn as a key label, for example Win+Alt+P.
+export component KeyCap inherits Rectangle {
+    in property <string> text;
+    height: 20px;
+    width: label.preferred-width + 12px;
+    border-radius: Theme.radius-control;
+    border-width: 1px;
+    border-color: Theme.border;
+    background: Theme.surface-raised;
+    accessible-role: none;
+    label := Text {
+        text: root.text;
+        font-size: 11px;
+        color: Theme.text;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+}
+
+// A filter in a row of chips: one is chosen at a time. A colored dot can
+// mark what the filter shows (pink for HDR, violet for suggestions).
+export component FilterChip inherits Rectangle {
+    in property <string> text;
+    in property <int> count;
+    in property <bool> selected;
+    in property <bool> has-dot;
+    in property <color> dot;
+    callback clicked();
+    height: 28px;
+    width: layout.preferred-width;
+    border-radius: 14px;
+    background: root.selected ? Theme.accent : touch.has-hover ? Theme.hover : Theme.surface-raised;
+    animate background { duration: Theme.hover-time; }
+    forward-focus: focus;
+    accessible-role: button;
+    accessible-label: root.text + ", " + root.count;
+    accessible-item-selected: root.selected;
+    accessible-action-default => {
+        root.clicked();
+    }
+    layout := HorizontalLayout {
+        padding-left: 11px;
+        padding-right: 11px;
+        spacing: 6px;
+        if root.has-dot: VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 7px;
+                height: 7px;
+                border-radius: 3.5px;
+                background: root.selected ? Theme.on-accent : root.dot;
+            }
+        }
+        Text {
+            text: root.text;
+            font-size: Theme.caption-size;
+            font-weight: root.selected ? 600 : 400;
+            color: root.selected ? Theme.on-accent : Theme.text;
+            vertical-alignment: center;
+            accessible-role: none;
+        }
+        Text {
+            text: root.count;
+            font-size: Theme.caption-size;
+            color: root.selected ? Theme.on-accent : Theme.text-muted;
+            vertical-alignment: center;
+            accessible-role: none;
+        }
+    }
+    touch := TouchArea {
+        clicked => {
+            root.clicked();
+        }
+    }
+    focus := FocusScope {
+        x: 0;
+        width: 0px;
+        key-pressed(event) => {
+            if event.text == Key.Space || event.text == Key.Return {
+                root.clicked();
+                return accept;
+            }
+            reject
+        }
+    }
+    if focus.has-focus: FocusRing {
+        x: -3px;
+        y: -3px;
+        width: parent.width + 6px;
+        height: parent.height + 6px;
+        border-radius: parent.border-radius + 3px;
+    }
+}
+
+// One banner for notices, placed under the page title: `info` (violet),
+// `update` (ultramarine) or `error` (pink with an outline; Huedra has no
+// yellow). The icon's shape tells the kinds apart as well as the color.
+// Action buttons go in as children; Close shows when `closable`.
+export component InfoBar inherits Rectangle {
+    in property <string> kind: "info";
+    in property <string> title;
+    in property <string> text;
+    in property <bool> closable;
+    callback closed();
+    min-height: 52px;
+    border-radius: Theme.radius-card - 2px;
+    border-width: 1px;
+    background: root.kind == "error" ? #FF2D6F14 : root.kind == "update" ? #3341E61F : #9B3DFF1A;
+    border-color: root.kind == "error" ? Theme.hdr-label : root.kind == "update" ? #3341E666 : #9B3DFF55;
+    accessible-role: groupbox;
+    accessible-label: root.title;
+    accessible-description: root.text;
+    HorizontalLayout {
+        padding-left: 14px;
+        padding-right: 10px;
+        padding-top: 8px;
+        padding-bottom: 8px;
+        spacing: 12px;
+        VerticalLayout {
+            alignment: center;
+            Text {
+                text: root.kind == "error" ? "\u{EA39}" : root.kind == "update" ? "\u{E896}" : "\u{E946}";
+                font-family: Theme.icons;
+                font-size: 16px;
+                color: root.kind == "error" ? Theme.hdr-label : root.kind == "update" ? Theme.accent : Theme.violet-text;
+                accessible-role: none;
+            }
+        }
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            spacing: 2px;
+            Text {
+                text: root.title;
+                font-size: Theme.body-size;
+                font-weight: 600;
+                color: Theme.text;
+                wrap: word-wrap;
+                accessible-role: none;
+            }
+            if root.text != "": Text {
+                text: root.text;
+                font-size: Theme.caption-size;
+                color: Theme.text-muted;
+                wrap: word-wrap;
+                accessible-role: none;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            HorizontalLayout {
+                spacing: 8px;
+                @children
+                if root.closable: IconButton {
+                    glyph: "\u{E711}";
+                    label: "Close";
+                    clicked => {
+                        root.closed();
+                    }
+                }
+            }
+        }
+    }
+}
+
+// A setting card that folds open, as SettingsExpander in the Windows
+// Community Toolkit: an icon, a title, a second line that sums up the
+// values inside, and optionally a switch or a button in the header. The
+// rows inside go in as children (see `SubRow`). Click the header, or press
+// Space or Enter on it, to open or close it.
+export component Expander inherits Rectangle {
+    in property <string> glyph;
+    // Shows the program icon instead of a glyph: in color while `hdr`.
+    in property <bool> logo;
+    in property <bool> hdr;
+    in property <string> title;
+    in property <bool> title-bold;
+    in property <string> summary;
+    in-out property <bool> open;
+    in property <bool> has-toggle;
+    in property <bool> toggle-checked;
+    in property <string> action-text;
+    in property <bool> action-enabled: true;
+    callback toggled(bool);
+    callback action();
+    background: Theme.surface;
+    border-radius: Theme.radius-card;
+    border-width: 1px;
+    border-color: Theme.border;
+    clip: true;
+    VerticalLayout {
+        Rectangle {
+            min-height: 64px;
+            header-touch := TouchArea {
+                clicked => {
+                    root.open = !root.open;
+                }
+            }
+            header-keys := FocusScope {
+                x: 0;
+                width: 0px;
+                accessible-role: button;
+                accessible-label: root.title;
+                accessible-description: root.summary;
+                accessible-expandable: true;
+                accessible-expanded: root.open;
+                accessible-action-default => {
+                    root.open = !root.open;
+                }
+                accessible-action-expand => {
+                    root.open = !root.open;
+                }
+                key-pressed(event) => {
+                    if event.text == Key.Space || event.text == Key.Return {
+                        root.open = !root.open;
+                        return accept;
+                    }
+                    reject
+                }
+            }
+            HorizontalLayout {
+                padding-left: 16px;
+                padding-right: 16px;
+                padding-top: 10px;
+                padding-bottom: 10px;
+                spacing: 16px;
+                VerticalLayout {
+                    alignment: center;
+                    if !root.logo: Text {
+                        width: 20px;
+                        text: root.glyph;
+                        font-family: Theme.icons;
+                        font-size: 16px;
+                        color: Theme.text;
+                        horizontal-alignment: center;
+                        accessible-role: none;
+                    }
+                    if root.logo: Rectangle {
+                        width: 28px;
+                        height: 28px;
+                        Image {
+                            source: Theme.logo-sdr;
+                            width: parent.width;
+                            height: parent.height;
+                            opacity: root.hdr ? 0 : 1;
+                            animate opacity { duration: Theme.fade; easing: ease-in-out; }
+                            accessible-role: none;
+                        }
+                        Image {
+                            source: Theme.logo-hdr;
+                            width: parent.width;
+                            height: parent.height;
+                            opacity: root.hdr ? 1 : 0;
+                            animate opacity { duration: Theme.fade; easing: ease-in-out; }
+                            accessible-role: none;
+                        }
+                    }
+                }
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    alignment: center;
+                    spacing: 2px;
+                    Text {
+                        text: root.title;
+                        font-size: Theme.body-size;
+                        font-weight: root.title-bold ? 600 : 400;
+                        color: Theme.text;
+                        wrap: word-wrap;
+                        accessible-role: none;
+                    }
+                    if root.summary != "": Text {
+                        text: root.summary;
+                        font-size: Theme.caption-size;
+                        color: Theme.text-muted;
+                        wrap: word-wrap;
+                        accessible-role: none;
+                    }
+                }
+                if root.action-text != "": VerticalLayout {
+                    alignment: center;
+                    ActionButton {
+                        text: root.action-text;
+                        enabled: root.action-enabled;
+                        clicked => {
+                            root.action();
+                        }
+                    }
+                }
+                if root.has-toggle: VerticalLayout {
+                    alignment: center;
+                    Toggle {
+                        accessible-label: root.title;
+                        checked: root.toggle-checked;
+                        toggled => {
+                            root.toggled(self.checked);
+                        }
+                    }
+                }
+                VerticalLayout {
+                    alignment: center;
+                    Text {
+                        text: root.open ? "\u{E70E}" : "\u{E70D}";
+                        font-family: Theme.icons;
+                        font-size: 12px;
+                        color: Theme.text;
+                        accessible-role: none;
+                    }
+                }
+            }
+            if header-keys.has-focus: FocusRing {
+                x: 2px;
+                y: 2px;
+                width: parent.width - 4px;
+                height: parent.height - 4px;
+                border-radius: Theme.radius-card - 2px;
+            }
+        }
+        Rectangle {
+            height: root.open ? body.preferred-height : 0px;
+            visible: root.open;
+            clip: true;
+            body := VerticalLayout {
+                y: 0;
+                height: self.preferred-height;
+                Rectangle {
+                    height: 1px;
+                    background: Theme.border;
+                }
+                @children
+            }
+        }
+    }
+}
+
+// A line of text that may be longer than its room. At rest it fades out at
+// the edge instead of ending in "..."; while `active` (pointed at or
+// reached with the keyboard) it slides left to show the rest, pauses and
+// slides back. With Windows animation effects off it does not move: it
+// wraps to more lines instead. Screen readers get the whole text.
+export component Marquee inherits Rectangle {
+    in property <string> text;
+    in property <bool> active;
+    in property <color> text-color: Theme.text;
+    in property <length> font-size: Theme.body-size;
+    in property <int> font-weight: 400;
+    // The background behind it, which the end of a long text fades into.
+    in property <color> fade: Theme.surface;
+    // How far the text reaches past the room it has.
+    property <length> overflow: Theme.motion ? max(0px, label.preferred-width - root.width) : 0px;
+    // A pixel of rounding is not worth a fade.
+    property <bool> long: root.overflow > 1px;
+    property <bool> moving: root.active && root.long;
+    // One loop of four seconds: rest, slide, rest, slide back.
+    property <float> loop: root.moving ? mod(animation-tick() / 1ms, 4000) / 4000 : 0;
+    property <float> slide: root.loop < 0.18 ? 0 : root.loop < 0.58 ? (root.loop - 0.18) / 0.4
+        : root.loop < 0.78 ? 1 : 1 - (root.loop - 0.78) / 0.22;
+    clip: true;
+    min-width: 32px;
+    preferred-width: label.preferred-width;
+    horizontal-stretch: 1;
+    height: label.preferred-height;
+    accessible-role: AccessibleRole.text;
+    accessible-label: root.text;
+    label := Text {
+        x: root.moving ? -root.overflow * root.slide * root.slide * (3 - 2 * root.slide) : 0px;
+        width: Theme.motion ? self.preferred-width : root.width;
+        text: root.text;
+        color: root.text-color;
+        font-size: root.font-size;
+        font-weight: root.font-weight;
+        wrap: Theme.motion ? no-wrap : word-wrap;
+        accessible-role: none;
+    }
+    if root.long: Rectangle {
+        x: parent.width - self.width;
+        width: min(32px, parent.width / 3);
+        background: @linear-gradient(90deg, root.fade.transparentize(1) 0%, root.fade 100%);
+        opacity: root.moving ? 0 : 1;
+        animate opacity { duration: Theme.control; }
+    }
+}
+
+// A button with an icon and a label that may be long (see Marquee); it
+// takes the room it is given.
+export component FlyButton inherits Rectangle {
+    in property <string> glyph;
+    in property <string> text;
+    in property <bool> enabled: true;
+    callback clicked();
+    height: Theme.button-height;
+    min-width: 64px;
+    horizontal-stretch: 1;
+    border-radius: Theme.radius-control;
+    border-width: 1px;
+    border-color: Theme.border;
+    background: !root.enabled ? Theme.surface
+        : touch.pressed ? Theme.border : touch.has-hover ? Theme.hover : Theme.surface-raised;
+    animate background { duration: Theme.hover-time; }
+    forward-focus: focus;
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-enabled: root.enabled;
+    accessible-action-default => {
+        if root.enabled {
+            root.clicked();
+        }
+    }
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 8px;
+        alignment: center;
+        Text {
+            text: root.glyph;
+            font-family: Theme.icons;
+            font-size: 14px;
+            color: root.enabled ? Theme.text : Theme.text-muted;
+            vertical-alignment: center;
+            accessible-role: none;
+        }
+        VerticalLayout {
+            alignment: center;
+            Marquee {
+                text: root.text;
+                active: touch.has-hover || focus.has-focus;
+                text-color: root.enabled ? Theme.text : Theme.text-muted;
+                fade: root.background;
+                // No wider than the text, so the button centers it.
+                max-width: self.preferred-width;
+            }
+        }
+    }
+    touch := TouchArea {
+        enabled: root.enabled;
+        clicked => {
+            root.clicked();
+        }
+    }
+    focus := FocusScope {
+        x: 0;
+        width: 0px;
+        enabled: root.enabled;
+        key-pressed(event) => {
+            if event.text == Key.Space || event.text == Key.Return {
+                root.clicked();
+                return accept;
+            }
+            reject
+        }
+    }
+    if focus.has-focus: FocusRing {
+        x: -3px;
+        y: -3px;
+        width: parent.width + 6px;
+        height: parent.height + 6px;
+        border-radius: Theme.radius-control + 3px;
+    }
+}
+
+// A setting inside an Expander: indented under the header's icon, with a
+// line above it unless it is the first. The control goes in as a child.
+export component SubRow inherits Rectangle {
+    in property <string> title;
+    in property <string> description;
+    in property <bool> first;
+    min-height: 52px;
+    if !root.first: Rectangle {
+        x: 52px;
+        y: 0;
+        width: parent.width - 52px;
+        height: 1px;
+        background: Theme.border;
+    }
+    HorizontalLayout {
+        padding-left: 52px;
+        padding-right: 16px;
+        padding-top: 10px;
+        padding-bottom: 10px;
+        spacing: 16px;
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            spacing: 2px;
+            if root.title != "": Text {
+                text: root.title;
+                font-size: Theme.body-size;
+                color: Theme.text;
+                wrap: word-wrap;
+            }
+            if root.description != "": Text {
+                text: root.description;
+                font-size: Theme.caption-size;
+                color: Theme.text-muted;
+                wrap: word-wrap;
+            }
+        }
+        VerticalLayout {
+            horizontal-stretch: 0;
+            alignment: center;
+            HorizontalLayout {
+                alignment: end;
+                spacing: 8px;
+                @children
+            }
+        }
+    }
+}

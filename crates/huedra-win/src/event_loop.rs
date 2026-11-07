@@ -13,7 +13,7 @@ use std::time::Duration;
 
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
-use windows::Win32::UI::Shell::NIN_SELECT;
+use windows::Win32::UI::Shell::{NIN_BALLOONUSERCLICK, NIN_SELECT};
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW, KillTimer, MSG,
     PostMessageW, RegisterClassExW, RegisterWindowMessageW, SetTimer, TranslateMessage,
@@ -54,6 +54,8 @@ pub enum Event {
     TrayClick,
     /// The tray icon's menu was requested.
     TrayMenu,
+    /// A notification shown from the tray icon was clicked.
+    NoticeClick,
     /// Explorer restarted; the tray icon must be added again.
     TaskbarCreated,
     /// Another thread has work for the loop (see [`Waker`]).
@@ -248,6 +250,7 @@ unsafe extern "system" fn window_proc(
         WM_TRAY => match u32::try_from(lparam.0 & 0xFFFF).unwrap_or(0) {
             WM_CONTEXTMENU => Some(Event::TrayMenu),
             NIN_SELECT | NIN_KEYSELECT => Some(Event::TrayClick),
+            NIN_BALLOONUSERCLICK => Some(Event::NoticeClick),
             _ => None,
         },
         WM_PROCESS_EXIT => u32::try_from(wparam.0).ok().map(Event::ProcessExited),
