@@ -603,6 +603,10 @@ export component StatusPage inherits Rectangle {
     callback open-game(string);
     callback open-page(int);
     callback close-failure();
+    // The one-time notice for people who used Huedra before this window.
+    in property <bool> new-look;
+    callback new-look-setup();
+    callback close-new-look();
     callback show-update();
     callback close-update();
 
@@ -667,6 +671,21 @@ export component StatusPage inherits Rectangle {
                 }
                 closed => {
                     root.close-update();
+                }
+            }
+            if root.new-look: InfoBar {
+                kind: "info";
+                title: "Huedra has a new look.";
+                text: "Click the tray icon for the quick panel. Settings is now at the bottom of the menu.";
+                closable: true;
+                ActionButton {
+                    text: "Show setup";
+                    clicked => {
+                        root.new-look-setup();
+                    }
+                }
+                closed => {
+                    root.close-new-look();
                 }
             }
             HeroCard {

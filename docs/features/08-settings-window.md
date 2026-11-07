@@ -220,3 +220,10 @@ Not verified: a description that wraps to two lines leaves little space under it
 Code: `preferred-width`/`preferred-height` in `crates/huedra-ui/ui/app.slint`, `fit_first_size` in `crates/huedra-ui/src/app.rs`, the close button in `GameDetailPanel` (`pages.slint`).
 - Owner's request: the first window is 1100 x 780, so Status shows **Now running** and **Displays** side by side (the cards pair up from 760 px of page width; 1040 x 680 left 744). A saved size still wins. When 1100 x 780 at the display's scale is more than nine tenths of the main display's work area, the first window takes nine tenths instead.
 - Owner's report: beside the list, a game's pane had no way to close. It now has a close button (X, spoken "Close Cyberpunk 2077") at the right of its title; narrow layouts keep **Back to games**.
+
+## Result (2026-11-07) — "Huedra has a new look" for people updating
+Decided 2026-11-07 (owner): people who used Huedra before the new window never see the first-run setup (their disclaimer is accepted), so they get a one-time notice instead. Code: `general.new_look_seen` in `crates/huedra-core/src/config.rs` (test `new_look_is_unseen_in_older_files`), the InfoBar in `StatusPage` (`pages.slint`), `new-look` and `close-new-look` in `app.slint`, `set_new_look`, `on_close_new_look` and the first acceptance in `crates/huedra-ui/src/app.rs`.
+- Shown on Status when the disclaimer was accepted and `new_look_seen` is not set, which is every settings file written before this version: "Huedra has a new look. Click the tray icon for the quick panel. Settings is now at the bottom of the menu." with **Show setup** and a close button.
+- **Show setup** opens the three setup screens over the window, filled with the current settings; it and the close button both write `new_look_seen = true`, so the notice never returns.
+- The first acceptance of the disclaimer writes `new_look_seen = true` too: new users get the setup, never the notice.
+- An older version that rewrites the settings file drops the key (unknown keys are ignored), so after going back and forth the notice can show once more.

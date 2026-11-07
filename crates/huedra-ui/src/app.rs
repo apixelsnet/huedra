@@ -213,6 +213,8 @@ pub fn run(locations: Locations, page: Page) -> Result<(), slint::PlatformError>
     let config = Config::load(&locations.config).unwrap_or_default();
     ui.set_disclaimer_accepted(config.general.disclaimer_accepted);
     ui.set_show_disclaimer(!config.general.disclaimer_accepted);
+    // Someone who used Huedra before this window: once, until closed.
+    ui.set_new_look(config.general.disclaimer_accepted && !config.general.new_look_seen);
     ui.set_can_check_updates(!cfg!(feature = "sample") && huedra_core::update::is_available());
     ui.set_has_project_page(huedra_core::update::project_page().is_some());
     ui.set_install_version(install_version(&locations.update).into());
@@ -414,6 +416,13 @@ fn wire_status(ui: &SettingsWindow) {
                 s.failure_closed = s.failure.take();
             });
             ui.set_failure("".into());
+        }
+    });
+    let weak = ui.as_weak();
+    ui.on_close_new_look(move || {
+        if let Some(ui) = weak.upgrade() {
+            ui.set_new_look(false);
+            with_state(|s| edit(s, |c| c.general.new_look_seen = true));
         }
     });
     // Setup chooses the mode while the tray may still be starting: the
@@ -1937,7 +1946,12 @@ fn wire_about(ui: &SettingsWindow) {
         // The first acceptance: three short screens of setup follow.
         ui.set_show_setup(true);
         let setup = with_state(|s| {
-            edit(s, |c| c.general.disclaimer_accepted = true);
+            edit(s, |c| {
+                c.general.disclaimer_accepted = true;
+                // A new user gets the setup, not the notice about the new
+                // window.
+                c.general.new_look_seen = true;
+            });
             !s.locations.portable && s.config.general.start_with_windows
         });
         // What the tray did on its first start before there was a

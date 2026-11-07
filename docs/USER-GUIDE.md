@@ -53,6 +53,8 @@ The first time Huedra starts, its window shows a disclaimer. Huedra changes a Wi
 
 After you accept it the first time, a short setup asks which displays Huedra may control, whether to look up your games' HDR support on PCGamingWiki, and which mode to use; **Skip setup** keeps the defaults. Until the disclaimer is accepted, Huedra does not run and never changes HDR. You can read it again at any time under **Settings › About › Disclaimer**.
 
+If you used Huedra before its new window, a notice on **Status** after the update points out the quick panel on the tray icon and Settings at the foot of the menu. **Show setup** opens the same setup screens with your current settings; closing the notice hides it for good.
+
 After that, Huedra:
 
 - adds itself to Windows start-up (turn this off under **Settings › Start with Windows**);
