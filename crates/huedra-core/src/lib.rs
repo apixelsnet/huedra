@@ -9,6 +9,7 @@
 #![forbid(unsafe_code)]
 
 pub mod clock;
+pub mod color;
 pub mod command;
 pub mod config;
 pub mod display;

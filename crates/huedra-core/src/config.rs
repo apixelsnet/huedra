@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
+use crate::color::{self, GameProfiles};
 use crate::engine::{Mode, Target, Trigger};
 use crate::files;
 use crate::library::{Game, GameId, Store};
@@ -330,6 +331,13 @@ pub struct GameSettings {
     /// only a game switched off writes `false`. See [`Config::steam_start`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub steam_start: Option<bool>,
+    /// Color profile (file name of an installed ICC profile) used in SDR
+    /// on the game's display while it runs; unset leaves Windows' choice.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sdr_profile: Option<String>,
+    /// Color profile used in HDR on the game's display while it runs.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hdr_profile: Option<String>,
 }
 
 impl GameSettings {
@@ -344,6 +352,16 @@ impl GameSettings {
             hold: None,
             launch_with_hdr: false,
             steam_start: None,
+            sdr_profile: None,
+            hdr_profile: None,
+        }
+    }
+
+    /// The color profiles the game asks for.
+    pub fn profiles(&self) -> GameProfiles {
+        GameProfiles {
+            sdr: self.sdr_profile.clone(),
+            hdr: self.hdr_profile.clone(),
         }
     }
 }
@@ -445,7 +463,24 @@ impl Config {
         for game in &mut self.games {
             game.start_delay = game.start_delay.map(|d| d.min(MAX_DELAY));
             game.hold = game.hold.map(|h| h.min(MAX_HOLD));
+            // Only plain file names reach Windows, never a path.
+            for profile in [&mut game.sdr_profile, &mut game.hdr_profile] {
+                if profile
+                    .as_deref()
+                    .is_some_and(|p| !color::is_profile_name(p))
+                {
+                    *profile = None;
+                }
+            }
         }
+    }
+
+    /// The color profiles a game asks for while it runs, or `None` when it
+    /// asks for none.
+    pub fn color_profiles(&self, id: &GameId) -> Option<GameProfiles> {
+        self.game(id)
+            .map(GameSettings::profiles)
+            .filter(|p| !p.is_empty())
     }
 
     /// Settings for a game, if any were saved.
@@ -790,6 +825,48 @@ mod tests {
             old.is_some_and(|c| c.steam_start(&GameId::from_raw("steam:1"))),
             "1.1.1 files still read"
         );
+    }
+
+    #[test]
+    fn color_profiles() {
+        let text = r#"
+            [[game]]
+            id = "steam:1"
+            sdr_profile = "sRGB Color Space Profile.icm"
+            hdr_profile = "HDR Calibrated Profile.icc"
+            [[game]]
+            id = "steam:2"
+            hdr_profile = '..\..\Windows\evil.icc'
+            [[game]]
+            id = "steam:3"
+        "#;
+        let config = Config::parse(text).expect("parse");
+        let profiles = config.color_profiles(&GameId::from_raw("steam:1"));
+        assert_eq!(
+            profiles,
+            Some(GameProfiles {
+                sdr: Some("sRGB Color Space Profile.icm".into()),
+                hdr: Some("HDR Calibrated Profile.icc".into()),
+            }),
+            "both read"
+        );
+        assert_eq!(
+            config.color_profiles(&GameId::from_raw("steam:2")),
+            None,
+            "a path is dropped"
+        );
+        assert_eq!(
+            config.color_profiles(&GameId::from_raw("steam:3")),
+            None,
+            "none asked for"
+        );
+        let text = config.to_toml().expect("serialize");
+        assert!(
+            text.contains("hdr_profile = \"HDR Calibrated Profile.icc\""),
+            "written: {text}"
+        );
+        assert_eq!(text.matches("_profile").count(), 2, "unset not written");
+        assert_eq!(Config::parse(&text).expect("again"), config, "round trip");
     }
 
     #[test]

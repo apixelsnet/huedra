@@ -340,6 +340,19 @@ impl Sim {
     }
 }
 
+/// Installed color profiles, as a PC with a calibrated monitor has them.
+pub fn profiles() -> huedra_core::color::Installed {
+    let names = |list: &[&str]| list.iter().map(|s| (*s).to_owned()).collect();
+    huedra_core::color::Installed {
+        sdr: names(&[
+            "Display Calibration 2026-10.icm",
+            "HDR Calibration 2026-10.icc",
+            "sRGB Color Space Profile.icm",
+        ]),
+        hdr: names(&["HDR Calibration 2026-10.icc"]),
+    }
+}
+
 /// The displays as Windows would report them, with the simulated HDR state.
 pub fn displays() -> Vec<Display> {
     let on = SIM
