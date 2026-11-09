@@ -67,6 +67,10 @@ export struct GameDetail {
     shortcut: bool,
     // Result of the last shortcut made for it.
     launch-note: string,
+    // Its color profiles: indexes into the SDR and HDR profile lists, where
+    // 0 is "Windows default".
+    sdr-profile: int,
+    hdr-profile: int,
 }
 
 export struct DisplayRow {
@@ -874,6 +878,11 @@ export component StatusPage inherits Rectangle {
 component GameDetailPanel inherits Card {
     in property <GameDetail> detail;
     in property <bool> show-back;
+    // The installed color profiles, "Windows default" first.
+    in property <[string]> sdr-profiles;
+    in property <[string]> hdr-profiles;
+    // A color profile was chosen: the game, HDR (or SDR), the list index.
+    callback set-profile(string, bool, int);
     callback back();
     callback set-setting(string, int);
     callback set-delay(string, int);
@@ -1000,6 +1009,51 @@ component GameDetailPanel inherits Card {
                     clicked => {
                         root.reset-timing(root.detail.id);
                     }
+                }
+            }
+            if root.sdr-profiles.length > 1: Rectangle {
+                height: 1px;
+                background: Theme.border;
+            }
+            if root.sdr-profiles.length > 1: SectionTitle {
+                text: "Color profiles";
+            }
+            if root.sdr-profiles.length > 1: Caption {
+                text: "While this game runs, the display it's on uses these color profiles (ICC). The earlier ones come back when it closes.";
+            }
+            if root.sdr-profiles.length > 1: VerticalLayout {
+                spacing: 4px;
+                Text {
+                    text: "Color profile in SDR";
+                    font-size: Theme.body-size;
+                    color: Theme.text;
+                }
+                Dropdown {
+                    accessible-label: "Color profile in SDR";
+                    model: root.sdr-profiles;
+                    current-index: root.detail.sdr-profile;
+                    selected(value) => {
+                        root.set-profile(root.detail.id, false, self.current-index);
+                    }
+                }
+            }
+            if root.sdr-profiles.length > 1: VerticalLayout {
+                spacing: 4px;
+                Text {
+                    text: "Color profile in HDR";
+                    font-size: Theme.body-size;
+                    color: Theme.text;
+                }
+                Dropdown {
+                    accessible-label: "Color profile in HDR";
+                    model: root.hdr-profiles;
+                    current-index: root.detail.hdr-profile;
+                    selected(value) => {
+                        root.set-profile(root.detail.id, true, self.current-index);
+                    }
+                }
+                if root.hdr-profiles.length <= 1: Caption {
+                    text: "No HDR color profile is installed. The Windows HDR Calibration app makes one.";
                 }
             }
             if root.detail.launch-option != "" || root.detail.shortcut: Rectangle {
@@ -1200,6 +1254,9 @@ export component GamesPage inherits Rectangle {
     callback remove-game(string);
     callback create-shortcut(string);
     callback set-steam-start(string, bool);
+    in property <[string]> sdr-profiles;
+    in property <[string]> hdr-profiles;
+    callback set-profile(string, bool, int);
 
     property <bool> has-selection: root.details.length > 0;
     property <bool> list-visible: root.wide || !root.has-selection;
@@ -1687,6 +1744,11 @@ export component GamesPage inherits Rectangle {
                 min-width: 300px;
                 detail: detail;
                 show-back: !root.wide;
+                sdr-profiles: root.sdr-profiles;
+                hdr-profiles: root.hdr-profiles;
+                set-profile(id, hdr, i) => {
+                    root.set-profile(id, hdr, i);
+                }
                 back => {
                     root.close-detail();
                 }

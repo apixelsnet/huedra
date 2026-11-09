@@ -152,8 +152,19 @@ enum ColorApi {
 struct Found {
     display: Display,
     target: Device,
+    source: Device,
     api: ColorApi,
     gdi_name: String,
+}
+
+/// The adapter and source id of a display, as the color profile functions
+/// take them.
+pub(crate) fn source_of(id: &DisplayId) -> Result<(LUID, u32), DisplayError> {
+    enumerate()?
+        .into_iter()
+        .find(|f| &f.display.id == id)
+        .map(|f| (f.source.adapter, f.source.id))
+        .ok_or(DisplayError::Gone)
 }
 
 fn enumerate() -> Result<Vec<Found>, DisplayError> {
@@ -192,6 +203,7 @@ fn enumerate() -> Result<Vec<Found>, DisplayError> {
                 peak: None,
             },
             target,
+            source,
             api,
             gdi_name,
         });

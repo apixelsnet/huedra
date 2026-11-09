@@ -9,6 +9,8 @@ pub mod audio;
 #[cfg(windows)]
 pub mod clock;
 #[cfg(windows)]
+pub mod color;
+#[cfg(windows)]
 pub mod console;
 #[cfg(windows)]
 pub mod display;

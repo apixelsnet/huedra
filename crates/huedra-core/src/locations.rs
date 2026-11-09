@@ -12,6 +12,8 @@ pub struct Locations {
     pub config: PathBuf,
     /// `owned.toml`, the recovery record (local).
     pub owned: PathBuf,
+    /// `color.toml`, the record of color profiles to put back (local).
+    pub color: PathBuf,
     /// `huedra.log` (local).
     pub log: PathBuf,
     /// `gameinfo.toml`, the PCGamingWiki cache (local).
@@ -69,6 +71,7 @@ impl Locations {
         Self {
             config: roaming.join("config.toml"),
             owned: local.join("owned.toml"),
+            color: local.join("color.toml"),
             log: local.join("huedra.log"),
             game_info: local.join("gameinfo.toml"),
             window: local.join("window.toml"),

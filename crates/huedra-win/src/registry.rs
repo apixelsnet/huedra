@@ -10,9 +10,10 @@ use huedra_core::library::registry::RegistryEntry;
 use windows::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_SUCCESS, WAIT_OBJECT_0};
 use windows::Win32::System::Registry::{
     HKEY, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_NOTIFY, KEY_READ, KEY_WOW64_32KEY,
-    REG_NOTIFY_CHANGE_LAST_SET, REG_SZ, RRF_RT_REG_DWORD, RRF_RT_REG_EXPAND_SZ, RRF_RT_REG_SZ,
-    RegCloseKey, RegDeleteKeyValueW, RegDeleteKeyW, RegDeleteTreeW, RegEnumKeyExW, RegGetValueW,
-    RegNotifyChangeKeyValue, RegOpenKeyExW, RegQueryInfoKeyW, RegSetKeyValueW,
+    REG_NOTIFY_CHANGE_LAST_SET, REG_SZ, RRF_RT_REG_DWORD, RRF_RT_REG_EXPAND_SZ,
+    RRF_RT_REG_MULTI_SZ, RRF_RT_REG_SZ, RegCloseKey, RegDeleteKeyValueW, RegDeleteKeyW,
+    RegDeleteTreeW, RegEnumKeyExW, RegGetValueW, RegNotifyChangeKeyValue, RegOpenKeyExW,
+    RegQueryInfoKeyW, RegSetKeyValueW,
 };
 use windows::Win32::System::Threading::{CreateEventW, INFINITE, WaitForSingleObject};
 use windows::core::{HSTRING, PWSTR};
@@ -111,6 +112,57 @@ fn read_string(key: &Key, name: &str) -> Option<String> {
 /// A string value, or `None` when the key or value is missing.
 pub fn string(hive: Hive, path: &str, name: &str) -> Option<String> {
     read_string(&open(hive, path)?, name)
+}
+
+/// The strings of a list value (`REG_MULTI_SZ`): `None` when the key is
+/// missing or the value cannot be read, empty when the key has no such
+/// value.
+pub fn strings(hive: Hive, path: &str, name: &str) -> Option<Vec<String>> {
+    let key = open(hive, path)?;
+    let name = HSTRING::from(name);
+    let mut bytes = 0_u32;
+    // SAFETY: a size query with no buffer.
+    let status = unsafe {
+        RegGetValueW(
+            key.0,
+            None,
+            &name,
+            RRF_RT_REG_MULTI_SZ,
+            None,
+            None,
+            Some(&mut bytes),
+        )
+    };
+    if status == ERROR_FILE_NOT_FOUND {
+        return Some(Vec::new());
+    }
+    if status != ERROR_SUCCESS || bytes > MAX_STRING_BYTES {
+        return None;
+    }
+    let mut buffer = vec![0_u16; (bytes as usize).div_ceil(2)];
+    // SAFETY: `buffer` holds `bytes` bytes; Windows writes at most that many.
+    let status = unsafe {
+        RegGetValueW(
+            key.0,
+            None,
+            &name,
+            RRF_RT_REG_MULTI_SZ,
+            None,
+            Some(buffer.as_mut_ptr().cast()),
+            Some(&mut bytes),
+        )
+    };
+    if status != ERROR_SUCCESS {
+        return None;
+    }
+    let used = (bytes as usize / 2).min(buffer.len());
+    Some(
+        buffer[..used]
+            .split(|&c| c == 0)
+            .filter(|s| !s.is_empty())
+            .map(String::from_utf16_lossy)
+            .collect(),
+    )
 }
 
 /// The Windows build number, for example 26100.

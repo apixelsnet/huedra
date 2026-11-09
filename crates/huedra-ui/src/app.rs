@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use std::thread;
 use std::time::Duration;
 
+use huedra_core::color::Installed;
 use huedra_core::command;
 use huedra_core::config::{
     CloseAction, Config, GameHdr, GameSettings, ManualDisplays, Seconds, UpdatePolicy,
@@ -96,6 +97,8 @@ struct State {
     games: Vec<Game>,
     info: Cache,
     displays: Vec<Display>,
+    /// The installed color profiles a game can choose.
+    profiles: Installed,
     running: Vec<String>,
     icons: HashMap<GameId, Image>,
     /// Portrait art for the cover grid, loaded once the grid is shown.
@@ -235,6 +238,7 @@ pub fn run(locations: Locations, page: Page) -> Result<(), slint::PlatformError>
     let state = State {
         info,
         displays: read_displays().unwrap_or_default(),
+        profiles: read_profiles(),
         games,
         config,
         locations,
@@ -253,6 +257,15 @@ pub fn run(locations: Locations, page: Page) -> Result<(), slint::PlatformError>
     STATE.set(Some(state));
 
     with_state(|s| {
+        let choices = |names: &[String]| -> ModelRc<SharedString> {
+            let list: Vec<SharedString> = std::iter::once("Windows default")
+                .chain(names.iter().map(String::as_str))
+                .map(SharedString::from)
+                .collect();
+            ModelRc::new(VecModel::from(list))
+        };
+        ui.set_sdr_profiles(choices(&s.profiles.sdr));
+        ui.set_hdr_profiles(choices(&s.profiles.hdr));
         show_games(&ui, s);
         show_video(&ui, s);
         show_displays(&ui, s);
@@ -474,6 +487,14 @@ pub(crate) fn read_displays() -> Option<Vec<Display>> {
     return Some(sample::displays());
     #[cfg(not(feature = "sample"))]
     huedra_win::display::displays().ok()
+}
+
+/// The color profiles installed on this PC.
+fn read_profiles() -> Installed {
+    #[cfg(feature = "sample")]
+    return sample::profiles();
+    #[cfg(not(feature = "sample"))]
+    huedra_win::color::installed()
 }
 
 /// The games of every store and those added by hand.
@@ -1044,7 +1065,23 @@ fn detail_of(state: &State, game: &Game) -> GameDetail {
             .map(|(_, note)| note.as_str())
             .unwrap_or_default()
             .into(),
+        sdr_profile: profile_index(
+            &state.profiles.sdr,
+            settings.and_then(|s| s.sdr_profile.as_deref()),
+        ),
+        hdr_profile: profile_index(
+            &state.profiles.hdr,
+            settings.and_then(|s| s.hdr_profile.as_deref()),
+        ),
     }
+}
+
+/// A saved profile's place in a dropdown list, where 0 is "Windows
+/// default" (also shown for a profile that is no longer installed).
+fn profile_index(list: &[String], saved: Option<&str>) -> i32 {
+    saved
+        .and_then(|name| list.iter().position(|p| p.eq_ignore_ascii_case(name)))
+        .map_or(0, |i| count(i + 1))
 }
 
 /// This program's path, for launch options, shortcuts and menu entries.
@@ -1242,6 +1279,30 @@ fn wire_games(ui: &SettingsWindow) {
             edit(s, |c| {
                 // On is the default and is not written.
                 c.game_mut(&GameId::from_raw(id.as_str())).steam_start = (!on).then_some(false);
+            });
+        });
+    });
+    let r = refresh.clone();
+    ui.on_set_game_profile(move |id, hdr, index| {
+        r(&|s| {
+            let list = if hdr {
+                &s.profiles.hdr
+            } else {
+                &s.profiles.sdr
+            };
+            // 0 is "Windows default": no profile of the game's own.
+            let name = usize::try_from(index)
+                .ok()
+                .and_then(|i| i.checked_sub(1))
+                .and_then(|i| list.get(i))
+                .cloned();
+            edit(s, |c| {
+                let settings = c.game_mut(&GameId::from_raw(id.as_str()));
+                if hdr {
+                    settings.hdr_profile = name;
+                } else {
+                    settings.sdr_profile = name;
+                }
             });
         });
     });

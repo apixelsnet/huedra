@@ -7,6 +7,7 @@ use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
 use std::time::{Duration, Instant, SystemTime};
 
 use anyhow::Context as _;
+use huedra_core::color::{self, ColorState, GameColor};
 use huedra_core::command::{TrayStart, startup_command, startup_program};
 use huedra_core::config::{Config, GameHdr, ManualDisplays, UpdatePolicy};
 use huedra_core::display::{Display, DisplayId, HdrState};
@@ -32,6 +33,7 @@ use huedra_win::window::{ProcessHook, Watch};
 use huedra_win::{audio, clock, display, foreground, registry, tray, window};
 
 use huedra_core::locations::Locations;
+use huedra_win::color::Displays as ColorDisplays;
 use huedra_win::stores;
 
 const ENGINE_TIMER: TimerId = TimerId(1);
@@ -134,6 +136,14 @@ struct App {
     /// Steam games that got HDR when Steam started them.
     steam_starts: SteamStarts,
     displays: Vec<Display>,
+    /// Color profiles running games ask for, and the changes to undo.
+    colors: ColorState,
+    color_system: ColorDisplays,
+    /// Names of running games that ask for color profiles.
+    color_names: HashMap<TriggerId, String>,
+    /// The displays each of those games was last seen on, kept while its
+    /// window is minimized or a launcher hands over to it.
+    color_places: HashMap<TriggerId, BTreeSet<DisplayId>>,
     /// The daily check came due while a game or video used HDR; it runs
     /// once they end.
     update_due: bool,
@@ -194,6 +204,10 @@ impl App {
             update_due: false,
             update_available,
             offer_update: false,
+            colors: ColorState::from_record(color::load_record(&paths.color)),
+            color_system: ColorDisplays::new(paths.color.clone()),
+            color_names: HashMap::new(),
+            color_places: HashMap::new(),
             saved_owned: owned,
             history: VecDeque::new(),
             waker: host.waker(),
@@ -208,6 +222,8 @@ impl App {
         // Read only; without Steam there is nothing to watch.
         registry::watch_steam_running_app(host.waker());
         app.apply(host, now, outcome);
+        // Profiles left changed by a run that did not end normally go back.
+        app.sync_colors();
         if let Some(pid) = foreground::foreground_pid() {
             app.on_foreground(host, now, pid);
         }
@@ -324,20 +340,27 @@ impl App {
         let Some(game) = self.library.find(&path).cloned() else {
             return;
         };
-        let Some(mut trigger) = self.config.trigger_for(&game) else {
+        // A game is followed when it changes HDR, uses its own color
+        // profiles, or both.
+        let trigger = self.config.trigger_for(&game);
+        let colors = self.config.color_profiles(&game.id).is_some();
+        if trigger.is_none() && !colors {
             return;
-        };
+        }
         if !self.watch(pid) {
             return;
         }
         let id = TriggerId::new(game.id.as_str());
         if self.tracker.track(pid, id.clone(), &game.install_dir, now) {
             self.find_game_window(pid);
-            trigger.target = self.game_target(&id);
-            self.log_line(&format!("{} started.", trigger.label));
-            self.follow_steam_start(host, now, &id, &trigger.target);
-            let outcome = self.engine.trigger_started(now, id, trigger);
-            self.apply(host, now, outcome);
+            self.log_line(&format!("{} started.", game.name));
+            if let Some(mut trigger) = trigger {
+                trigger.target = self.game_target(&id);
+                self.follow_steam_start(host, now, &id, &trigger.target);
+                let outcome = self.engine.trigger_started(now, id, trigger);
+                self.apply(host, now, outcome);
+            }
+            self.sync_colors();
         } else {
             self.place_game(host, now, pid);
         }
@@ -401,6 +424,99 @@ impl App {
         if outcome != Outcome::default() {
             self.apply(host, now, outcome);
         }
+        if self.color_names.contains_key(&id) {
+            self.sync_colors();
+        }
+    }
+
+    // --- Color profiles ---------------------------------------------------
+
+    /// Brings the displays' color profiles in line with the running games
+    /// that ask for their own: sets theirs on the displays they are on, and
+    /// puts back the earlier profiles where no game wants a change any
+    /// more.
+    fn sync_colors(&mut self) {
+        // Running games that ask for profiles, including ones given profiles
+        // while they run; a game a launcher is handing over to keeps its own.
+        let tracked: BTreeSet<TriggerId> = self
+            .tracker
+            .pids()
+            .filter_map(|pid| self.tracker.trigger_of(pid).cloned())
+            .collect();
+        for id in tracked {
+            let game = GameId::from_raw(id.as_str());
+            if !self.color_names.contains_key(&id) && self.config.color_profiles(&game).is_some() {
+                let name = self
+                    .library
+                    .get(&game)
+                    .map_or_else(|| id.as_str().to_owned(), |g| g.name.clone());
+                self.color_names.insert(id, name);
+            }
+        }
+        let tracker = &self.tracker;
+        self.color_names.retain(|id, _| tracker.is_active(id));
+        self.color_places.retain(|id, _| tracker.is_active(id));
+        let ids: BTreeSet<TriggerId> = self.color_names.keys().cloned().collect();
+        let mut games = Vec::new();
+        for id in ids {
+            let Some(profiles) = self.config.color_profiles(&GameId::from_raw(id.as_str())) else {
+                continue;
+            };
+            let displays = self.color_displays(&id);
+            let label = self
+                .color_names
+                .get(&id)
+                .cloned()
+                .unwrap_or_else(|| id.as_str().to_owned());
+            games.push(GameColor {
+                id,
+                label,
+                displays,
+                profiles,
+            });
+        }
+        if games.is_empty() && !self.colors.is_active() {
+            return;
+        }
+        self.colors.set_games(games);
+        for line in self.colors.sync(&mut self.color_system) {
+            self.log_line(&line);
+        }
+        if let Some(problem) = self.color_system.problem.take() {
+            self.log_line(&format!(
+                "Could not write the record of color profiles: {problem}"
+            ));
+        }
+    }
+
+    /// The displays a game's color profiles go on: those of its processes'
+    /// main windows, the ones last seen while it has none showing, or the
+    /// main display, where games open by default.
+    fn color_displays(&mut self, id: &TriggerId) -> BTreeSet<DisplayId> {
+        let numbers: BTreeSet<u32> = self
+            .tracker
+            .pids()
+            .filter(|pid| self.tracker.trigger_of(*pid) == Some(id))
+            .filter_map(|pid| window::main_monitor(pid.0))
+            .collect();
+        let shown: BTreeSet<DisplayId> = self
+            .displays
+            .iter()
+            .filter(|d| numbers.contains(&d.number))
+            .map(|d| d.id.clone())
+            .collect();
+        if !shown.is_empty() {
+            self.color_places.insert(id.clone(), shown.clone());
+            return shown;
+        }
+        if let Some(last) = self.color_places.get(id) {
+            return last.clone();
+        }
+        self.displays
+            .iter()
+            .filter(|d| d.primary)
+            .map(|d| d.id.clone())
+            .collect()
     }
 
     /// Applies a change of the Displays setting to running games and
@@ -582,11 +698,17 @@ impl App {
         self.game_moves.remove(&pid);
         match self.tracker.exited(pid, now) {
             Exit::Ended(id) => {
-                let label = self.engine.label(&id).unwrap_or(id.as_str()).to_owned();
+                let label = self
+                    .engine
+                    .label(&id)
+                    .or_else(|| self.color_names.get(&id).map(String::as_str))
+                    .unwrap_or(id.as_str())
+                    .to_owned();
                 self.log_line(&format!("{label} ended."));
                 let outcome = self.engine.trigger_ended(now, &id);
                 self.apply(host, now, outcome);
                 self.end_steam_start(host, now, &id);
+                self.sync_colors();
             }
             Exit::Following => {
                 self.log_line("A launcher closed; looking for the game it started.");
@@ -623,10 +745,15 @@ impl App {
                 break;
             }
         }
-        for id in self.tracker.expire(now) {
+        let expired = self.tracker.expire(now);
+        let any_expired = !expired.is_empty();
+        for id in expired {
             let outcome = self.engine.trigger_ended(now, &id);
             self.apply(host, now, outcome);
             self.end_steam_start(host, now, &id);
+        }
+        if any_expired {
+            self.sync_colors();
         }
         if !self.tracker.is_following() {
             host.kill_timer(FOLLOW_TIMER);
@@ -651,6 +778,8 @@ impl App {
         outcome.actions.extend(more.actions);
         outcome.notes.extend(more.notes);
         self.apply(host, now, outcome);
+        // A display that came back gets its profiles put back or set.
+        self.sync_colors();
     }
 
     // --- Launch with HDR -------------------------------------------------
@@ -1095,6 +1224,8 @@ impl App {
         }
         self.apply(host, now, outcome);
         self.retarget_all(host, now);
+        // A running game's profiles may have changed.
+        self.sync_colors();
         self.rtx_video_hdr = registry::rtx_video_hdr() == Some(true);
         let pids: Vec<(Pid, VideoApp)> = self.videos.iter().map(|(p, v)| (*p, v.app)).collect();
         for (pid, app) in pids {
@@ -1122,8 +1253,15 @@ impl App {
         }
     }
 
-    /// Turns off the HDR Huedra turned on, then clears the recovery record.
+    /// Puts back the color profiles games changed and turns off the HDR
+    /// Huedra turned on, then clears the recovery records.
     fn shutdown(&mut self) {
+        if self.colors.is_active() {
+            self.colors.set_games(Vec::new());
+            for line in self.colors.sync(&mut self.color_system) {
+                self.log_line(&line);
+            }
+        }
         for id in self.engine.owned() {
             if let Err(error) = display::set_hdr(&id, HdrState::Off, self.config.attempts()) {
                 self.log_line(&format!(
@@ -1140,7 +1278,9 @@ impl App {
     /// Whether a game, video or launch keeps HDR on or is about to, or HDR
     /// Huedra turned on is still held: no update may restart Huedra now.
     fn busy(&self) -> bool {
-        !self.engine.active_triggers().is_empty() || !self.engine.owned().is_empty()
+        !self.engine.active_triggers().is_empty()
+            || !self.engine.owned().is_empty()
+            || !self.colors.games().is_empty()
     }
 
     /// Sets the daily check's timer from the last check, or stops it when
