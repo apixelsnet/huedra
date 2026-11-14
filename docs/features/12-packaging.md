@@ -223,3 +223,9 @@ Not verified: installing through winget (local manifests need an administrator s
 ## Result (2026-11-14) — code signing policy
 - The owner applied to the SignPath Foundation for free code signing. The README has the **Code signing policy** section their review looks for: the attribution line, what is signed (only `huedra.exe` from the Release workflow), who commits, reviews and approves, multi-factor authentication, and the network connections the program makes on its own. Until the application is approved, releases are not Windows-signed, and the section says so.
 - `PRIVACY.md` names the icon downloads from `cdn.discordapp.com` (only the list was named before) and the Settings page by its current name.
+
+## Result (2026-11-14) — 1.2.1
+- PR #47 (the switch worker, keyboard shortcuts, pause lengths, Auto HDR per game, resolution and refresh rate per game, SDR content brightness, the battery setting, starting without displays, the package manifests) merged as 9748b9e, and PR #49 (the 1.2.1 changelog) as d7b7c62, both with a plain squash merge. Release > Run workflow (version 1.2.1) on d7b7c62, run 43548295797: every job green; "Huedra 1.2.1" marked Latest, not a pre-release, with `huedra-1.2.1-windows-x64.zip` (6,225,984 bytes), its signature and the extension 0.3.1 zip; the update channel's `huedra.exe` is 11,916,800 bytes (limit 12,000,000).
+- Verified on this PC from the downloads: the zip, `release.toml` and `release-notes.md` signatures verify (trusted comment "huedra 1.2.1"); the exe's size and SHA-256 match `release.toml`, and the zip's exe is the channel's; `--version` prints Huedra 1.2.1; the notes carry every 1.2.1 entry; Defender finds nothing in the exe or the zip.
+- The winget and Scoop manifests in `extras/packaging/` now name 1.2.1 and the zip's SHA-256 (6108e87752fb2c6dd4974f122ad456c69890d4ca3370feff334169402b54fc4f).
+

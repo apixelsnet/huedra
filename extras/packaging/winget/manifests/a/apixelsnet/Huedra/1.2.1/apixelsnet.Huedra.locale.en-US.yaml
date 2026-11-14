@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.10.0.schema.json
 PackageIdentifier: apixelsnet.Huedra
-PackageVersion: 1.2.0
+PackageVersion: 1.2.1
 PackageLocale: en-US
 Publisher: apixelsnet
 PublisherUrl: https://github.com/apixelsnet
@@ -19,6 +19,6 @@ Tags:
   - display
   - gaming
   - tray
-ReleaseNotesUrl: https://github.com/apixelsnet/huedra/releases/tag/v1.2.0
+ReleaseNotesUrl: https://github.com/apixelsnet/huedra/releases/tag/v1.2.1
 ManifestType: defaultLocale
 ManifestVersion: 1.10.0
