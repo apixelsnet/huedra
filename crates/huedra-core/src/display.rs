@@ -56,6 +56,52 @@ impl HdrSupport {
     }
 }
 
+/// How bright SDR content (the desktop, SDR apps) is while HDR is on, as
+/// Windows Settings › Display › HDR sets it: 80 to 480 nits.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub struct SdrBrightness(u32);
+
+impl SdrBrightness {
+    /// The lowest Windows offers.
+    pub const MIN: u32 = 80;
+    /// The highest Windows offers.
+    pub const MAX: u32 = 480;
+
+    /// A brightness in nits, when Windows offers it.
+    pub fn from_nits(nits: u32) -> Option<Self> {
+        (Self::MIN..=Self::MAX)
+            .contains(&nits)
+            .then_some(Self(nits))
+    }
+
+    /// From Windows' `SDRWhiteLevel`, where 1000 is 80 nits; brought into
+    /// range.
+    pub fn from_level(level: u32) -> Self {
+        let nits = (u64::from(level) * 80 + 500) / 1000;
+        Self(
+            u32::try_from(nits)
+                .unwrap_or(Self::MAX)
+                .clamp(Self::MIN, Self::MAX),
+        )
+    }
+
+    /// The value in nits.
+    pub const fn nits(self) -> u32 {
+        self.0
+    }
+
+    /// As Windows' `SDRWhiteLevel`.
+    pub const fn level(self) -> u32 {
+        self.0 * 1000 / 80
+    }
+}
+
+impl std::fmt::Display for SdrBrightness {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} nits", self.0)
+    }
+}
+
 /// Luminance in nits (candela per square metre).
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 pub struct Nits(f32);
@@ -96,6 +142,9 @@ pub struct Display {
     pub state: HdrState,
     /// Peak brightness reported by the display, when known.
     pub peak: Option<Nits>,
+    /// How bright SDR content is while HDR is on; read only while HDR is
+    /// on, as Windows reports nothing useful otherwise.
+    pub sdr_brightness: Option<SdrBrightness>,
 }
 
 impl Display {
@@ -206,6 +255,37 @@ mod tests {
     use super::color_flags::{decode_v1, decode_v2};
     use super::*;
 
+    #[test]
+    fn sdr_brightness_converts_windows_levels() {
+        assert_eq!(
+            SdrBrightness::from_level(1000).nits(),
+            80,
+            "1000 is 80 nits"
+        );
+        assert_eq!(
+            SdrBrightness::from_level(3000).nits(),
+            240,
+            "3000 is 240 nits"
+        );
+        assert_eq!(
+            SdrBrightness::from_level(0).nits(),
+            80,
+            "brought into range"
+        );
+        assert_eq!(
+            SdrBrightness::from_level(99_999).nits(),
+            480,
+            "brought into range"
+        );
+        assert_eq!(
+            SdrBrightness::from_nits(240).map(SdrBrightness::level),
+            Some(3000),
+            "back"
+        );
+        assert_eq!(SdrBrightness::from_nits(79), None, "below Windows' range");
+        assert_eq!(SdrBrightness::from_nits(481), None, "above Windows' range");
+    }
+
     fn display(number: u32, primary: bool, support: HdrSupport) -> Display {
         Display {
             id: DisplayId::new(format!("path{number}")),
@@ -215,6 +295,7 @@ mod tests {
             support,
             state: HdrState::Off,
             peak: None,
+            sdr_brightness: None,
         }
     }
 

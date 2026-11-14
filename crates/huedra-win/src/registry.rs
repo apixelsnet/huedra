@@ -271,6 +271,35 @@ pub fn set_startup(command: Option<&str>) -> windows::core::Result<()> {
     }
 }
 
+/// Where Windows keeps per-program graphics settings, Auto HDR among them
+/// (see `huedra_core::autohdr`).
+const GPU_PREFERENCES_KEY: &str = r"Software\Microsoft\DirectX\UserGpuPreferences";
+
+/// A program's graphics settings text, for example
+/// `AutoHDREnable=4147;AppStatus=4;`, if Windows has any for it.
+pub fn gpu_preferences(program: &str) -> Option<String> {
+    string(Hive::CurrentUser, GPU_PREFERENCES_KEY, program)
+}
+
+/// Writes a program's graphics settings text, or removes the value.
+///
+/// # Errors
+/// The Windows error when the value cannot be written or removed.
+pub fn set_gpu_preferences(program: &str, text: Option<&str>) -> windows::core::Result<()> {
+    match text {
+        Some(text) => write_string(GPU_PREFERENCES_KEY, program, text),
+        None => {
+            let (key, value) = (HSTRING::from(GPU_PREFERENCES_KEY), HSTRING::from(program));
+            // SAFETY: deletes one value of a key of the current user.
+            match unsafe { RegDeleteKeyValueW(HKEY_CURRENT_USER, &key, &value) } {
+                ERROR_FILE_NOT_FOUND => ERROR_SUCCESS,
+                other => other,
+            }
+            .ok()
+        }
+    }
+}
+
 /// The command of the "Start with HDR" entry, if there is one.
 pub fn context_menu_command() -> Option<String> {
     string(Hive::CurrentUser, MENU_COMMAND_KEY, "")

@@ -3,10 +3,11 @@
 //! Feature docs: `02-engine.md`, `03-watchers.md`, `05-video.md`,
 //! `06-launch-with-hdr.md`, `07-tray-hotkeys.md`.
 
-use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use std::time::{Duration, Instant, SystemTime};
 
 use anyhow::Context as _;
+use huedra_core::autohdr::{self, AutoHdr};
 use huedra_core::color::{self, ColorState, GameColor};
 use huedra_core::command::{TrayStart, startup_command, startup_program};
 use huedra_core::config::{Config, GameHdr, ManualDisplays, UpdatePolicy};
@@ -20,6 +21,8 @@ use huedra_core::ipc::{DisplayReport, HistoryEntry, HistoryKind, Request, Respon
 use huedra_core::launch;
 use huedra_core::library::{GameId, Library};
 use huedra_core::logfile::{self, LogFile};
+use huedra_core::mode::DisplayMode;
+use huedra_core::shortcut::Binding;
 use huedra_core::steam_start::{self, SteamStarts};
 use huedra_core::tracker::{Exit, Pid, Tracker};
 use huedra_core::update::{self, UpdateState, Version};
@@ -27,8 +30,9 @@ use huedra_core::video::{self, PlayerHdr, VideoApp, VideoKind};
 use huedra_win::event_loop::{Event, EventLoop, Flow, TimerId, Waker};
 use huedra_win::hotkey::{Hotkey, Hotkeys};
 use huedra_win::menu::{self, MenuEntry};
-use huedra_win::pipe::{PipeError, PipeServer};
+use huedra_win::pipe::{PipeCall, PipeError, PipeServer};
 use huedra_win::process::{self, ExitWatch};
+use huedra_win::switcher::Switcher;
 use huedra_win::window::{ProcessHook, Watch};
 use huedra_win::{audio, clock, display, foreground, registry, tray, window};
 
@@ -43,6 +47,16 @@ const VIDEO_TIMER: TimerId = TimerId(3);
 const UPDATE_TIMER: TimerId = TimerId(4);
 /// Ends early starts whose game never appeared (see `steam_start::GRACE`).
 const STEAM_TIMER: TimerId = TimerId(5);
+/// Display modes are set this long after HDR switched, and tried again
+/// after it when Windows refused: right after an HDR change the display is
+/// still settling and Windows refuses every mode (seen on this PC).
+const MODE_TIMER: TimerId = TimerId(6);
+const MODE_SETTLE: Duration = Duration::from_secs(1);
+/// Reads the displays again while Windows cannot list them.
+const DISPLAY_TIMER: TimerId = TimerId(7);
+const DISPLAY_RETRY: Duration = Duration::from_secs(5);
+/// Tries per display mode before giving up until the next change.
+const MODE_TRIES: u32 = 3;
 /// The first check waits this long after start, so it does not compete
 /// with Windows starting up.
 const UPDATE_FIRST_DELAY: Duration = Duration::from_secs(120);
@@ -52,6 +66,9 @@ const FOLLOW_POLL: Duration = Duration::from_secs(1);
 /// (RTX Video HDR): full screen and sound send no window events.
 const VIDEO_POLL: Duration = Duration::from_secs(2);
 const HISTORY_LEN: usize = 50;
+/// How long exit waits for switches under way before returning displays to
+/// SDR: two displays refusing every attempt take about this long.
+const SHUTDOWN_WAIT: Duration = Duration::from_secs(15);
 const PAUSE_MINUTES: u32 = 60;
 /// Longest pause accepted from a client.
 const MAX_PAUSE_MINUTES: u32 = 24 * 60;
@@ -66,6 +83,11 @@ const MENU_EXIT: u32 = 31;
 const MENU_UPDATE: u32 = 32;
 const MENU_SUPPORT: u32 = 33;
 const MENU_REPORT: u32 = 34;
+/// "Pause automatic switching" choices: the menu id is this plus the index
+/// in [`PAUSE_CHOICES`].
+const MENU_PAUSE_FOR: u32 = 40;
+/// The lengths the menu offers for a pause, in minutes.
+const PAUSE_CHOICES: [u32; 5] = [15, 30, 60, 120, 240];
 
 /// Runs the tray process until it is told to exit, and opens the settings
 /// window when the user started it.
@@ -160,6 +182,32 @@ struct App {
     _foreground: Option<foreground::ForegroundHook>,
     pipe: PipeServer,
     waker: Waker,
+    /// Changes HDR on its own thread, so the menu, the shortcuts and the
+    /// command line keep answering while a display switches.
+    switcher: Switcher,
+    /// The displays changed while a switch was under way; they are read
+    /// again once it has finished, so a switch still in progress is not
+    /// mistaken for a change made outside Huedra.
+    display_change_due: bool,
+    /// `huedra launch` calls that are answered once HDR has switched, so
+    /// the game starts only after the display is in HDR.
+    launch_calls: Vec<PipeCall>,
+    /// The keys of shortcuts Windows refused, for the settings window.
+    refused_keys: Vec<String>,
+    /// Whether the PC runs on battery power.
+    on_battery: bool,
+    /// Displays whose mode Huedra changed for a running game, with the
+    /// mode the game asked for.
+    modes: BTreeMap<DisplayId, DisplayMode>,
+    /// Displays whose mode a crashed run left changed and that could not be
+    /// put back yet; kept in the record and tried again.
+    stale_modes: BTreeSet<DisplayId>,
+    /// Windows could not list the displays at the last reading.
+    displays_missing: bool,
+    /// [`MODE_TIMER`] should be set when the current event is handled.
+    modes_due: bool,
+    /// Refused tries per display since its mode last changed.
+    mode_tries: BTreeMap<DisplayId, u32>,
 }
 
 impl App {
@@ -170,7 +218,14 @@ impl App {
             Ok(config) => (config, None),
             Err(error) => (Config::default(), Some(error.to_string())),
         };
-        let displays = display::current().context("could not read the displays")?;
+        // Windows can refuse to list the displays (QueryDisplayConfig error
+        // 50, seen on this PC while its monitor reported itself off line);
+        // Huedra then starts without them and reads them again every few
+        // seconds until Windows answers.
+        let (displays, display_problem) = match display::current() {
+            Ok(displays) => (displays, None),
+            Err(error) => (Vec::new(), Some(error.to_string())),
+        };
         let owned = files::load_owned(&paths.owned);
         let now = Instant::now();
         let (engine, outcome) = Engine::new(
@@ -211,6 +266,17 @@ impl App {
             saved_owned: owned,
             history: VecDeque::new(),
             waker: host.waker(),
+            switcher: Switcher::start(host.waker())
+                .context("could not start the HDR switch thread")?,
+            display_change_due: false,
+            launch_calls: Vec::new(),
+            refused_keys: Vec::new(),
+            on_battery: huedra_win::power::on_battery(),
+            modes: BTreeMap::new(),
+            stale_modes: BTreeSet::new(),
+            displays_missing: display_problem.is_some(),
+            modes_due: false,
+            mode_tries: BTreeMap::new(),
             paths,
             config,
             engine,
@@ -219,11 +285,19 @@ impl App {
             pipe,
         };
         app.register_hotkeys(host);
+        let battery = app.battery_holds_hdr();
+        let more = app.engine.set_on_battery(now, battery);
+        let mut outcome = outcome;
+        outcome.actions.extend(more.actions);
+        outcome.notes.extend(more.notes);
         // Read only; without Steam there is nothing to watch.
         registry::watch_steam_running_app(host.waker());
         app.apply(host, now, outcome);
         // Profiles left changed by a run that did not end normally go back.
         app.sync_colors();
+        app.reset_modes_after_crash();
+        app.sync_modes();
+        app.sync_auto_hdr();
         if let Some(pid) = foreground::foreground_pid() {
             app.on_foreground(host, now, pid);
         }
@@ -239,6 +313,12 @@ impl App {
         if let Some(problem) = problem {
             app.log_line(&format!(
                 "The settings were not loaded and defaults are used: {problem}"
+            ));
+        }
+        if let Some(problem) = display_problem {
+            host.set_timer(DISPLAY_TIMER, DISPLAY_RETRY);
+            app.log_line(&format!(
+                "Could not read the displays ({problem}); waiting for Windows to report them."
             ));
         }
         app.startup_entry(first_run);
@@ -266,6 +346,14 @@ impl App {
             }
             Event::Timer(FOLLOW_TIMER) => self.on_follow_tick(host, now),
             Event::Timer(STEAM_TIMER) => self.on_steam_tick(host, now),
+            Event::Timer(DISPLAY_TIMER) => {
+                host.kill_timer(DISPLAY_TIMER);
+                self.on_display_change(host, now);
+            }
+            Event::Timer(MODE_TIMER) => {
+                host.kill_timer(MODE_TIMER);
+                self.sync_modes();
+            }
             Event::SteamApp(app_id) => self.on_steam_app(host, now, app_id),
             Event::Timer(VIDEO_TIMER) => self.on_video_tick(host, now),
             Event::Timer(UPDATE_TIMER) => {
@@ -275,6 +363,19 @@ impl App {
             }
             Event::Timer(_) => {}
             Event::DisplayChanged => self.on_display_change(host, now),
+            Event::Switched => self.on_switched(host, now),
+            Event::PowerChanged => {
+                let on_battery = huedra_win::power::on_battery();
+                if on_battery != self.on_battery {
+                    self.on_battery = on_battery;
+                    self.log_line(if on_battery {
+                        "The PC is running on battery power."
+                    } else {
+                        "The PC is back on mains power."
+                    });
+                    self.apply_battery(host, now);
+                }
+            }
             Event::Hotkey(key) => self.on_hotkey(host, now, key),
             // The quick panel, beside the icon; the menu stays on the
             // right button and is the keyboard and screen reader path too.
@@ -291,6 +392,14 @@ impl App {
             Event::Wake => {
                 while let Some(call) = self.pipe.next_call() {
                     let (response, flow) = self.on_request(host, now, &call.request);
+                    // A launch is answered once HDR has switched.
+                    if matches!(call.request, Request::Launch { .. })
+                        && matches!(response, Response::Done { .. })
+                        && !self.switcher.is_idle()
+                    {
+                        self.launch_calls.push(call);
+                        continue;
+                    }
                     // On exit the displays are back in SDR before the reply,
                     // so "Huedra has closed." is true when it is printed.
                     if flow == Flow::Exit {
@@ -305,6 +414,9 @@ impl App {
         self.update_video_poll(host);
         self.run_due_update();
         self.offer_waiting_update();
+        if std::mem::take(&mut self.modes_due) {
+            host.set_timer(MODE_TIMER, MODE_SETTLE);
+        }
         self.refresh_tray(now);
         Flow::Continue
     }
@@ -326,7 +438,10 @@ impl App {
         let Some(path) = process::image_path(pid.0) else {
             return;
         };
-        if self.tracker.is_following() && self.tracker.adopt(pid, &path, now).is_some() {
+        if self.tracker.is_following()
+            && let Some(id) = self.tracker.adopt(pid, &path, now)
+        {
+            self.note_program(&GameId::from_raw(id.as_str()), &path);
             if self.watch(pid) {
                 self.place_game(host, now, pid);
             }
@@ -340,10 +455,15 @@ impl App {
         let Some(game) = self.library.find(&path).cloned() else {
             return;
         };
+        self.note_program(&game.id, &path);
         // A game is followed when it changes HDR, uses its own color
         // profiles, or both.
         let trigger = self.config.trigger_for(&game);
-        let colors = self.config.color_profiles(&game.id).is_some();
+        let colors = self.config.color_profiles(&game.id).is_some()
+            || self
+                .config
+                .game(&game.id)
+                .is_some_and(|g| g.display_mode.is_some());
         if trigger.is_none() && !colors {
             return;
         }
@@ -361,6 +481,7 @@ impl App {
                 self.apply(host, now, outcome);
             }
             self.sync_colors();
+            self.sync_modes();
         } else {
             self.place_game(host, now, pid);
         }
@@ -426,6 +547,267 @@ impl App {
         }
         if self.color_names.contains_key(&id) {
             self.sync_colors();
+            self.sync_modes();
+        }
+    }
+
+    // --- Auto HDR ---------------------------------------------------------
+
+    /// A game's program is running: when the game has its own Auto HDR
+    /// setting, the program gets it (Windows reads it when the game starts,
+    /// so it takes effect from the next start) and is remembered.
+    fn note_program(&mut self, game: &GameId, path: &str) {
+        let Some(settings) = self.config.game(game) else {
+            return;
+        };
+        if settings.auto_hdr == AutoHdr::Windows
+            || settings
+                .programs
+                .iter()
+                .any(|p| p.eq_ignore_ascii_case(path))
+        {
+            return;
+        }
+        let choice = settings.auto_hdr;
+        self.edit_config(|c| c.game_mut(game).programs.push(path.to_owned()));
+        self.set_auto_hdr(&self.game_name(game), path, choice);
+    }
+
+    /// Brings every game's programs in line with its Auto HDR setting. A
+    /// game set back to "As set in Windows" has Huedra's part removed from
+    /// its programs, which are then forgotten.
+    fn sync_auto_hdr(&mut self) {
+        // (game, choice, programs to set, programs to remember)
+        let mut work = Vec::new();
+        for g in &self.config.games {
+            if g.auto_hdr == AutoHdr::Windows && g.programs.is_empty() {
+                continue;
+            }
+            let mut programs = g.programs.clone();
+            let mut new = Vec::new();
+            // A game added by hand names its program, so it gets the
+            // setting at once; it is remembered so it can be taken back.
+            if g.auto_hdr != AutoHdr::Windows
+                && let Some(exe) = &g.exe
+                && !programs.iter().any(|p| p.eq_ignore_ascii_case(exe))
+            {
+                programs.push(exe.clone());
+                new.push(exe.clone());
+            }
+            work.push((g.id.clone(), g.auto_hdr, programs, new));
+        }
+        let mut changes: Vec<(GameId, Option<Vec<String>>)> = Vec::new();
+        for (id, choice, programs, new) in work {
+            let name = self.game_name(&id);
+            for program in &programs {
+                self.set_auto_hdr(&name, program, choice);
+            }
+            if choice == AutoHdr::Windows {
+                changes.push((id, None));
+            } else if !new.is_empty() {
+                changes.push((id, Some(new)));
+            }
+        }
+        if !changes.is_empty() {
+            self.edit_config(|c| {
+                for (id, new) in &changes {
+                    let programs = &mut c.game_mut(id).programs;
+                    match new {
+                        None => programs.clear(),
+                        Some(new) => programs.extend(new.iter().cloned()),
+                    }
+                }
+            });
+        }
+    }
+
+    /// A game's name from the library, or its id.
+    fn game_name(&self, id: &GameId) -> String {
+        self.library
+            .get(id)
+            .map_or_else(|| id.as_str().to_owned(), |g| g.name.clone())
+    }
+
+    /// Writes one program's Auto HDR choice where Windows reads it, keeping
+    /// the program's other graphics settings.
+    fn set_auto_hdr(&self, game: &str, program: &str, choice: AutoHdr) {
+        let current = registry::gpu_preferences(program);
+        let wanted = autohdr::edit(current.as_deref(), choice);
+        if wanted == current {
+            return;
+        }
+        let name = huedra_core::paths::display_name(program);
+        match registry::set_gpu_preferences(program, wanted.as_deref()) {
+            Ok(()) => self.log_line(&format!(
+                "Auto HDR for {game} ({name}): {}.",
+                match choice {
+                    AutoHdr::On => "on",
+                    AutoHdr::Off => "off",
+                    AutoHdr::Windows => "as set in Windows",
+                }
+            )),
+            Err(error) => self.log_line(&format!(
+                "Could not set Auto HDR for {game} ({name}): {error}"
+            )),
+        }
+    }
+
+    // --- Display modes ----------------------------------------------------
+
+    /// Puts back the modes a run that did not end normally left changed.
+    fn reset_modes_after_crash(&mut self) {
+        if self.displays_missing {
+            return;
+        }
+        self.stale_modes.extend(
+            files::load_owned(&self.paths.modes)
+                .into_iter()
+                .filter(|id| !self.modes.contains_key(id)),
+        );
+        if self.stale_modes.is_empty() {
+            return;
+        }
+        for id in std::mem::take(&mut self.stale_modes) {
+            match huedra_win::mode::reset(&id) {
+                Ok(()) => self.log_line(&format!(
+                    "{}: the resolution and refresh rate set in Windows are back.",
+                    self.display_label(&id)
+                )),
+                Err(error) => {
+                    self.log_line(&format!(
+                        "{}: could not put back the display mode: {error}",
+                        self.display_label(&id)
+                    ));
+                    self.stale_modes.insert(id);
+                }
+            }
+        }
+        self.save_modes_record();
+    }
+
+    /// Gives each display a running game is on the mode the game asks for,
+    /// and puts back the Windows mode where no game wants one any more. It
+    /// waits for HDR switches under way, since HDR can change the modes a
+    /// display offers (less bandwidth for the same cable).
+    fn sync_modes(&mut self) {
+        if !self.switcher.is_idle() || self.displays_missing {
+            return;
+        }
+        let mut wanted: BTreeMap<DisplayId, (DisplayMode, String)> = BTreeMap::new();
+        let ids: BTreeSet<TriggerId> = self
+            .tracker
+            .pids()
+            .filter_map(|pid| self.tracker.trigger_of(pid).cloned())
+            .collect();
+        for id in ids {
+            let game = GameId::from_raw(id.as_str());
+            let Some(mode) = self.config.game(&game).and_then(|g| g.display_mode) else {
+                continue;
+            };
+            let name = self.game_name(&game);
+            for display in self.color_displays(&id) {
+                wanted.entry(display).or_insert((mode, name.clone()));
+            }
+        }
+        let done: Vec<DisplayId> = self
+            .modes
+            .keys()
+            .filter(|d| !wanted.contains_key(*d))
+            .cloned()
+            .collect();
+        for id in done {
+            self.modes.remove(&id);
+            match huedra_win::mode::reset(&id) {
+                Ok(()) => self.log_line(&format!(
+                    "{}: the resolution and refresh rate set in Windows are back.",
+                    self.display_label(&id)
+                )),
+                Err(error) => self.log_line(&format!(
+                    "{}: could not put back the display mode: {error}",
+                    self.display_label(&id)
+                )),
+            }
+        }
+        for (id, (mode, game)) in wanted {
+            if self.modes.get(&id) == Some(&mode) {
+                continue;
+            }
+            let offered = huedra_win::mode::offered(&id);
+            // An empty list: the display is still settling after HDR
+            // changed, or is switched off. Try again shortly.
+            if offered.is_empty() {
+                let tries = self.mode_tries.entry(id.clone()).or_insert(0);
+                *tries += 1;
+                if *tries < MODE_TRIES {
+                    self.modes_due = true;
+                } else {
+                    self.mode_tries.remove(&id);
+                    self.log_line(&format!(
+                        "{}: Windows didn't list the display's modes, so {game}'s mode wasn't set.",
+                        self.display_label(&id)
+                    ));
+                }
+                continue;
+            }
+            let Some(pick) = mode.closest(&offered) else {
+                self.log_line(&format!(
+                    "{}: {game} asks for {}, which this display doesn't offer.",
+                    self.display_label(&id),
+                    mode.label()
+                ));
+                continue;
+            };
+            if huedra_win::mode::current(&id) == Some(pick) {
+                continue;
+            }
+            // Recorded before the change, so a crash still leaves a record.
+            self.modes.insert(id.clone(), mode);
+            self.save_modes_record();
+            match huedra_win::mode::set(&id, pick) {
+                Ok(()) if pick == mode => {
+                    self.mode_tries.remove(&id);
+                    self.log_line(&format!(
+                        "{}: {} for {game}.",
+                        self.display_label(&id),
+                        pick.label()
+                    ));
+                }
+                Ok(()) => {
+                    self.mode_tries.remove(&id);
+                    self.log_line(&format!(
+                        "{}: {} for {game} ({} isn't offered now).",
+                        self.display_label(&id),
+                        pick.label(),
+                        mode.label()
+                    ));
+                }
+                Err(error) => {
+                    self.modes.remove(&id);
+                    let tries = self.mode_tries.entry(id.clone()).or_insert(0);
+                    *tries += 1;
+                    if *tries < MODE_TRIES {
+                        self.modes_due = true;
+                    } else {
+                        self.mode_tries.remove(&id);
+                        self.log_line(&format!("{}: {error}", self.display_label(&id)));
+                    }
+                }
+            }
+        }
+        self.save_modes_record();
+    }
+
+    fn save_modes_record(&mut self) {
+        let ids: Vec<DisplayId> = self
+            .modes
+            .keys()
+            .chain(&self.stale_modes)
+            .cloned()
+            .collect();
+        if let Err(error) = files::save_owned(&self.paths.modes, &ids) {
+            self.log_line(&format!(
+                "Could not write the record of display modes: {error}"
+            ));
         }
     }
 
@@ -436,6 +818,10 @@ impl App {
     /// puts back the earlier profiles where no game wants a change any
     /// more.
     fn sync_colors(&mut self) {
+        // Without a list of displays every profile would look unplaced.
+        if self.displays_missing {
+            return;
+        }
         // Running games that ask for profiles, including ones given profiles
         // while they run; a game a launcher is handing over to keeps its own.
         let tracked: BTreeSet<TriggerId> = self
@@ -709,6 +1095,7 @@ impl App {
                 self.apply(host, now, outcome);
                 self.end_steam_start(host, now, &id);
                 self.sync_colors();
+                self.sync_modes();
             }
             Exit::Following => {
                 self.log_line("A launcher closed; looking for the game it started.");
@@ -729,6 +1116,7 @@ impl App {
             };
             let pid = Pid(pid);
             if let Some(id) = self.tracker.adopt(pid, &path, now) {
+                self.note_program(&GameId::from_raw(id.as_str()), &path);
                 self.log_line(&format!(
                     "Following {} for {}.",
                     huedra_core::paths::display_name(&path),
@@ -754,6 +1142,7 @@ impl App {
         }
         if any_expired {
             self.sync_colors();
+            self.sync_modes();
         }
         if !self.tracker.is_following() {
             host.kill_timer(FOLLOW_TIMER);
@@ -762,10 +1151,31 @@ impl App {
     }
 
     fn on_display_change(&mut self, host: &EventLoop, now: Instant) {
+        if !self.switcher.is_idle() {
+            self.display_change_due = true;
+            return;
+        }
+        self.display_change_due = false;
         match display::current() {
-            Ok(displays) => self.displays = displays,
+            Ok(displays) => {
+                if self.displays_missing && !displays.is_empty() {
+                    self.displays_missing = false;
+                    self.log_line("Windows lists the displays again.");
+                    self.displays = displays;
+                    self.reset_modes_after_crash();
+                } else {
+                    self.displays = displays;
+                }
+            }
             Err(error) => {
-                self.log_line(&format!("Could not read the displays: {error}"));
+                // Logged once, then read again until Windows answers. The
+                // last list is kept, so the engine and the records keep
+                // their displays meanwhile.
+                if !self.displays_missing {
+                    self.displays_missing = true;
+                    self.log_line(&format!("Could not read the displays: {error}"));
+                }
+                host.set_timer(DISPLAY_TIMER, DISPLAY_RETRY);
                 return;
             }
         }
@@ -780,6 +1190,7 @@ impl App {
         self.apply(host, now, outcome);
         // A display that came back gets its profiles put back or set.
         self.sync_colors();
+        self.sync_modes();
     }
 
     // --- Launch with HDR -------------------------------------------------
@@ -820,8 +1231,15 @@ impl App {
             .engine
             .trigger_started(now, launch::trigger_id(pid.0), trigger);
         self.apply(host, now, outcome);
+        Response::Done {
+            message: self.launch_message(now).to_owned(),
+        }
+    }
+
+    /// The answer to `huedra launch`, once HDR has switched (or not).
+    fn launch_message(&self, now: Instant) -> &'static str {
         let status = self.engine.status(now);
-        let message = if status.hdr_on {
+        if status.hdr_on {
             "HDR is on."
         } else if status.mode == Mode::AlwaysSdr {
             "HDR stays off: Huedra is in Always SDR mode."
@@ -831,9 +1249,6 @@ impl App {
             "HDR stays off: no display Huedra manages supports HDR."
         } else {
             "HDR could not be turned on; see Huedra's log."
-        };
-        Response::Done {
-            message: message.to_owned(),
         }
     }
 
@@ -976,7 +1391,8 @@ impl App {
         let outcome = self.engine.pause(now, until);
         self.apply(host, now, outcome);
         self.log_line(&format!(
-            "Automatic switching paused for {minutes} minutes."
+            "Automatic switching paused for {}.",
+            pause_length(minutes)
         ));
     }
 
@@ -1034,7 +1450,7 @@ impl App {
             MenuEntry::Separator,
             radio(
                 MENU_AUTOMATIC,
-                &format!("Automatic\t{}", Hotkey::CycleMode.label()),
+                &self.with_keys("Automatic", Hotkey::CycleMode),
                 mode == Mode::Automatic,
             ),
             radio(MENU_ALWAYS_HDR, "Always HDR", mode == Mode::AlwaysHdr),
@@ -1045,15 +1461,29 @@ impl App {
         if let Some((_, label)) = &game {
             entries.push(item(MENU_NEVER, &format!("Never use HDR for {label}")));
         }
-        let pause_text = if status.paused_until.is_some() {
-            "Resume automatic switching"
+        if status.paused_until.is_some() {
+            entries.push(item(
+                MENU_PAUSE,
+                &self.with_keys("Resume automatic switching", Hotkey::Pause),
+            ));
         } else {
-            "Pause for 1 hour"
-        };
-        entries.push(item(
-            MENU_PAUSE,
-            &format!("{pause_text}\t{}", Hotkey::Pause.label()),
-        ));
+            let choices = PAUSE_CHOICES
+                .iter()
+                .zip(MENU_PAUSE_FOR..)
+                .map(|(&minutes, id)| {
+                    let text = pause_length(minutes);
+                    if minutes == PAUSE_MINUTES {
+                        item(id, &self.with_keys(&text, Hotkey::Pause))
+                    } else {
+                        item(id, &text)
+                    }
+                })
+                .collect();
+            entries.push(MenuEntry::Submenu {
+                text: "Pause automatic switching".to_owned(),
+                entries: choices,
+            });
+        }
         entries.push(MenuEntry::Separator);
         if let Some(version) = self.update_available {
             entries.push(item(MENU_UPDATE, &format!("Install Huedra {version}...")));
@@ -1074,6 +1504,12 @@ impl App {
                 }
             }
             Some(MENU_PAUSE) => self.toggle_pause(host, now),
+            Some(id) if id >= MENU_PAUSE_FOR => {
+                let index = usize::try_from(id - MENU_PAUSE_FOR).unwrap_or(usize::MAX);
+                if let Some(&minutes) = PAUSE_CHOICES.get(index) {
+                    self.pause(host, now, minutes);
+                }
+            }
             Some(MENU_OPEN) => crate::open_settings(),
             // The settings window shows the update dialog: what is new,
             // and Download and install.
@@ -1188,6 +1624,7 @@ impl App {
             }
         }
         self.library = build_library(&self.config);
+        self.sync_auto_hdr();
         self.engine
             .set_default_hold(self.config.general.hold.duration());
         self.register_hotkeys(host);
@@ -1223,9 +1660,11 @@ impl App {
             outcome.notes.extend(more.notes);
         }
         self.apply(host, now, outcome);
+        self.apply_battery(host, now);
         self.retarget_all(host, now);
         // A running game's profiles may have changed.
         self.sync_colors();
+        self.sync_modes();
         self.rtx_video_hdr = registry::rtx_video_hdr() == Some(true);
         let pids: Vec<(Pid, VideoApp)> = self.videos.iter().map(|(p, v)| (*p, v.app)).collect();
         for (pid, app) in pids {
@@ -1238,38 +1677,106 @@ impl App {
         self.log_line("Settings reloaded.");
     }
 
+    /// Whether automatic HDR is held off now: the PC runs on battery and the
+    /// settings ask for that.
+    fn battery_holds_hdr(&self) -> bool {
+        self.on_battery && self.config.general.battery_sdr
+    }
+
+    /// Tells the engine whether battery power holds automatic HDR off.
+    fn apply_battery(&mut self, host: &EventLoop, now: Instant) {
+        let hold = self.battery_holds_hdr();
+        if hold != self.engine.is_on_battery() {
+            let outcome = self.engine.set_on_battery(now, hold);
+            self.apply(host, now, outcome);
+        }
+    }
+
     fn register_hotkeys(&mut self, host: &EventLoop) {
         self.hotkeys = None;
+        self.refused_keys.clear();
         if !self.config.general.hotkeys {
             return;
         }
-        let (hotkeys, refused) = Hotkeys::register(host);
+        let shortcuts = self.config.general.shortcuts.clone();
+        for binding in [
+            &shortcuts.toggle_hdr,
+            &shortcuts.cycle_mode,
+            &shortcuts.pause,
+        ] {
+            if let Binding::Invalid(text) = binding {
+                self.log_line(&format!(
+                    "The shortcut \"{text}\" in the settings is not valid; the default is used."
+                ));
+            }
+        }
+        let (hotkeys, refused) = Hotkeys::register(host, shortcuts.resolved());
         self.hotkeys = Some(hotkeys);
         for key in refused {
-            self.log_line(&format!(
-                "{} is already used by another program.",
-                key.label()
-            ));
+            let keys = self.keys_of(key).unwrap_or_default();
+            self.log_line(&format!("{keys} is already used by another program."));
+            self.refused_keys.push(keys);
+        }
+    }
+
+    /// The keys of a shortcut, "Win+Alt+H"; `None` when shortcuts or this
+    /// one are off.
+    fn keys_of(&self, key: Hotkey) -> Option<String> {
+        if !self.config.general.hotkeys {
+            return None;
+        }
+        let index = Hotkey::ALL.iter().position(|k| *k == key)?;
+        self.config.general.shortcuts.resolved()[index].map(|k| k.to_string())
+    }
+
+    /// A menu item's text with its shortcut in the right-hand column.
+    fn with_keys(&self, text: &str, key: Hotkey) -> String {
+        match self.keys_of(key) {
+            Some(keys) => format!("{text}\t{keys}"),
+            None => text.to_owned(),
         }
     }
 
     /// Puts back the color profiles games changed and turns off the HDR
     /// Huedra turned on, then clears the recovery records.
     fn shutdown(&mut self) {
+        // Switches still under way finish first, so none turns a display
+        // back on after it was returned to SDR below.
+        for done in self.switcher.wait_idle(SHUTDOWN_WAIT) {
+            if let Err(error) = done.result {
+                self.log_line(&format!("Could not change HDR: {error}"));
+            }
+        }
+        for call in std::mem::take(&mut self.launch_calls) {
+            call.reply(Response::Failed {
+                message: "Huedra closed before HDR switched.".to_owned(),
+            });
+        }
+        for id in std::mem::take(&mut self.modes).into_keys() {
+            if let Err(error) = huedra_win::mode::reset(&id) {
+                self.log_line(&format!("Could not put back the display mode: {error}"));
+                self.stale_modes.insert(id);
+            }
+        }
+        self.save_modes_record();
         if self.colors.is_active() {
             self.colors.set_games(Vec::new());
             for line in self.colors.sync(&mut self.color_system) {
                 self.log_line(&line);
             }
         }
+        // Displays that could not be returned to SDR (not listed, for one)
+        // stay in the record, so the next start does it.
+        let mut left = Vec::new();
         for id in self.engine.owned() {
             if let Err(error) = display::set_hdr(&id, HdrState::Off, self.config.attempts()) {
                 self.log_line(&format!(
                     "Could not return a display to SDR on exit: {error}"
                 ));
+                left.push(id);
             }
         }
-        self.save_owned(&[]);
+        self.save_owned(&left);
         self.log_line("Huedra closed.");
     }
 
@@ -1280,6 +1787,7 @@ impl App {
     fn busy(&self) -> bool {
         !self.engine.active_triggers().is_empty()
             || !self.engine.owned().is_empty()
+            || !self.switcher.is_idle()
             || !self.colors.games().is_empty()
     }
 
@@ -1355,13 +1863,11 @@ impl App {
 
     // --- Applying decisions ---------------------------------------------
 
-    fn apply(&mut self, host: &EventLoop, now: Instant, mut outcome: Outcome) {
-        // A failed switch can produce one more decision; a few rounds suffice.
-        for _ in 0..4 {
-            self.record(&outcome.notes);
-            if outcome.actions.is_empty() {
-                break;
-            }
+    /// Records the engine's notes and hands its switches to the worker.
+    /// Their results come back as [`Event::Switched`].
+    fn apply(&mut self, host: &EventLoop, now: Instant, outcome: Outcome) {
+        self.record(&outcome.notes);
+        if !outcome.actions.is_empty() {
             // Record ownership before turning HDR on, so a crash in between
             // still leaves a record of it.
             let mut planned = self.saved_owned.clone();
@@ -1375,26 +1881,60 @@ impl App {
                 "Switch requested {} ms after the event.",
                 now.elapsed().as_millis()
             ));
-            let mut next = Outcome::default();
-            for action in outcome.actions {
-                if let Err(error) =
-                    display::set_hdr(&action.display, action.state, self.config.attempts())
-                {
-                    self.log_line(&format!("Could not change HDR: {error}"));
-                    let more = self
-                        .engine
-                        .switch_failed(now, &action.display, action.state);
-                    next.actions.extend(more.actions);
-                    next.notes.extend(more.notes);
-                }
-            }
-            let owned = self.engine.owned();
-            self.save_owned(&owned);
-            outcome = next;
+            let changes = outcome
+                .actions
+                .into_iter()
+                .map(|a| (a.display, a.state))
+                .collect();
+            self.switcher.request(changes, self.config.attempts());
         }
         match self.engine.next_deadline() {
             Some(deadline) => host.set_timer(ENGINE_TIMER, deadline.saturating_duration_since(now)),
             None => host.kill_timer(ENGINE_TIMER),
+        }
+    }
+
+    /// The worker finished switching: logs how long each display took and
+    /// lets the engine decide again for the ones that did not switch.
+    fn on_switched(&mut self, host: &EventLoop, now: Instant) {
+        let mut outcome = Outcome::default();
+        for done in self.switcher.finished() {
+            let label = self.display_label(&done.display);
+            match done.result {
+                Ok(()) if done.took.is_zero() => {}
+                Ok(()) => self.log_line(&format!(
+                    "{label} switched to {} in {} ms.",
+                    hdr_word(done.state),
+                    done.took.as_millis()
+                )),
+                Err(error) => {
+                    self.log_line(&format!(
+                        "Could not change HDR after {} ms: {error}",
+                        done.took.as_millis()
+                    ));
+                    let more = self.engine.switch_failed(now, &done.display, done.state);
+                    outcome.actions.extend(more.actions);
+                    outcome.notes.extend(more.notes);
+                }
+            }
+        }
+        if !outcome.notes.is_empty() || !outcome.actions.is_empty() {
+            self.apply(host, now, outcome);
+        }
+        if !self.switcher.is_idle() {
+            return;
+        }
+        let owned = self.engine.owned();
+        self.save_owned(&owned);
+        // After the display has settled.
+        self.modes_due = true;
+        for call in std::mem::take(&mut self.launch_calls) {
+            call.reply(Response::Done {
+                message: self.launch_message(now).to_owned(),
+            });
+        }
+        if self.display_change_due {
+            self.on_display_change(host, now);
         }
     }
 
@@ -1517,6 +2057,8 @@ impl App {
             format!("Paused until {}", clock::now().hour_minute_after(minutes))
         } else if status.mode != Mode::Automatic {
             format!("{} mode", status.mode.label())
+        } else if self.engine.is_on_battery() {
+            "On battery power: games and video don't turn HDR on".to_owned()
         } else if let Some(reason) = &status.reason {
             format!("{reason} is running")
         } else {
@@ -1554,6 +2096,14 @@ impl App {
                 .never_target()
                 .map(|(_, label)| label)
                 .unwrap_or_default(),
+            shortcut_note: match self.refused_keys.as_slice() {
+                [] => String::new(),
+                [one] => format!("{one} is used by another program, so it doesn't work."),
+                many => format!(
+                    "{} are used by other programs, so they don't work.",
+                    many.join(" and ")
+                ),
+            },
         }
     }
 
@@ -1659,6 +2209,23 @@ fn phase_detail(phase: Phase, now: Instant) -> String {
             format!("HDR on; turns off in {secs} {unit}")
         }
         Phase::HdrExternal => "HDR on (not by Huedra)".to_owned(),
+    }
+}
+
+/// "15 minutes", "1 hour", "2 hours".
+fn pause_length(minutes: u32) -> String {
+    match minutes {
+        60 => "1 hour".to_owned(),
+        m if m % 60 == 0 => format!("{} hours", m / 60),
+        m => format!("{m} minutes"),
+    }
+}
+
+/// "HDR" or "SDR", for the log.
+fn hdr_word(state: HdrState) -> &'static str {
+    match state {
+        HdrState::On => "HDR",
+        HdrState::Off => "SDR",
     }
 }
 

@@ -1,4 +1,4 @@
-//! `huedra hdr status | on | off`.
+//! `huedra hdr status | on | off | brightness`.
 //! Feature doc: `docs/features/01-hdr-switch.md`.
 
 use anyhow::Context as _;
@@ -14,6 +14,27 @@ pub fn run(command: HdrCommand) -> anyhow::Result<()> {
     let all = display::displays().context("could not list the displays")?;
     match command {
         HdrCommand::Status => print!("{}", status_table(&all)),
+        HdrCommand::Brightness { nits, displays } => {
+            for chosen in displays.pick(&all)? {
+                if let Some(nits) = nits {
+                    display::set_sdr_brightness(&chosen.id, nits)?;
+                }
+                if chosen.state == HdrState::On {
+                    let now = display::sdr_brightness(&chosen.id)?;
+                    println!(
+                        "Display {}  {}: SDR content brightness {now}",
+                        chosen.number,
+                        chosen.label()
+                    );
+                } else {
+                    println!(
+                        "Display {}  {}: HDR off; SDR content brightness shows while HDR is on",
+                        chosen.number,
+                        chosen.label()
+                    );
+                }
+            }
+        }
         HdrCommand::Set { state, displays } => {
             for chosen in displays.pick(&all)? {
                 display::set_hdr(&chosen.id, state, ATTEMPTS)?;

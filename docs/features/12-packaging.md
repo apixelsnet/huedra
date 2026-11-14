@@ -210,7 +210,16 @@ A scripted pass on this PC (two HDR displays) with portable copies of a main bui
 - Verified on this PC from the downloads: the zip, `release.toml` and `release-notes.md` signatures verify (trusted comment "huedra 1.2.0"); the exe's SHA-256 matches `release.toml`, and the zip's exe is the channel's; `--version` prints Huedra 1.2.0; the notes carry the quick panel, the new look notice, Mica, the Always SDR change and the fix for games added by hand; Defender finds nothing.
 - Not verified yet: an installed 1.1.2 updating itself to 1.2.0 through the update channel.
 
+## Result (2026-11-14) — package managers, Firefox listing, code signing
+Code: `extras/packaging/` (winget and Scoop manifests and how to update them), `extras/browser/FIREFOXADDONS.md`.
+- winget: the three manifests for 1.2.0 (`apixelsnet.Huedra`, the release zip with `huedra.exe` as a portable program and the command `huedra`), at the path a pull request to microsoft/winget-pkgs uses. Scoop: `huedra.json` with `checkver` and `autoupdate`, for a bucket of the project's own or the Extras bucket. Both point at the GitHub release; neither is submitted.
+- Firefox Add-ons: a listing sheet with the fields AMO asks for, the reviewer note and what to change in SETUP once listed. The manifest already has a Gecko ID, `strict_min_version` 128 and `data_collection_permissions`.
+- Code signing: nothing in the code. The free route for an open-source project is the SignPath Foundation (an application by the owner, with the repository's details); a paid certificate or Azure Trusted Signing are the others. Once one exists, the signing step goes in `ci.yml`'s Windows job after the release build and before `pack-release.ps1`, because `release.toml` records the exe's size and SHA-256, which the minisign signature covers.
+
+Verified on this PC: `winget validate` accepted the manifests ("Manifest validation succeeded."); the SHA-256 is that of the published 1.2.0 zip; the Scoop file is valid JSON.
+Later the same day the owner ran `web-ext lint` (10.8.0): 0 errors, 2 warnings, both that `data_collection_permissions` needs Firefox 140 (Android 142) while `strict_min_version` is 128.
+Not verified: installing through winget (local manifests need an administrator setting) or Scoop (not installed here); any submission.
+
 ## Result (2026-11-14) — code signing policy
 - The owner applied to the SignPath Foundation for free code signing. The README has the **Code signing policy** section their review looks for: the attribution line, what is signed (only `huedra.exe` from the Release workflow), who commits, reviews and approves, multi-factor authentication, and the network connections the program makes on its own. Until the application is approved, releases are not Windows-signed, and the section says so.
 - `PRIVACY.md` names the icon downloads from `cdn.discordapp.com` (only the list was named before) and the Settings page by its current name.
-

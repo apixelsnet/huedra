@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.10.0.schema.json
+PackageIdentifier: apixelsnet.Huedra
+PackageVersion: 1.2.0
+PackageLocale: en-US
+Publisher: apixelsnet
+PublisherUrl: https://github.com/apixelsnet
+PublisherSupportUrl: https://github.com/apixelsnet/huedra/issues
+PrivacyUrl: https://github.com/apixelsnet/huedra/blob/main/PRIVACY.md
+PackageName: Huedra
+PackageUrl: https://github.com/apixelsnet/huedra
+License: Apache-2.0
+LicenseUrl: https://github.com/apixelsnet/huedra/blob/main/LICENSE
+ShortDescription: Turns Windows HDR on for games and HDR video, and back off afterwards.
+Description: |-
+  Huedra is a small tray app that turns Windows HDR on while a game or HDR video runs and back off when it ends. It finds games from Steam, Epic, GOG, Xbox, EA, Ubisoft, Battle.net and more, follows the game's display, and can start games with HDR from the command line.
+Moniker: huedra
+Tags:
+  - hdr
+  - display
+  - gaming
+  - tray
+ReleaseNotesUrl: https://github.com/apixelsnet/huedra/releases/tag/v1.2.0
+ManifestType: defaultLocale
+ManifestVersion: 1.10.0

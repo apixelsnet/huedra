@@ -1,0 +1,28 @@
+{
+    "version": "1.2.0",
+    "description": "Turns Windows HDR on for games and HDR video, and back off afterwards.",
+    "homepage": "https://github.com/apixelsnet/huedra",
+    "license": "Apache-2.0",
+    "architecture": {
+        "64bit": {
+            "url": "https://github.com/apixelsnet/huedra/releases/download/v1.2.0/huedra-1.2.0-windows-x64.zip",
+            "hash": "b68fbc8d69df199adb18bc220e19ebe298d930075c967ec5605210b2da90b475"
+        }
+    },
+    "bin": "huedra.exe",
+    "shortcuts": [
+        [
+            "huedra.exe",
+            "Huedra"
+        ]
+    ],
+    "notes": "Huedra updates itself unless Settings > Updates is Off. To let Scoop update it instead, choose Off.",
+    "checkver": "github",
+    "autoupdate": {
+        "architecture": {
+            "64bit": {
+                "url": "https://github.com/apixelsnet/huedra/releases/download/v$version/huedra-$version-windows-x64.zip"
+            }
+        }
+    }
+}

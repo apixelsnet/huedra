@@ -8,6 +8,7 @@
 
 #![forbid(unsafe_code)]
 
+pub mod autohdr;
 pub mod clock;
 pub mod color;
 pub mod command;
@@ -25,8 +26,10 @@ pub mod launch;
 pub mod library;
 pub mod locations;
 pub mod logfile;
+pub mod mode;
 pub mod paths;
 pub mod report;
+pub mod shortcut;
 pub mod steam_start;
 pub mod tracker;
 pub mod update;

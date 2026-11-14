@@ -79,3 +79,7 @@ Not verified: Windows 10 (no detached console policy; the same path applies).
 
 Verified on this PC: the check fails on the 0.1.3 channel exe (exit 1, the program never started) and passes on 0.1.4.
 Passes on GitHub's Windows runner too (manual CI run on this branch).
+
+## Result (2026-11-14) — update from 1.1.2 to 1.2.0 checked
+Verified on this PC: the released `huedra-1.1.2-windows-x64.zip`, unpacked as a portable copy with no tray running, reported "Huedra 1.2.0 is available (this is 1.1.2)" to `huedra update --check`, and `huedra update` answered "Huedra was updated from 1.1.2 to 1.2.0."; the copy then reported 1.2.0 and kept `huedra.previous.exe` beside it until the new version's next start. This closes the open item of the 1.2.0 release (an installed 1.1.2 updating itself through the update channel).
+

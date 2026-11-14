@@ -231,3 +231,12 @@ Decided 2026-11-07 (owner): people who used Huedra before the new window never s
 ## Result (2026-11-07) — Mica behind the pages too
 Code: the page area's background in `crates/huedra-ui/ui/app.slint` (`root.mica`), the comment in `run` (`crates/huedra-ui/src/app.rs`).
 - Owner's request: the navigation pane showed Mica while the pages kept the plain background, a visible change of color. With Mica the page area is now transparent as well, so the whole window shares one backdrop, as in Windows' own apps; the cards keep their solid surface. Without Mica (before Windows 11 22H2) nothing changes.
+
+## Result (2026-11-14) — new controls in both themes and at larger scales
+- The new controls were captured with the sample build on a hidden desktop, dark and light (`HUEDRA_SAMPLE_THEME`), at scale 1, 1.5 and 2 (`SLINT_SCALE_FACTOR`), in a 1100-pixel-wide window: Settings with the battery row and the Keyboard shortcuts boxes, a game's page with Auto HDR and Resolution and refresh rate, and Displays with the SDR content brightness box.
+- Fixed from it: at 1.5 and 2 the brightness label beside its box was squeezed to three or four lines; the label now sits above the box (`crates/huedra-ui/ui/pages.slint`). The README tour was retaken with it.
+
+Verified on this PC: all six captures read cleanly after the fix (the Displays page rechecked dark at 1 and 2, light at 1.5). Later the same day, with real Windows scaling on display 1 (the owner set 150 %, system DPI 144, then 200 %, DPI 192): the window rendered at 1.5× and 2× (1672 × 1456 and 2226 × 1471 pixels for about 1100 logical pixels across). At 150 % the battery row, the three shortcut boxes, the brightness box and the game page's Auto HDR and Resolution and refresh rate all laid out cleanly. At 200 % everything in view laid out the same way; on this 1440-pixel-high display only about 720 logical pixels fit, so the shortcut boxes and the game page's lower rows stayed below the fold of the capture, at the same width as at 150 %.
+Not verified: the shortcut boxes and the game page's lower rows in view at 200 % (they need scrolling, which the hidden-desktop capture cannot do).
+
+Also with the real Windows light theme (`AppsUseLightTheme` 1 for the test, then 0 again): the sample window followed Windows and the battery row, the shortcut boxes, the brightness box and the game page's Auto HDR and Resolution and refresh rate rows read cleanly.

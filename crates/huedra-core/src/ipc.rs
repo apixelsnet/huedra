@@ -105,6 +105,10 @@ pub struct StatusReport {
     /// The game or player "Never use HDR for" would apply to; empty when none.
     #[serde(default)]
     pub never: String,
+    /// Shortcuts Windows refused because another program uses them, for
+    /// example "Win+Ctrl+M is used by another program."; empty when none.
+    #[serde(default)]
+    pub shortcut_note: String,
     /// Recent changes, newest first.
     pub history: Vec<HistoryEntry>,
 }

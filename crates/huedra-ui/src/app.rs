@@ -8,12 +8,13 @@ use std::collections::HashMap;
 use std::thread;
 use std::time::Duration;
 
+use huedra_core::autohdr::AutoHdr;
 use huedra_core::color::Installed;
 use huedra_core::command;
 use huedra_core::config::{
     CloseAction, Config, GameHdr, GameSettings, ManualDisplays, Seconds, UpdatePolicy,
 };
-use huedra_core::display::{Display, HdrState, HdrSupport};
+use huedra_core::display::{Display, DisplayId, HdrState, HdrSupport, SdrBrightness};
 use huedra_core::engine::{Mode, TriggerId};
 use huedra_core::gameinfo::{Cache, GameInfo};
 use huedra_core::geometry::WindowGeometry;
@@ -22,7 +23,9 @@ use huedra_core::ipc::{HistoryKind, Request, Response, StatusReport};
 use huedra_core::launch;
 use huedra_core::library::{self, Game, GameId, Store};
 use huedra_core::locations::Locations;
+use huedra_core::mode::DisplayMode;
 use huedra_core::paths::{NormPath, display_name};
+use huedra_core::shortcut::Binding;
 use huedra_core::video::{self, StreamingSite, VideoApp};
 use huedra_win::{instance, pipe, registry, shell};
 use slint::{
@@ -99,6 +102,8 @@ struct State {
     displays: Vec<Display>,
     /// The installed color profiles a game can choose.
     profiles: Installed,
+    /// The modes the main display offers, for a game's mode.
+    modes: Vec<DisplayMode>,
     running: Vec<String>,
     icons: HashMap<GameId, Image>,
     /// Portrait art for the cover grid, loaded once the grid is shown.
@@ -239,6 +244,7 @@ pub fn run(locations: Locations, page: Page) -> Result<(), slint::PlatformError>
         info,
         displays: read_displays().unwrap_or_default(),
         profiles: read_profiles(),
+        modes: read_modes(),
         games,
         config,
         locations,
@@ -265,6 +271,11 @@ pub fn run(locations: Locations, page: Page) -> Result<(), slint::PlatformError>
             ModelRc::new(VecModel::from(list))
         };
         ui.set_sdr_profiles(choices(&s.profiles.sdr));
+        let modes: Vec<SharedString> = std::iter::once("As set in Windows".to_owned())
+            .chain(s.modes.iter().map(|m| m.label()))
+            .map(SharedString::from)
+            .collect();
+        ui.set_display_modes(ModelRc::new(VecModel::from(modes)));
         ui.set_hdr_profiles(choices(&s.profiles.hdr));
         show_games(&ui, s);
         show_video(&ui, s);
@@ -379,6 +390,41 @@ pub(crate) fn rgba_image(rgba: &[u8], width: u32, height: u32) -> Image {
     ))
 }
 
+/// Hands a brightness change to one worker thread, so the steps of a held
+/// arrow key apply in order and only the latest per display is sent when
+/// several wait; the next display reading shows the result.
+fn set_brightness_later(id: DisplayId, brightness: SdrBrightness) {
+    type Sender = std::sync::Mutex<std::sync::mpsc::Sender<(DisplayId, SdrBrightness)>>;
+    static WORKER: std::sync::OnceLock<Option<Sender>> = std::sync::OnceLock::new();
+    let worker = WORKER.get_or_init(|| {
+        let (send, receive) = std::sync::mpsc::channel::<(DisplayId, SdrBrightness)>();
+        thread::Builder::new()
+            .name("huedra-brightness".into())
+            .spawn(move || {
+                while let Ok(first) = receive.recv() {
+                    let mut latest = vec![first];
+                    while let Ok((id, b)) = receive.try_recv() {
+                        latest.retain(|(other, _)| *other != id);
+                        latest.push((id, b));
+                    }
+                    for (id, b) in latest {
+                        #[cfg(not(feature = "sample"))]
+                        let _ = huedra_win::display::set_sdr_brightness(&id, b);
+                        #[cfg(feature = "sample")]
+                        let _ = (id, b);
+                    }
+                }
+            })
+            .ok()
+            .map(|_| std::sync::Mutex::new(send))
+    });
+    if let Some(sender) = worker
+        && let Ok(sender) = sender.lock()
+    {
+        let _ = sender.send((id, brightness));
+    }
+}
+
 // ---- Saving ---------------------------------------------------------
 
 /// Makes one change to the settings, saves them and asks the tray process to
@@ -490,6 +536,33 @@ pub(crate) fn read_displays() -> Option<Vec<Display>> {
 }
 
 /// The color profiles installed on this PC.
+/// The modes the main display offers now.
+fn read_modes() -> Vec<DisplayMode> {
+    #[cfg(feature = "sample")]
+    return [
+        "3840x2160@144",
+        "3840x2160@120",
+        "3840x2160@60",
+        "2560x1440@144",
+        "1920x1080@60",
+    ]
+    .iter()
+    .filter_map(|m| m.parse().ok())
+    .collect();
+    #[cfg(not(feature = "sample"))]
+    read_displays()
+        .unwrap_or_default()
+        .iter()
+        .find(|d| d.primary)
+        .map(|d| {
+            huedra_core::mode::for_games(
+                huedra_win::mode::offered(&d.id),
+                huedra_win::mode::current(&d.id),
+            )
+        })
+        .unwrap_or_default()
+}
+
 fn read_profiles() -> Installed {
     #[cfg(feature = "sample")]
     return sample::profiles();
@@ -565,6 +638,12 @@ fn start_status_polling(ui: &SettingsWindow) {
 
 fn show_status(ui: &SettingsWindow, state: &mut State, report: Option<&StatusReport>) {
     ui.set_tray_running(report.is_some());
+    ui.set_shortcut_note(
+        report
+            .map(|r| r.shortcut_note.as_str())
+            .unwrap_or_default()
+            .into(),
+    );
     let Some(report) = report else {
         let on = state.displays.iter().any(|d| d.state == HdrState::On);
         ui.set_hdr_on(on);
@@ -1073,6 +1152,18 @@ fn detail_of(state: &State, game: &Game) -> GameDetail {
             &state.profiles.hdr,
             settings.and_then(|s| s.hdr_profile.as_deref()),
         ),
+        auto_hdr: match settings.map(|s| s.auto_hdr).unwrap_or_default() {
+            AutoHdr::Windows => 0,
+            AutoHdr::On => 1,
+            AutoHdr::Off => 2,
+        },
+        auto_hdr_known: settings.is_some_and(|s| !s.programs.is_empty() || s.exe.is_some()),
+        // A saved mode the display no longer lists shows as the default
+        // until another is chosen; the saved one stays in the file.
+        display_mode: settings
+            .and_then(|s| s.display_mode)
+            .and_then(|m| state.modes.iter().position(|o| *o == m))
+            .map_or(0, |i| i32::try_from(i + 1).unwrap_or(0)),
     }
 }
 
@@ -1283,6 +1374,31 @@ fn wire_games(ui: &SettingsWindow) {
         });
     });
     let r = refresh.clone();
+    ui.on_set_game_display_mode(move |id, index| {
+        r(&|s| {
+            let mode = usize::try_from(index)
+                .ok()
+                .and_then(|i| i.checked_sub(1))
+                .and_then(|i| s.modes.get(i))
+                .copied();
+            edit(s, |c| {
+                c.game_mut(&GameId::from_raw(id.as_str())).display_mode = mode
+            });
+        });
+    });
+    let r = refresh.clone();
+    ui.on_set_game_auto_hdr(move |id, index| {
+        let choice = usize::try_from(index)
+            .ok()
+            .and_then(|i| AutoHdr::ALL.get(i).copied())
+            .unwrap_or_default();
+        r(&|s| {
+            edit(s, |c| {
+                c.game_mut(&GameId::from_raw(id.as_str())).auto_hdr = choice
+            });
+        });
+    });
+    let r = refresh.clone();
     ui.on_set_game_profile(move |id, hdr, index| {
         r(&|s| {
             let list = if hdr {
@@ -1479,6 +1595,9 @@ fn show_displays(ui: &SettingsWindow, state: &State) {
                 capable,
                 controlled,
                 hdr_on: d.state == HdrState::On,
+                brightness: d
+                    .sdr_brightness
+                    .map_or(0, |b| i32::try_from(b.nits()).unwrap_or(0)),
                 status: if d.primary {
                     // "Main display · controlled by Huedra": only the
                     // first word gives up its capital.
@@ -1495,7 +1614,18 @@ fn show_displays(ui: &SettingsWindow, state: &State) {
         })
         .collect();
     ui.set_status_displays(ModelRc::new(VecModel::from(rows.clone())));
-    ui.set_displays(ModelRc::new(VecModel::from(rows)));
+    // Changed in place when the same displays are listed, so a row being
+    // edited (its brightness box) keeps its focus through the readings.
+    let current = ui.get_displays();
+    if current.row_count() == rows.len() {
+        for (i, row) in rows.into_iter().enumerate() {
+            if current.row_data(i).as_ref() != Some(&row) {
+                current.set_row_data(i, row);
+            }
+        }
+    } else {
+        ui.set_displays(ModelRc::new(VecModel::from(rows)));
+    }
     ui.set_retries(i32::try_from(state.config.general.retry_attempts).unwrap_or(0));
     ui.set_content_only(state.config.displays.content_only);
     ui.set_main_only(state.config.displays.manual == ManualDisplays::Main);
@@ -1514,6 +1644,11 @@ fn wire_displays(ui: &SettingsWindow) {
         with_state(|s| edit(s, |c| c.displays.manual = manual));
     });
     let weak = ui.as_weak();
+    ui.on_set_brightness(|id, nits| {
+        if let Some(brightness) = u32::try_from(nits).ok().and_then(SdrBrightness::from_nits) {
+            set_brightness_later(DisplayId::new(id.as_str()), brightness);
+        }
+    });
     ui.on_set_controlled(move |id, controlled| {
         with_state(|s| {
             let id = id.to_string();
@@ -1685,8 +1820,16 @@ fn show_settings(ui: &SettingsWindow, state: &State) {
     ui.set_hold(secs(g.hold));
     ui.set_delay(secs(g.start_delay));
     ui.set_hotkeys(g.hotkeys);
+    let [hdr, mode, pause] = g
+        .shortcuts
+        .resolved()
+        .map(|k| k.map(|k| k.to_string()).unwrap_or_default());
+    ui.set_keys_hdr(hdr.into());
+    ui.set_keys_mode(mode.into());
+    ui.set_keys_pause(pause.into());
     ui.set_log_titles(g.log_window_titles);
     ui.set_notify_failures(g.notify_failures);
+    ui.set_battery_sdr(g.battery_sdr);
 }
 
 fn wire_settings(ui: &SettingsWindow) {
@@ -1783,8 +1926,36 @@ fn wire_settings(ui: &SettingsWindow) {
         c(&|c| c.general.hotkeys = on);
     });
     let c = change.clone();
+    let weak = ui.as_weak();
+    ui.on_set_shortcut(move |index, text| {
+        let Some(ui) = weak.upgrade() else {
+            return;
+        };
+        match Binding::parse(&text) {
+            Ok(binding) => {
+                ui.set_shortcut_error("".into());
+                c(&|c| {
+                    let binding = binding.clone();
+                    let s = &mut c.general.shortcuts;
+                    match index {
+                        0 => s.toggle_hdr = binding,
+                        1 => s.cycle_mode = binding,
+                        _ => s.pause = binding,
+                    }
+                });
+            }
+            Err(error) => {
+                ui.set_shortcut_error(format!("\"{}\" wasn't saved: {error}", text.trim()).into())
+            }
+        }
+    });
+    let c = change.clone();
     ui.on_set_log_titles(move |on| {
         c(&|c| c.general.log_window_titles = on);
+    });
+    let c = change.clone();
+    ui.on_set_battery_sdr(move |on| {
+        c(&|c| c.general.battery_sdr = on);
     });
     ui.on_set_notify_failures(move |on| {
         change(&|c| c.general.notify_failures = on);

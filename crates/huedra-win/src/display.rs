@@ -7,7 +7,9 @@ use std::mem::size_of;
 use std::thread;
 use std::time::{Duration, Instant};
 
-use huedra_core::display::{Display, DisplayId, HdrState, HdrSupport, Nits, color_flags};
+use huedra_core::display::{
+    Display, DisplayId, HdrState, HdrSupport, Nits, SdrBrightness, color_flags,
+};
 use windows::Win32::Devices::Display::{
     DISPLAYCONFIG_DEVICE_INFO_GET_ADVANCED_COLOR_INFO, DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME,
     DISPLAYCONFIG_DEVICE_INFO_GET_TARGET_NAME, DISPLAYCONFIG_DEVICE_INFO_HEADER,
@@ -26,6 +28,13 @@ use windows::core::Interface;
 const GET_ADVANCED_COLOR_INFO_2: DISPLAYCONFIG_DEVICE_INFO_TYPE =
     DISPLAYCONFIG_DEVICE_INFO_TYPE(15);
 const SET_HDR_STATE: DISPLAYCONFIG_DEVICE_INFO_TYPE = DISPLAYCONFIG_DEVICE_INFO_TYPE(16);
+/// `DISPLAYCONFIG_DEVICE_INFO_GET_SDR_WHITE_LEVEL` (documented).
+const GET_SDR_WHITE_LEVEL: DISPLAYCONFIG_DEVICE_INFO_TYPE = DISPLAYCONFIG_DEVICE_INFO_TYPE(11);
+/// The request Windows Settings uses for its "SDR content brightness"
+/// slider. Not documented: 0xFFFFFFEE, with the level and a byte saying the
+/// value is final (the slider sends intermediate ones while dragged). Its
+/// effect is checked by reading the level back with the documented request.
+const SET_SDR_WHITE_LEVEL: DISPLAYCONFIG_DEVICE_INFO_TYPE = DISPLAYCONFIG_DEVICE_INFO_TYPE(-18);
 
 const RETRY_DELAY: Duration = Duration::from_millis(300);
 /// How long a change may take to show before it counts as not applied.
@@ -35,7 +44,7 @@ const APPLY_POLL: Duration = Duration::from_millis(50);
 const QUERY_ATTEMPTS: u32 = 5;
 
 /// Reading or changing a display failed.
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, Clone, thiserror::Error)]
 pub enum DisplayError {
     /// `QueryDisplayConfig` failed.
     #[error("Windows did not return the display configuration (error {0})")]
@@ -56,6 +65,18 @@ pub enum DisplayError {
         name: String,
         /// Last Win32 error code.
         code: i32,
+    },
+    /// SDR content brightness changes only while HDR is on.
+    #[error("SDR content brightness on {name} can be changed only while HDR is on")]
+    BrightnessNeedsHdr {
+        /// Display label.
+        name: String,
+    },
+    /// Windows accepted a brightness but kept the old one.
+    #[error("SDR content brightness on {name} did not change")]
+    BrightnessNotApplied {
+        /// Display label.
+        name: String,
     },
     /// Windows accepted the request but the state did not change.
     #[error("HDR on {name} did not turn {state} within two seconds")]
@@ -78,6 +99,10 @@ pub fn displays() -> Result<Vec<Display>, DisplayError> {
         .into_iter()
         .map(|f| Display {
             peak: peaks.get(&f.gdi_name).copied(),
+            sdr_brightness: (f.display.state == HdrState::On)
+                .then(|| get_info::<SdrWhite>(f.target, GET_SDR_WHITE_LEVEL).ok())
+                .flatten()
+                .map(|i| SdrBrightness::from_level(i.level)),
             ..f.display
         })
         .collect())
@@ -131,6 +156,184 @@ pub fn set_hdr(id: &DisplayId, state: HdrState, attempts: u32) -> Result<(), Dis
             code: last_code,
         }
     })
+}
+
+/// The GDI name of a display (`\\.\DISPLAY1`), used by the display mode
+/// functions.
+pub fn gdi_name(id: &DisplayId) -> Option<String> {
+    enumerate()
+        .ok()?
+        .into_iter()
+        .find(|f| &f.display.id == id)
+        .map(|f| f.gdi_name)
+}
+
+/// How bright SDR content is on a display while HDR is on.
+///
+/// # Errors
+/// [`DisplayError`] when the display is gone or Windows does not answer.
+pub fn sdr_brightness(id: &DisplayId) -> Result<SdrBrightness, DisplayError> {
+    let found = enumerate()?
+        .into_iter()
+        .find(|f| &f.display.id == id)
+        .ok_or(DisplayError::Gone)?;
+    let info =
+        get_info::<SdrWhite>(found.target, GET_SDR_WHITE_LEVEL).map_err(DisplayError::Describe)?;
+    Ok(SdrBrightness::from_level(info.level))
+}
+
+/// Sets how bright SDR content is on a display while HDR is on, as the
+/// slider in Windows Settings does, and checks that Windows took it.
+///
+/// # Errors
+/// [`DisplayError`] when the display is gone, cannot use HDR, or Windows
+/// refuses or ignores the change.
+pub fn set_sdr_brightness(id: &DisplayId, brightness: SdrBrightness) -> Result<(), DisplayError> {
+    let found = enumerate()?
+        .into_iter()
+        .find(|f| &f.display.id == id)
+        .ok_or(DisplayError::Gone)?;
+    let name = found.display.label();
+    if !found.display.support.is_capable() {
+        return Err(DisplayError::Unsupported(name));
+    }
+    // Windows refuses it (error 50) while the display is in SDR.
+    if found.display.state != HdrState::On {
+        return Err(DisplayError::BrightnessNeedsHdr { name });
+    }
+    let mut request: SetSdrWhite = packet(found.target, SET_SDR_WHITE_LEVEL);
+    request.level = brightness.level();
+    request.final_value = 1;
+    // SAFETY: `SetSdrWhite` is a `#[repr(C)]` packet that starts with its
+    // header, `header.size` is its full size, and Windows only reads it.
+    let code = unsafe { DisplayConfigSetDeviceInfo((&raw const request).cast()) };
+    if code != 0 {
+        return Err(DisplayError::Refused { name, code });
+    }
+    let start = Instant::now();
+    loop {
+        let now = get_info::<SdrWhite>(found.target, GET_SDR_WHITE_LEVEL)
+            .map(|i| SdrBrightness::from_level(i.level));
+        if now == Ok(brightness) {
+            return Ok(());
+        }
+        if start.elapsed() >= APPLY_TIMEOUT {
+            return Err(DisplayError::BrightnessNotApplied { name });
+        }
+        thread::sleep(APPLY_POLL);
+    }
+}
+
+/// The result of one display's change in [`set_hdr_many`].
+#[derive(Debug)]
+pub struct Switched {
+    /// The display.
+    pub display: DisplayId,
+    /// The state that was asked for.
+    pub state: HdrState,
+    /// Whether Windows shows that state now.
+    pub result: Result<(), DisplayError>,
+    /// From the first request to Windows showing the state (or giving up).
+    pub took: Duration,
+}
+
+/// Turns HDR on or off for several displays at once: every request is sent
+/// before any is waited for, so two displays take about as long as one.
+/// Each display gets up to `attempts` tries, as in [`set_hdr`]. Displays
+/// already in the state they are asked for count as done at once.
+pub fn set_hdr_many(changes: &[(DisplayId, HdrState)], attempts: u32) -> Vec<Switched> {
+    let start = Instant::now();
+    let found = match enumerate() {
+        Ok(found) => found,
+        Err(error) => {
+            return changes
+                .iter()
+                .map(|(display, state)| Switched {
+                    display: display.clone(),
+                    state: *state,
+                    result: Err(error.clone()),
+                    took: start.elapsed(),
+                })
+                .collect();
+        }
+    };
+    let mut done: Vec<(usize, Result<(), DisplayError>, Duration)> = Vec::new();
+    let mut pending: Vec<Pending> = Vec::new();
+    for (index, (id, state)) in changes.iter().enumerate() {
+        let Some(f) = found.iter().find(|f| &f.display.id == id) else {
+            done.push((index, Err(DisplayError::Gone), Duration::ZERO));
+            continue;
+        };
+        let name = f.display.label();
+        if !f.display.support.is_capable() {
+            done.push((index, Err(DisplayError::Unsupported(name)), Duration::ZERO));
+        } else if f.display.state == *state {
+            done.push((index, Ok(()), Duration::ZERO));
+        } else {
+            pending.push(Pending {
+                index,
+                target: f.target,
+                api: f.api,
+                name,
+                code: 0,
+            });
+        }
+    }
+    for attempt in 0..attempts.max(1) {
+        if pending.is_empty() {
+            break;
+        }
+        if attempt > 0 {
+            thread::sleep(RETRY_DELAY);
+        }
+        for p in &mut pending {
+            p.code = send(p.target, p.api, changes[p.index].1);
+        }
+        let mut still = Vec::new();
+        for p in pending {
+            if p.code == 0 && wait_for(p.target, changes[p.index].1) {
+                done.push((p.index, Ok(()), start.elapsed()));
+            } else {
+                still.push(p);
+            }
+        }
+        pending = still;
+    }
+    for p in pending {
+        let state = changes[p.index].1;
+        let error = if p.code == 0 {
+            DisplayError::NotApplied {
+                name: p.name,
+                state,
+            }
+        } else {
+            DisplayError::Refused {
+                name: p.name,
+                code: p.code,
+            }
+        };
+        done.push((p.index, Err(error), start.elapsed()));
+    }
+    done.sort_by_key(|(index, _, _)| *index);
+    done.into_iter()
+        .map(|(index, result, took)| Switched {
+            display: changes[index].0.clone(),
+            state: changes[index].1,
+            result,
+            took,
+        })
+        .collect()
+}
+
+/// A display waiting for its change in [`set_hdr_many`].
+struct Pending {
+    /// Index into the requested changes.
+    index: usize,
+    target: Device,
+    api: ColorApi,
+    name: String,
+    /// The last error code from Windows, 0 when the request was accepted.
+    code: i32,
 }
 
 /// A display path end: an adapter and a source or target on it.
@@ -201,6 +404,7 @@ fn enumerate() -> Result<Vec<Found>, DisplayError> {
                 support,
                 state,
                 peak: None,
+                sdr_brightness: None,
             },
             target,
             source,
@@ -387,6 +591,37 @@ fn get_info<P: Packet>(device: Device, kind: DISPLAYCONFIG_DEVICE_INFO_TYPE) -> 
         Ok(request)
     } else {
         Err(status)
+    }
+}
+
+/// `DISPLAYCONFIG_SDR_WHITE_LEVEL`: 1000 is 80 nits.
+#[repr(C)]
+#[derive(Default)]
+struct SdrWhite {
+    header: DISPLAYCONFIG_DEVICE_INFO_HEADER,
+    level: u32,
+}
+
+/// The undocumented request behind [`SET_SDR_WHITE_LEVEL`].
+#[repr(C)]
+#[derive(Default)]
+struct SetSdrWhite {
+    header: DISPLAYCONFIG_DEVICE_INFO_HEADER,
+    level: u32,
+    final_value: u8,
+}
+
+// SAFETY: both are `#[repr(C)]`, start with the header and are valid when
+// all zero.
+unsafe impl Packet for SdrWhite {
+    fn header(&mut self) -> &mut DISPLAYCONFIG_DEVICE_INFO_HEADER {
+        &mut self.header
+    }
+}
+// SAFETY: see above.
+unsafe impl Packet for SetSdrWhite {
+    fn header(&mut self) -> &mut DISPLAYCONFIG_DEVICE_INFO_HEADER {
+        &mut self.header
     }
 }
 

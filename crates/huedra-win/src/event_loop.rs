@@ -17,8 +17,8 @@ use windows::Win32::UI::Shell::{NIN_BALLOONUSERCLICK, NIN_SELECT};
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW, KillTimer, MSG,
     PostMessageW, RegisterClassExW, RegisterWindowMessageW, SetTimer, TranslateMessage,
-    WINDOW_EX_STYLE, WM_APP, WM_CONTEXTMENU, WM_DISPLAYCHANGE, WM_HOTKEY, WM_NULL, WM_TIMER,
-    WNDCLASSEXW, WS_POPUP,
+    WINDOW_EX_STYLE, WM_APP, WM_CONTEXTMENU, WM_DISPLAYCHANGE, WM_HOTKEY, WM_NULL,
+    WM_POWERBROADCAST, WM_TIMER, WNDCLASSEXW, WS_POPUP,
 };
 use windows::core::{Error, PCWSTR, Result, w};
 
@@ -28,6 +28,7 @@ pub(crate) const WM_TRAY: u32 = WM_APP + 1;
 pub(crate) const WM_PROCESS_EXIT: u32 = WM_APP + 2;
 pub(crate) const WM_WAKE: u32 = WM_APP + 3;
 pub(crate) const WM_STEAM_APP: u32 = WM_APP + 4;
+pub(crate) const WM_SWITCHED: u32 = WM_APP + 5;
 /// `NIN_KEYSELECT`: the icon was chosen with the keyboard.
 const NIN_KEYSELECT: u32 = NIN_SELECT | 1;
 const CLASS_NAME: PCWSTR = w!("HuedraTray");
@@ -63,6 +64,12 @@ pub enum Event {
     /// Steam reports another running game: its app id, 0 for none (see
     /// [`crate::registry::watch_steam_running_app`]).
     SteamApp(u32),
+    /// The HDR worker finished a batch of changes (see
+    /// [`crate::switcher::Switcher`]).
+    Switched,
+    /// The PC changed between battery and mains power (see
+    /// [`crate::power::on_battery`]).
+    PowerChanged,
 }
 
 /// Identifies a timer.
@@ -256,6 +263,9 @@ unsafe extern "system" fn window_proc(
         WM_PROCESS_EXIT => u32::try_from(wparam.0).ok().map(Event::ProcessExited),
         WM_WAKE => Some(Event::Wake),
         WM_STEAM_APP => u32::try_from(wparam.0).ok().map(Event::SteamApp),
+        WM_SWITCHED => Some(Event::Switched),
+        // PBT_APMPOWERSTATUSCHANGE
+        WM_POWERBROADCAST if wparam.0 == 0x000A => Some(Event::PowerChanged),
         m if m != 0 && m == TASKBAR_CREATED.get() => Some(Event::TaskbarCreated),
         _ => None,
     };

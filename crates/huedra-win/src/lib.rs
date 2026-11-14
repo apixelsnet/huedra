@@ -33,9 +33,13 @@ pub mod job;
 #[cfg(windows)]
 pub mod menu;
 #[cfg(windows)]
+pub mod mode;
+#[cfg(windows)]
 pub mod monitor;
 #[cfg(windows)]
 pub mod pipe;
+#[cfg(windows)]
+pub mod power;
 #[cfg(windows)]
 pub mod process;
 #[cfg(windows)]
@@ -48,6 +52,8 @@ pub mod shell;
 mod sqlite;
 #[cfg(windows)]
 pub mod stores;
+#[cfg(windows)]
+pub mod switcher;
 #[cfg(windows)]
 pub mod tray;
 #[cfg(windows)]

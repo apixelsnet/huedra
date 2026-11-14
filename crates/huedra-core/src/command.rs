@@ -1,6 +1,7 @@
 //! Command-line grammar. Parsing lives here so it is tested on any platform;
 //! the executable only runs what it returns.
 
+use crate::display::SdrBrightness;
 use crate::display::{DisplaySelector, HdrState};
 use crate::engine::Mode;
 use crate::ipc::Request;
@@ -24,7 +25,7 @@ Usage:
                                Change the mode of the running Huedra.
   huedra pause [minutes]       Pause automatic switching (default 60).
   huedra resume                Resume automatic switching.
-  huedra toggle                Turn HDR on or off, as Win+Alt+H does.
+  huedra toggle                Turn HDR on or off, as its shortcut does.
   huedra exit                  Close the running Huedra.
   huedra launch -- <program> [arguments]
                                Turn HDR on, start the program, and keep HDR
@@ -44,6 +45,10 @@ Usage:
                                main display is used. N is the number shown
                                under Settings > System > Display >
                                Identify.
+  huedra hdr brightness [NITS] [--display N | all]
+                               Show how bright SDR content is while HDR is
+                               on, or set it (80 to 480 nits; the main
+                               display unless one is named).
   huedra --version             Show the version.";
 
 /// What the executable was asked to do.
@@ -133,6 +138,13 @@ pub enum UpdateCommand {
 pub enum HdrCommand {
     /// List displays and their state.
     Status,
+    /// Show SDR content brightness, or set it when `nits` is given.
+    Brightness {
+        /// The brightness to set.
+        nits: Option<SdrBrightness>,
+        /// The displays to change; all HDR displays when showing.
+        displays: DisplaySelector,
+    },
     /// Turn HDR on or off.
     Set {
         /// The state to apply.
@@ -148,6 +160,9 @@ pub enum UsageError {
     /// The first argument is not a command.
     #[error("unknown command `{0}`")]
     UnknownCommand(String),
+    /// A brightness outside what Windows offers.
+    #[error("SDR content brightness goes from 80 to 480 nits, not {0}")]
+    Brightness(u32),
     /// `hdr` without an action.
     #[error("`hdr` needs one of: status, on, off")]
     MissingHdrAction,
@@ -230,6 +245,7 @@ where
 fn parse_hdr(args: &mut impl Iterator<Item = String>) -> Result<HdrCommand, UsageError> {
     let state = match args.next().as_deref() {
         Some("status") => return Ok(HdrCommand::Status),
+        Some("brightness") => return parse_brightness(args),
         Some("on") => HdrState::On,
         Some("off") => HdrState::Off,
         Some(other) => return Err(UsageError::UnexpectedArgument(other.to_owned())),
@@ -243,6 +259,29 @@ fn parse_hdr(args: &mut impl Iterator<Item = String>) -> Result<HdrCommand, Usag
         Some(other) => return Err(UsageError::UnexpectedArgument(other)),
     };
     Ok(HdrCommand::Set { state, displays })
+}
+
+fn parse_brightness(args: &mut impl Iterator<Item = String>) -> Result<HdrCommand, UsageError> {
+    let mut nits = None;
+    let mut displays = DisplaySelector::AllCapable;
+    let mut chosen = false;
+    while let Some(arg) = args.next() {
+        if arg == "--display" || arg == "-d" {
+            displays = parse_selector(&args.next().ok_or(UsageError::MissingDisplay)?)?;
+            chosen = true;
+        } else if nits.is_none()
+            && let Ok(value) = arg.parse::<u32>()
+        {
+            nits = Some(SdrBrightness::from_nits(value).ok_or(UsageError::Brightness(value))?);
+        } else {
+            return Err(UsageError::UnexpectedArgument(arg));
+        }
+    }
+    // Setting without a display changes the main one, as `hdr on` does.
+    if nits.is_some() && !chosen {
+        displays = DisplaySelector::Primary;
+    }
+    Ok(HdrCommand::Brightness { nits, displays })
 }
 
 fn parse_launch(args: impl Iterator<Item = String>) -> Result<LaunchCommand, UsageError> {

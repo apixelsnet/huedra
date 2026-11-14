@@ -14,6 +14,9 @@ pub struct Locations {
     pub owned: PathBuf,
     /// `color.toml`, the record of color profiles to put back (local).
     pub color: PathBuf,
+    /// `modes.toml`, the displays whose resolution or refresh rate Huedra
+    /// changed, to put back after a crash (local).
+    pub modes: PathBuf,
     /// `huedra.log` (local).
     pub log: PathBuf,
     /// `gameinfo.toml`, the PCGamingWiki cache (local).
@@ -72,6 +75,7 @@ impl Locations {
             config: roaming.join("config.toml"),
             owned: local.join("owned.toml"),
             color: local.join("color.toml"),
+            modes: local.join("modes.toml"),
             log: local.join("huedra.log"),
             game_info: local.join("gameinfo.toml"),
             window: local.join("window.toml"),

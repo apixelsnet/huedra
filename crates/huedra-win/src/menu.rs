@@ -4,8 +4,9 @@
 use windows::Win32::Foundation::{LPARAM, POINT, WPARAM};
 use windows::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CheckMenuRadioItem, CreatePopupMenu, DestroyMenu, GetCursorPos, HMENU,
-    MENU_ITEM_FLAGS, MF_BYCOMMAND, MF_CHECKED, MF_GRAYED, MF_SEPARATOR, MF_STRING, PostMessageW,
-    SetForegroundWindow, TPM_NONOTIFY, TPM_RETURNCMD, TPM_RIGHTBUTTON, TrackPopupMenuEx, WM_NULL,
+    MENU_ITEM_FLAGS, MF_BYCOMMAND, MF_CHECKED, MF_GRAYED, MF_POPUP, MF_SEPARATOR, MF_STRING,
+    PostMessageW, SetForegroundWindow, TPM_NONOTIFY, TPM_RETURNCMD, TPM_RIGHTBUTTON,
+    TrackPopupMenuEx, WM_NULL,
 };
 use windows::core::{HSTRING, PCWSTR};
 
@@ -36,6 +37,13 @@ pub enum MenuEntry {
     },
     /// A dividing line.
     Separator,
+    /// An item that opens more items beside the menu.
+    Submenu {
+        /// Text.
+        text: String,
+        /// The items it opens.
+        entries: Vec<MenuEntry>,
+    },
 }
 
 struct Menu(HMENU);
@@ -55,31 +63,54 @@ fn append(menu: &Menu, flags: MENU_ITEM_FLAGS, id: u32, text: Option<&str>) {
     let _ = unsafe { AppendMenuW(menu.0, flags, id as usize, text) };
 }
 
-/// Shows the menu at the pointer and returns the chosen id, if any.
-pub fn show(host: &EventLoop, entries: &[MenuEntry]) -> Option<u32> {
-    // SAFETY: creates an empty menu, destroyed by the guard.
-    let menu = Menu(unsafe { CreatePopupMenu() }.ok()?);
+/// Adds the entries to a menu, submenus included.
+fn fill(menu: &Menu, entries: &[MenuEntry]) {
     for entry in entries {
         match entry {
-            MenuEntry::Label(text) => append(&menu, MF_STRING | MF_GRAYED, 0, Some(text)),
+            MenuEntry::Label(text) => append(menu, MF_STRING | MF_GRAYED, 0, Some(text)),
             MenuEntry::Item { id, text, checked } => {
                 let flags = if *checked {
                     MF_STRING | MF_CHECKED
                 } else {
                     MF_STRING
                 };
-                append(&menu, flags, *id, Some(text));
+                append(menu, flags, *id, Some(text));
             }
             MenuEntry::Radio { id, text, selected } => {
-                append(&menu, MF_STRING, *id, Some(text));
+                append(menu, MF_STRING, *id, Some(text));
                 if *selected {
                     // SAFETY: the item was appended to this menu just above.
                     let _ = unsafe { CheckMenuRadioItem(menu.0, *id, *id, *id, MF_BYCOMMAND.0) };
                 }
             }
-            MenuEntry::Separator => append(&menu, MF_SEPARATOR, 0, None),
+            MenuEntry::Separator => append(menu, MF_SEPARATOR, 0, None),
+            MenuEntry::Submenu { text, entries } => {
+                // SAFETY: creates an empty menu; once appended below, the
+                // parent owns it and destroys it with itself.
+                let Ok(handle) = (unsafe { CreatePopupMenu() }) else {
+                    continue;
+                };
+                let sub = Menu(handle);
+                fill(&sub, entries);
+                let text = HSTRING::from(text.as_str());
+                // SAFETY: appends a submenu owned by `sub` to a menu owned
+                // by the caller; the text is copied.
+                let added =
+                    unsafe { AppendMenuW(menu.0, MF_STRING | MF_POPUP, handle.0 as usize, &text) };
+                if added.is_ok() {
+                    // The parent destroys it now.
+                    std::mem::forget(sub);
+                }
+            }
         }
     }
+}
+
+/// Shows the menu at the pointer and returns the chosen id, if any.
+pub fn show(host: &EventLoop, entries: &[MenuEntry]) -> Option<u32> {
+    // SAFETY: creates an empty menu, destroyed by the guard.
+    let menu = Menu(unsafe { CreatePopupMenu() }.ok()?);
+    fill(&menu, entries);
     let hwnd = host.hwnd();
     let mut point = POINT::default();
     // SAFETY: `point` is a valid out-parameter. The window must be in front

@@ -2,6 +2,23 @@
 
 Changes that matter to people using Huedra (not the project's own build and workflow changes). Versions follow `MAJOR.MINOR.PATCH`; the updater installs only versions newer than the running one.
 
+## Unreleased
+
+### Added
+- **Choose your keyboard shortcuts** under **Settings › Keyboard shortcuts**: type the keys for turning HDR on or off, changing the mode and pausing, for example `Ctrl+Alt+H`, or leave a box empty to turn that shortcut off. The section says when another program already uses the keys.
+- **Auto HDR per game**: a game's page under **Games** chooses whether Windows Auto HDR turns the game's SDR picture into HDR (**On**, **Off**, or **As set in Windows**). Huedra sets it for the game's program (a store game's from the first time Huedra sees it run), and it applies from the game's next start. The program's other graphics settings in Windows stay as they are.
+- **Keep HDR off on battery power** under **Settings**, for laptops: while the PC runs on battery, games and video don't turn HDR on, and HDR Huedra turned on goes off. Off by default; Always HDR still applies.
+- **SDR content brightness** on the **Displays** page: while a display is in HDR, set how bright the desktop and SDR apps look (80 to 480 nits), as in Windows Settings. `huedra hdr brightness [nits]` does the same from the command line.
+- **Resolution and refresh rate per game** on a game's page: while the game runs, the display it's on uses the mode you choose, set after HDR has turned on. When HDR leaves too little bandwidth for the refresh rate, the fastest one the display offers then is used. Windows' own mode comes back when the game closes. A game that sets its own refresh rate in full screen keeps its own.
+- **Pause for as long as you need**: the tray menu's **Pause automatic switching** offers 15 minutes, 30 minutes, 1 hour, 2 hours or 4 hours.
+- **Color profiles** on a game's page under **Games**: an ICC profile for SDR and one for HDR. While the game runs, the display it's on uses them; the earlier profiles come back when it closes, when Huedra quits, or on the next start after a crash. The HDR list offers only profiles Windows applies in HDR, such as the ones the Windows HDR Calibration app makes.
+
+### Changed
+- Huedra stays responsive while a display switches: the menu, the quick panel, the shortcuts and `huedra` commands answer at once instead of waiting for Windows, which takes about a second per display and several seconds when a display refuses. Several displays now switch together instead of one after another. The log says how long each switch took.
+
+### Fixed
+- Huedra starts when Windows can't list the displays, as happened on a test PC while its monitor was in standby. Before, it stopped at once; now it waits for the displays, and HDR or display modes it left changed are still put back once they are listed.
+
 ## 1.2.0 — 2026-11-07
 
 ### Added

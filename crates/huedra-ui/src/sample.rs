@@ -380,6 +380,10 @@ pub fn displays() -> Vec<Display> {
                 HdrState::Off
             },
             peak: Nits::new(*peak),
+            // As Windows reports it while HDR is on.
+            sdr_brightness: on
+                .contains(&(i + 1))
+                .then(|| huedra_core::display::SdrBrightness::from_level(3000)),
         })
         .collect()
 }
@@ -416,6 +420,7 @@ pub fn status() -> Option<StatusReport> {
             })
             .collect(),
         history: sim.history.clone(),
+        shortcut_note: String::new(),
         never: if sim.mode == Mode::Automatic && hdr_on && sim.forced.is_none() {
             "Cyberpunk 2077".to_owned()
         } else {

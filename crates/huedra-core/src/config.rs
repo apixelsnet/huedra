@@ -7,11 +7,14 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
+use crate::autohdr::AutoHdr;
 use crate::color::{self, GameProfiles};
 use crate::engine::{Mode, Target, Trigger};
 use crate::files;
 use crate::library::{Game, GameId, Store};
+use crate::mode::DisplayMode;
 use crate::paths::NormPath;
+use crate::shortcut::Shortcuts;
 use crate::video::{self, Assessment, PlayerHdr, StreamingSite, VideoApp, VideoKind, VideoWindow};
 
 /// Schema version written by this build.
@@ -138,8 +141,13 @@ pub struct General {
     pub log_window_titles: bool,
     /// Register the keyboard shortcuts.
     pub hotkeys: bool,
+    /// The keys of each shortcut.
+    #[serde(skip_serializing_if = "Shortcuts::is_default")]
+    pub shortcuts: Shortcuts,
     /// A Windows notification when a switch fails (never for normal ones).
     pub notify_failures: bool,
+    /// Games and video do not turn HDR on while the PC runs on battery.
+    pub battery_sdr: bool,
     /// The disclaimer shown on the first start was accepted. Until then the
     /// tray does not start and HDR is never changed.
     pub disclaimer_accepted: bool,
@@ -161,7 +169,9 @@ impl Default for General {
             retry_attempts: 2,
             log_window_titles: false,
             hotkeys: true,
+            shortcuts: Shortcuts::default(),
             notify_failures: true,
+            battery_sdr: false,
             disclaimer_accepted: false,
             new_look_seen: false,
         }
@@ -331,6 +341,17 @@ pub struct GameSettings {
     /// only a game switched off writes `false`. See [`Config::steam_start`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub steam_start: Option<bool>,
+    /// Windows Auto HDR for the game's programs.
+    #[serde(default, skip_serializing_if = "is_windows_auto_hdr")]
+    pub auto_hdr: AutoHdr,
+    /// The game's programs Huedra saw running while Auto HDR was set for
+    /// it, which get the setting (full paths).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub programs: Vec<String>,
+    /// The resolution and refresh rate of the display the game is on while
+    /// it runs; `None` keeps the one set in Windows.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_mode: Option<DisplayMode>,
     /// Color profile (file name of an installed ICC profile) used in SDR
     /// on the game's display while it runs; unset leaves Windows' choice.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -352,6 +373,9 @@ impl GameSettings {
             hold: None,
             launch_with_hdr: false,
             steam_start: None,
+            auto_hdr: AutoHdr::Windows,
+            programs: Vec::new(),
+            display_mode: None,
             sdr_profile: None,
             hdr_profile: None,
         }
@@ -590,6 +614,10 @@ impl Config {
     pub fn attempts(&self) -> u32 {
         1 + self.general.retry_attempts
     }
+}
+
+fn is_windows_auto_hdr(choice: &AutoHdr) -> bool {
+    *choice == AutoHdr::Windows
 }
 
 /// The folder part of a path, keeping its original case.

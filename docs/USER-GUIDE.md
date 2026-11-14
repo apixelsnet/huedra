@@ -80,7 +80,7 @@ Huedra lives in the tray (the notification area, next to the clock). If you do n
 | Menu item | What it does |
 | --- | --- |
 | Automatic / Always HDR / Always SDR | Choose the mode (see [Modes](#5-modes)). |
-| Pause for 1 hour / Resume automatic switching | Stop automatic switching for an hour, or start it again. |
+| Pause automatic switching › 15 minutes to 4 hours / Resume automatic switching | Stop automatic switching for a while, or start it again. |
 | Never use HDR for *game* | Shown while a game or player is active: Huedra stops changing HDR for it. |
 | Install Huedra *version*... | Shown when an update is waiting. Opens the update dialog. |
 | Open Huedra | Open the window. |
@@ -123,6 +123,8 @@ Select a game to open its settings:
 | **Let the game switch HDR** | For games with their own HDR switch: Huedra does not interfere. |
 | **Wait before turning HDR on** | Waits this many seconds after the game starts. Useful for games that show a launcher first. |
 | **Keep HDR on after the game closes** | Seconds HDR stays on after the game closes, so restarting it, or a launcher starting the game again, does not switch the display off and on twice. |
+| **Auto HDR** | Whether Windows Auto HDR turns this game's SDR picture into HDR: **As set in Windows**, **On** or **Off**. Huedra sets it on the game's program (a store game's once Huedra has seen it run); it applies from the game's next start. |
+| **Resolution and refresh rate** | While the game runs, the display it's on uses this mode, set after HDR has turned on; Windows' own mode comes back when it closes. When HDR leaves too little bandwidth for the rate, the fastest one offered then is used. The list shows the main display's modes of the same shape as now, at 50 Hz or more. A game that sets its own refresh rate in full screen keeps its own. |
 
 When **Game information and icons** is on, the page also shows what PCGamingWiki reports about the game's HDR support and may suggest a setting. Suggestions are never applied without your choice.
 
@@ -179,6 +181,7 @@ With NVIDIA RTX Video HDR turned on in the NVIDIA app, ordinary SDR video in a b
 | Setting | Meaning |
 | --- | --- |
 | **Let Huedra control HDR** | One switch per display. Huedra changes HDR only on the displays it controls, in every mode; on the others HDR stays as you set it in Windows. Displays that support HDR are controlled by default. A display without HDR shows **Not available**. |
+| **SDR content brightness (nits)** | Shown on a display while it is in HDR: how bright the desktop and SDR apps look, 80 to 480 nits, the same setting as Windows Settings › Display › HDR. |
 | **Switch only the display with the game or video** | HDR turns on only for the display the game or video is on, and follows the window to another display. When off, every display Huedra controls switches together. |
 | **Always HDR on the main display only** | Always HDR mode and the Win+Alt+H shortcut turn HDR on only for the main display, the one Windows uses as the primary display. Other displays keep following their games and video. When off, every display Huedra controls. On by default. |
 | **Retries when a switch fails** | How often Huedra tries again when a display does not accept a change. |
@@ -192,6 +195,7 @@ The **Settings** page sits at the foot of the navigation pane. It was called **G
 | **Start with Windows** | Starts Huedra in the tray when you sign in, without opening the window. |
 | **Closing this window** | **Keep Huedra running** (the default): closing the window leaves Huedra switching HDR from the tray. **Quit Huedra**: closing the window closes Huedra too, and displays it turned to HDR go back to SDR. **Exit** in the tray menu always quits. |
 | **Notify me when HDR doesn't switch** | A Windows notification when a display didn't switch after Huedra's retries; normal switches never notify. On by default. |
+| **Keep HDR off on battery power** | For laptops: while the PC runs on battery, games and video don't turn HDR on, and HDR Huedra turned on goes off at once. Always HDR still applies. Off by default. |
 | **Updates** | Ask before installing (the default), Install automatically, or Off (see [Updates](#10-updates)). |
 | **Timing › Keep HDR on after a game or video ends** | Seconds HDR stays on after a game closes or a video ends, so restarting the game or playing the next video does not switch the display off and on again. Games and the Video players page can set their own time. |
 | **Timing › Default wait before turning HDR on** | Seconds to wait after a game starts, unless set per game. |
@@ -213,13 +217,13 @@ The **About** section (headed with Huedra's version) has **Check for updates**, 
 
 ## 11. Keyboard shortcuts
 
-| Keys | Action |
+| Keys (unless changed) | Action |
 | --- | --- |
 | Win+Alt+H | Turn HDR on or off |
 | Win+Alt+O | Change the mode |
-| Win+Alt+P | Pause or resume automatic switching |
+| Win+Alt+P | Pause or resume automatic switching (for an hour) |
 
-If another program already uses one of these, Huedra's log says which (see [Troubleshooting](#13-troubleshooting)).
+Change the keys under **Settings › Keyboard shortcuts**: type them in the box beside the action, for example `Ctrl+Alt+H` or `Win+Shift+F9`, and press Enter. A shortcut needs Win, Ctrl or Alt (F13 to F24 work alone). Leave a box empty to turn that shortcut off. If another program already uses the keys, the section says so and Huedra's log names them (see [Troubleshooting](#13-troubleshooting)).
 
 ## 12. Command line
 
@@ -234,7 +238,10 @@ huedra games                 List the games found in every store.
 huedra mode automatic|hdr|sdr
 huedra pause [minutes]       Pause automatic switching (default 60).
 huedra resume                Resume automatic switching.
-huedra toggle                Turn HDR on or off, as Win+Alt+H does.
+huedra toggle                Turn HDR on or off, as its shortcut does.
+huedra hdr brightness [NITS] [--display N | all]
+                             Show or set how bright SDR content is while
+                             HDR is on (80 to 480 nits).
 huedra launch -- <program> [arguments]
                              Turn HDR on, start the program, keep HDR on until it ends.
 huedra hdr status            List the displays and their HDR state.
