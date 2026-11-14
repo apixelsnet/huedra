@@ -217,7 +217,8 @@ Code: `extras/packaging/` (winget and Scoop manifests and how to update them), `
 - Code signing: nothing in the code. The free route for an open-source project is the SignPath Foundation (an application by the owner, with the repository's details); a paid certificate or Azure Trusted Signing are the others. Once one exists, the signing step goes in `ci.yml`'s Windows job after the release build and before `pack-release.ps1`, because `release.toml` records the exe's size and SHA-256, which the minisign signature covers.
 
 Verified on this PC: `winget validate` accepted the manifests ("Manifest validation succeeded."); the SHA-256 is that of the published 1.2.0 zip; the Scoop file is valid JSON.
-Not verified: installing through winget (local manifests need an administrator setting) or Scoop (not installed here); `web-ext lint` (the download was not allowed in this session); any submission.
+Later the same day the owner ran `web-ext lint` (10.8.0): 0 errors, 2 warnings, both that `data_collection_permissions` needs Firefox 140 (Android 142) while `strict_min_version` is 128.
+Not verified: installing through winget (local manifests need an administrator setting) or Scoop (not installed here); any submission.
 
 ## Result (2026-11-14) — code signing policy
 - The owner applied to the SignPath Foundation for free code signing. The README has the **Code signing policy** section their review looks for: the attribution line, what is signed (only `huedra.exe` from the Release workflow), who commits, reviews and approves, multi-factor authentication, and the network connections the program makes on its own. Until the application is approved, releases are not Windows-signed, and the section says so.

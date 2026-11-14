@@ -22,8 +22,11 @@ differently.
 - `data_collection_permissions.required = ["none"]`: AMO asks every new
   extension to declare what it collects; Huedra's collects nothing.
 - Run `npx web-ext lint --source-dir extras/browser` first (AMO runs the same
-  linter on upload). Not run while preparing this file: the session could not
-  download `web-ext`.
+  linter on upload). Result on 2026-11-14 (web-ext 10.8.0, extension 0.3.1):
+  0 errors, 0 notices, 2 warnings. Both say `data_collection_permissions` is
+  understood only from Firefox 140 and Firefox for Android 142, while
+  `strict_min_version` is 128; older versions ignore the key. Raising
+  `strict_min_version` to 140.0 (the current ESR) would clear them.
 
 ## Listing
 
