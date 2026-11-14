@@ -218,3 +218,7 @@ Code: `extras/packaging/` (winget and Scoop manifests and how to update them), `
 
 Verified on this PC: `winget validate` accepted the manifests ("Manifest validation succeeded."); the SHA-256 is that of the published 1.2.0 zip; the Scoop file is valid JSON.
 Not verified: installing through winget (local manifests need an administrator setting) or Scoop (not installed here); `web-ext lint` (the download was not allowed in this session); any submission.
+
+## Result (2026-11-14) — code signing policy
+- The owner applied to the SignPath Foundation for free code signing. The README has the **Code signing policy** section their review looks for: the attribution line, what is signed (only `huedra.exe` from the Release workflow), who commits, reviews and approves, multi-factor authentication, and the network connections the program makes on its own. Until the application is approved, releases are not Windows-signed, and the section says so.
+- `PRIVACY.md` names the icon downloads from `cdn.discordapp.com` (only the list was named before) and the Settings page by its current name.
