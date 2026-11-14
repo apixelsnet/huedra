@@ -2,7 +2,7 @@
 
 Changes that matter to people using Huedra (not the project's own build and workflow changes). Versions follow `MAJOR.MINOR.PATCH`; the updater installs only versions newer than the running one.
 
-## Unreleased
+## 1.2.1 — 2026-11-14
 
 ### Added
 - **Choose your keyboard shortcuts** under **Settings › Keyboard shortcuts**: type the keys for turning HDR on or off, changing the mode and pausing, for example `Ctrl+Alt+H`, or leave a box empty to turn that shortcut off. The section says when another program already uses the keys.
