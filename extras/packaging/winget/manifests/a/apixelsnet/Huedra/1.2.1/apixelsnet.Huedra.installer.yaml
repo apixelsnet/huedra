@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.10.0.schema.json
 PackageIdentifier: apixelsnet.Huedra
-PackageVersion: 1.2.0
+PackageVersion: 1.2.1
 InstallerType: zip
 NestedInstallerType: portable
 NestedInstallerFiles:
@@ -9,7 +9,7 @@ NestedInstallerFiles:
 MinimumOSVersion: 10.0.19041.0
 Installers:
   - Architecture: x64
-    InstallerUrl: https://github.com/apixelsnet/huedra/releases/download/v1.2.0/huedra-1.2.0-windows-x64.zip
-    InstallerSha256: B68FBC8D69DF199ADB18BC220E19EBE298D930075C967EC5605210B2DA90B475
+    InstallerUrl: https://github.com/apixelsnet/huedra/releases/download/v1.2.1/huedra-1.2.1-windows-x64.zip
+    InstallerSha256: 6108E87752FB2C6DD4974F122AD456C69890D4CA3370FEFF334169402B54FC4F
 ManifestType: installer
 ManifestVersion: 1.10.0

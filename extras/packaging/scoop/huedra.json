@@ -1,12 +1,12 @@
 {
-    "version": "1.2.0",
+    "version": "1.2.1",
     "description": "Turns Windows HDR on for games and HDR video, and back off afterwards.",
     "homepage": "https://github.com/apixelsnet/huedra",
     "license": "Apache-2.0",
     "architecture": {
         "64bit": {
-            "url": "https://github.com/apixelsnet/huedra/releases/download/v1.2.0/huedra-1.2.0-windows-x64.zip",
-            "hash": "b68fbc8d69df199adb18bc220e19ebe298d930075c967ec5605210b2da90b475"
+            "url": "https://github.com/apixelsnet/huedra/releases/download/v1.2.1/huedra-1.2.1-windows-x64.zip",
+            "hash": "6108e87752fb2c6dd4974f122ad456c69890d4ca3370feff334169402b54fc4f"
         }
     },
     "bin": "huedra.exe",

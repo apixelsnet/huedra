@@ -5,7 +5,7 @@ published from here: each needs a submission by the owner.
 
 ## winget
 
-`winget/manifests/a/apixelsnet/Huedra/1.2.0/` is a copy of what a pull request to
+`winget/manifests/a/apixelsnet/Huedra/1.2.1/` is a copy of what a pull request to
 [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs) adds, at the
 same path. The installer is the release zip with `huedra.exe` inside, installed
 as a portable program with the command `huedra`.
