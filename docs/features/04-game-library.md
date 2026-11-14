@@ -52,3 +52,13 @@ Code: `Library::find` and `is_windows_folder` in `crates/huedra-core/src/library
 
 Verified: unit tests (the program itself still matches; another program beside it, a Windows helper and the Windows folder do not); CI green.
 Not verified: on this PC with Windows Settings opened against the test copy's Character Map entry.
+
+## Result (2026-11-14) — Auto HDR per game
+Code: `crates/huedra-core/src/autohdr.rs`, `gpu_preferences` and `set_gpu_preferences` in `crates/huedra-win/src/registry.rs`, `note_program`, `sync_auto_hdr` and `set_auto_hdr` in `crates/huedra/src/app.rs`, the Auto HDR dropdown on a game's page in `crates/huedra-ui/ui/pages.slint`.
+- A game's page has **Auto HDR**: As set in Windows (default), On, Off (`auto_hdr` in the game's `[[game]]` entry). Windows keeps the per-program choice in `HKCU\Software\Microsoft\DirectX\UserGpuPreferences`, a string value named after the program's full path holding `Name=value;` pairs. The values were taken from Windows Settings › System › Display › Graphics on this PC (build 26300) by turning a program's Auto HDR switch on and off: `AutoHDREnable=4147` for on, `AutoHDREnable=48` for off. The global switch writes `AutoHDREnable=1` or `0` into `DirectXUserGlobalSettings`, which Huedra never touches. The per-program switch shows in Windows Settings only while HDR is on.
+- Huedra changes only the `AutoHDREnable` pair and keeps the program's other pairs (`AppStatus`, `SwapEffectUpgradeEnable`…) in place; a value with nothing else left is deleted.
+- Which programs: a game added by hand gets it at once on its program. Store games name only a folder, so the tray sets it on each of the game's programs it sees running (it applies from the next start, since Windows reads it when the game starts) and remembers them in `programs`. Choosing As set in Windows takes Huedra's pair off those programs and forgets them; a value set in Windows Settings for a program Huedra never touched stays as it is.
+
+Verified on this PC (portable test copy, a copy of Notepad added by hand as "Auto HDR test"): with `auto_hdr = "on"` the tray's start wrote `AutoHDREnable=4147;` and remembered the program; on the game's page Down chose Off (`AutoHDREnable=48;`), Up twice chose As set in Windows (value deleted, `programs` emptied); the log named the game and the program. Unit tests cover keeping the other pairs.
+Not verified: a store game's program being picked up while it runs (the same `set_auto_hdr`, reached from `note_program`); that Windows then applies Auto HDR in a DirectX 11 or 12 game (no SDR game was started).
+

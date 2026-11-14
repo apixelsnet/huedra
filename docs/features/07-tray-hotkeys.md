@@ -104,3 +104,13 @@ Code: `actions` in `crates/huedra-ui/ui/flyout.slint`, the display lines in `sho
 
 Verified on this PC with the sample build on a hidden desktop: Automatic with Cyberpunk 2077 running shows both rows in full; Always HDR, Display 2's switch, Never use HDR for, light theme and Escape.
 Not verified: on the real tray (the merged build was not run as the tray).
+
+## Result (2026-11-14) — pause length and custom shortcuts
+Code: `crates/huedra-core/src/shortcut.rs`, `crates/huedra-win/src/hotkey.rs`, `MenuEntry::Submenu` in `crates/huedra-win/src/menu.rs`, `on_menu`, `register_hotkeys`, `keys_of` in `crates/huedra/src/app.rs`, the Keyboard shortcuts section in `crates/huedra-ui/ui/pages.slint`.
+- The tray menu's **Pause automatic switching** opens a submenu: 15 minutes, 30 minutes, 1 hour (the shortcut's length), 2 hours, 4 hours. While paused the item is **Resume automatic switching**. The quick panel and Status keep their one-hour Pause.
+- Shortcuts are settings: `[general.shortcuts]` with `toggle_hdr`, `cycle_mode` and `pause`, written only when one differs from Win+Alt+H, Win+Alt+O, Win+Alt+P. Text such as `ctrl + alt + f9` is stored tidied (`Ctrl+Alt+F9`); an empty text turns that shortcut off; text that is not a shortcut (typed into the file) is kept as written, logged, and the default is used. A shortcut needs Win, Ctrl or Alt, except F13 to F24; Win+Alt+B (Windows' HDR switch), Win+L and Ctrl+Alt+Delete are refused.
+- Settings › Keyboard shortcuts has a box per action; a refused text leaves the old keys and says why. Keys Windows refused because another program holds them come back from the tray in the status report (`shortcut_note`) and show in the section. The menu's shortcut column, Status's key labels and the setup text follow the settings.
+
+Verified on this PC (portable test copy, default keys free after the owner's tray was closed): the submenu lists the five lengths; 15 minutes paused until 15 minutes later ("Automatic switching paused for 15 minutes." in the log); Resume ended it. Win+Alt+H toggled HDR on and off. With `toggle_hdr = "ctrl+alt+f9"`, `cycle_mode = ""`, `pause = "nonsense"`: Win+Alt+H did nothing, Ctrl+Alt+F9 toggled HDR both ways, Win+Alt+P paused (default for invalid text, logged), Win+Alt+O left the mode alone. In the window: the boxes showed Ctrl+Alt+F9, empty and Win+Alt+P; typing `ctrl + win + m` saved `Win+Ctrl+M`; typing `Shift+H` kept the old keys and showed "Add Win, Ctrl or Alt, so typing doesn't set it off."; Win+Ctrl+M was refused by Windows (another program holds it) and the section said "Win+Ctrl+M is used by another program, so it doesn't work."
+Not verified: Narrator reading the boxes; the shortcut column of the tray menu by eye (UI Automation gives the item names without it).
+

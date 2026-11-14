@@ -45,3 +45,24 @@ Verified on this PC: the test passed on display 1 (HDR on through v1 in 230 ms, 
 Not verified: the choice of v1 on a system that refuses `GET_ADVANCED_COLOR_INFO_2` (Windows 10 or 11 before 24H2); only the v1 calls themselves were exercised here. It is on the pre-release checklist (12).
 
 Status: done.
+
+## Result (2026-11-14) — switching off the tray's thread
+Code: `crates/huedra-win/src/switcher.rs`, `set_hdr_many` in `crates/huedra-win/src/display.rs`, `apply` and `on_switched` in `crates/huedra/src/app.rs`.
+- The tray hands each set of switches to a worker thread (`Switcher`) and gets the result back as `Event::Switched`, so the menu, the shortcuts, the pipe and the settings window's status keep answering while Windows changes a display. Before, `set_hdr` ran on the message loop: about 0.9 s per display here, and up to 7 s with the default two retries when a display refused.
+- `set_hdr_many` sends every display's request before waiting for any, so two displays switch together instead of one after the other. Retries and the 2-second wait per attempt are unchanged.
+- The log says how long each switch took: "Display 1 (…) switched to HDR in 864 ms." A failure says after how long.
+- Kept contracts: `huedra exit` waits for switches under way (at most 15 s), then returns the displays to SDR before it answers; `huedra launch` answers once HDR has switched, so the game still starts in HDR; `owned.toml` is written before a switch is queued. A display change that arrives during a switch is read once the switch has finished, so a switch in progress is not taken for a change made outside Huedra.
+
+Verified on this PC (one HDR display connected, portable test copy): `huedra status` answered in 11 ms during an 849 ms switch, and `mode hdr` in 39 ms; HDR on in 849–908 ms and off in 895–908 ms (log lines); `huedra launch notepad.exe` from SDR started Notepad 965 ms after the command, after the 864 ms switch; `huedra exit` sent 100 ms after `mode hdr` answered after 1189 ms with the display back in SDR.
+Later the same day, with both displays on: Always HDR turned both on together in 696 ms and Automatic both off in 577 ms (one log line each, same time), against about 0.9 s per display one after the other before.
+Not verified: a display refusing the change (the failure path through `on_switched`).
+
+## Result (2026-11-14) — SDR content brightness
+Code: `SdrBrightness` in `crates/huedra-core/src/display.rs`, `sdr_brightness` and `set_sdr_brightness` in `crates/huedra-win/src/display.rs`, `hdr brightness` in `crates/huedra/src/hdr.rs` and `crates/huedra-core/src/command.rs`, the brightness box on the Displays page (`crates/huedra-ui/ui/pages.slint`, `set_brightness_later` in `crates/huedra-ui/src/app.rs`).
+- Reading uses the documented `DISPLAYCONFIG_DEVICE_INFO_GET_SDR_WHITE_LEVEL` (11); `SDRWhiteLevel` 1000 is 80 nits. Setting uses the request Windows Settings' slider sends, type 0xFFFFFFEE with the level and a "final value" byte; it is not documented, so every change is read back with the documented request and reported as failed when Windows keeps the old level. Range 80 to 480 nits, as in Windows Settings.
+- Windows refuses the change (error 50) while the display is in SDR, and reads 80 nits then whatever the setting is, so the value is read and changed only while HDR is on: `huedra hdr brightness` says "HDR off" for a display in SDR, and the Displays page shows **SDR content brightness (nits)** only on a display in HDR. `Display` carries `sdr_brightness`, read with the other display details while HDR is on.
+- The page's box sends changes through one worker thread that keeps only the newest value per display, so holding an arrow key applies in order; the display list is now updated in place, so the box keeps its focus through the page's once-a-second display reading (before, the row was rebuilt and lost focus after a few steps).
+- CLI: `huedra hdr brightness` lists HDR displays; `huedra hdr brightness 240 [--display N | all]` sets it (main display by default).
+
+Verified on this PC (display 1 in HDR): `hdr brightness` read 160 nits (the value set in Windows); 320 and 120 were set and read back; 500 and 79 were refused with the range message; in SDR the change was refused with a clear message. On the Displays page the box showed 160; Up 20 times gave 180 nits and Down 20 times 160 (read back with the CLI). The display was left at 160 nits.
+Not verified: a second display; a display that ignores the request.

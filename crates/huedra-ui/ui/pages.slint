@@ -71,6 +71,12 @@ export struct GameDetail {
     // 0 is "Windows default".
     sdr-profile: int,
     hdr-profile: int,
+    // Windows Auto HDR: 0 as set in Windows, 1 on, 2 off.
+    auto-hdr: int,
+    // Whether Huedra knows a program of the game to set it on.
+    auto-hdr-known: bool,
+    // Index into the display mode list; 0 keeps the mode set in Windows.
+    display-mode: int,
 }
 
 export struct DisplayRow {
@@ -84,6 +90,8 @@ export struct DisplayRow {
     hdr-on: bool,
     // The line under its name on Status: "Main display · Controlled by Huedra".
     status: string,
+    // SDR content brightness in nits while HDR is on; 0 otherwise.
+    brightness: int,
 }
 
 export struct VideoAppRow {
@@ -596,6 +604,8 @@ export component StatusPage inherits Rectangle {
     in property <string> idle;
     in property <[DisplayRow]> displays;
     in property <bool> hotkeys;
+    in property <string> mode-keys;
+    in property <string> pause-keys;
     // The newest failed switch, until closed.
     in property <string> failure;
     // A newer version waiting, until closed.
@@ -759,9 +769,9 @@ export component StatusPage inherits Rectangle {
                                 vertical-alignment: center;
                                 text: "Automatic: HDR turns on for games and HDR video, then off again. Always HDR and Always SDR stay until you change them.";
                             }
-                            if root.hotkeys: Centered {
+                            if root.hotkeys && root.mode-keys != "": Centered {
                                 KeyCap {
-                                    text: "Win+Alt+O";
+                                    text: root.mode-keys;
                                 }
                             }
                         }
@@ -781,9 +791,9 @@ export component StatusPage inherits Rectangle {
                             title: "Pause automatic switching";
                             text: root.paused ? root.pause-note : "HDR stays as it is now for one hour.";
                         }
-                        if root.hotkeys: Centered {
+                        if root.hotkeys && root.pause-keys != "": Centered {
                             KeyCap {
-                                text: "Win+Alt+P";
+                                text: root.pause-keys;
                             }
                         }
                         Centered {
@@ -883,6 +893,9 @@ component GameDetailPanel inherits Card {
     in property <[string]> hdr-profiles;
     // A color profile was chosen: the game, HDR (or SDR), the list index.
     callback set-profile(string, bool, int);
+    callback set-auto-hdr(string, int);
+    in property <[string]> display-modes;
+    callback set-display-mode(string, int);
     callback back();
     callback set-setting(string, int);
     callback set-delay(string, int);
@@ -1054,6 +1067,48 @@ component GameDetailPanel inherits Card {
                 }
                 if root.hdr-profiles.length <= 1: Caption {
                     text: "No HDR color profile is installed. The Windows HDR Calibration app makes one.";
+                }
+            }
+            VerticalLayout {
+                spacing: 4px;
+                Text {
+                    text: "Auto HDR";
+                    font-size: Theme.body-size;
+                    color: Theme.text;
+                }
+                Dropdown {
+                    accessible-label: "Auto HDR";
+                    model: ["As set in Windows", "On", "Off"];
+                    current-index: root.detail.auto-hdr;
+                    selected(value) => {
+                        root.set-auto-hdr(root.detail.id, self.current-index);
+                    }
+                }
+                Caption {
+                    text: root.detail.auto-hdr == 0
+                        ? "Windows can turn SDR games into HDR. Choose On or Off to decide for this game."
+                        : root.detail.auto-hdr-known
+                        ? "Applies from the next time the game starts."
+                        : "Applies to the game's program once Huedra has seen it run, from the start after that.";
+                }
+            }
+            if root.display-modes.length > 1: VerticalLayout {
+                spacing: 4px;
+                Text {
+                    text: "Resolution and refresh rate";
+                    font-size: Theme.body-size;
+                    color: Theme.text;
+                }
+                Dropdown {
+                    accessible-label: "Resolution and refresh rate";
+                    model: root.display-modes;
+                    current-index: root.detail.display-mode;
+                    selected(value) => {
+                        root.set-display-mode(root.detail.id, self.current-index);
+                    }
+                }
+                Caption {
+                    text: "While the game runs, the display it's on uses this mode, after HDR has turned on. When HDR leaves too little bandwidth for the refresh rate, the fastest one the display offers then is used.";
                 }
             }
             if root.detail.launch-option != "" || root.detail.shortcut: Rectangle {
@@ -1256,6 +1311,9 @@ export component GamesPage inherits Rectangle {
     callback set-steam-start(string, bool);
     in property <[string]> sdr-profiles;
     in property <[string]> hdr-profiles;
+    callback set-auto-hdr(string, int);
+    in property <[string]> display-modes;
+    callback set-display-mode(string, int);
     callback set-profile(string, bool, int);
 
     property <bool> has-selection: root.details.length > 0;
@@ -1749,6 +1807,13 @@ export component GamesPage inherits Rectangle {
                 set-profile(id, hdr, i) => {
                     root.set-profile(id, hdr, i);
                 }
+                set-auto-hdr(id, i) => {
+                    root.set-auto-hdr(id, i);
+                }
+                display-modes: root.display-modes;
+                set-display-mode(id, i) => {
+                    root.set-display-mode(id, i);
+                }
                 back => {
                     root.close-detail();
                 }
@@ -2105,6 +2170,8 @@ export component SetupPage inherits Rectangle {
     in property <[StoreChip]> chips;
     in property <int> total;
     in property <bool> game-info;
+    // The mode shortcut's keys; empty when it is off.
+    in property <string> mode-keys;
     in property <int> mode;
     in property <bool> start-with-windows;
     callback set-controlled(string, bool);
@@ -2246,7 +2313,9 @@ export component SetupPage inherits Rectangle {
                 }
             }
             if root.step == 2: Caption {
-                text: "You can change the mode at any time from the tray icon, the Status page or Win+Alt+O.";
+                text: root.mode-keys != ""
+                    ? "You can change the mode at any time from the tray icon, the Status page or " + root.mode-keys + "."
+                    : "You can change the mode at any time from the tray icon or the Status page.";
             }
             if root.step == 2: VerticalLayout {
                 spacing: 8px;
@@ -2349,6 +2418,7 @@ export component DisplaysPage inherits Rectangle {
     in property <bool> content-only;
     in property <bool> main-only;
     callback set-controlled(string, bool);
+    callback set-brightness(string, int);
     callback set-retries(int);
     callback set-content-only(bool);
     callback set-main-only(bool);
@@ -2411,6 +2481,24 @@ export component DisplaysPage inherits Rectangle {
                         }
                         Caption {
                             text: d.detail;
+                        }
+                        if d.hdr-on && d.brightness > 0: HorizontalLayout {
+                            alignment: start;
+                            spacing: 8px;
+                            padding-top: 6px;
+                            Caption {
+                                vertical-alignment: center;
+                                text: "SDR content brightness (nits)";
+                            }
+                            NumberBox {
+                                accessible-label: "SDR content brightness on " + d.title + " (nits)";
+                                minimum: 80;
+                                maximum: 480;
+                                value: d.brightness;
+                                edited(v) => {
+                                    root.set-brightness(d.id, v);
+                                }
+                            }
                         }
                     }
                     if d.capable: Centered {
@@ -2484,9 +2572,14 @@ export component SettingsPage inherits Rectangle {
     in property <int> hold;
     in property <int> delay;
     in property <bool> hotkeys;
-    in property <string> hotkey-note;
+    in property <string> keys-hdr;
+    in property <string> keys-mode;
+    in property <string> keys-pause;
+    in property <string> shortcut-error;
+    in property <string> shortcut-note;
     in property <bool> log-titles;
     in property <bool> notify-failures;
+    in property <bool> battery-sdr;
     in property <string> version;
     in property <string> data-folder;
     in property <string> update-note;
@@ -2511,8 +2604,10 @@ export component SettingsPage inherits Rectangle {
     callback set-hold(int);
     callback set-delay(int);
     callback set-hotkeys(bool);
+    callback set-shortcut(int, string);
     callback set-log-titles(bool);
     callback set-notify-failures(bool);
+    callback set-battery-sdr(bool);
 
     page := ScrollView {
         // At least the preferred height, so rows keep their wrapped text
@@ -2579,6 +2674,17 @@ export component SettingsPage inherits Rectangle {
                 }
             }
             SettingRow {
+                title: "Keep HDR off on battery power";
+                description: "For laptops: while the PC runs on battery, games and video don't turn HDR on, and HDR Huedra turned on goes off. Always HDR still applies.";
+                Toggle {
+                    accessible-label: "Keep HDR off on battery power";
+                    checked: root.battery-sdr;
+                    toggled => {
+                        root.set-battery-sdr(self.checked);
+                    }
+                }
+            }
+            SettingRow {
                 title: "Updates";
                 description: "Checks once a day for a new signed release. Ask before installing: you choose when. Install automatically: installs when no game or video is running. Your settings are kept." + (root.update-note != "" ? " " + root.update-note : "");
                 Dropdown {
@@ -2626,9 +2732,10 @@ export component SettingsPage inherits Rectangle {
             Expander {
                 glyph: "\u{E765}";
                 title: "Keyboard shortcuts";
-                summary: root.hotkeys
-                    ? "Win+Alt+H turns HDR on or off · Win+Alt+O changes the mode · Win+Alt+P pauses or resumes"
-                    : "Off";
+                summary: !root.hotkeys ? "Off"
+                    : (root.keys-hdr != "" ? root.keys-hdr : "No shortcut") + " turns HDR on or off · "
+                    + (root.keys-mode != "" ? root.keys-mode : "no shortcut") + " changes the mode · "
+                    + (root.keys-pause != "" ? root.keys-pause : "no shortcut") + " pauses or resumes";
                 has-toggle: true;
                 toggle-checked: root.hotkeys;
                 toggled(on) => {
@@ -2636,7 +2743,41 @@ export component SettingsPage inherits Rectangle {
                 }
                 SubRow {
                     first: true;
-                    description: "Win+Alt+H turns HDR on or off now. Win+Alt+O steps through Automatic, Always HDR and Always SDR. Win+Alt+P pauses switching for an hour, or resumes it." + (root.hotkey-note != "" ? " " + root.hotkey-note : "");
+                    description: "Type keys such as Win+Alt+H or Ctrl+Shift+F9. Leave a box empty to turn that shortcut off."
+                        + (root.shortcut-note != "" ? " " + root.shortcut-note : "")
+                        + (root.shortcut-error != "" ? " " + root.shortcut-error : "");
+                }
+                SubRow {
+                    title: "Turn HDR on or off";
+                    TextBox {
+                        label: "Shortcut to turn HDR on or off";
+                        value: root.keys-hdr;
+                        accepted(text) => {
+                            root.set-shortcut(0, text);
+                        }
+                    }
+                }
+                SubRow {
+                    title: "Change the mode";
+                    description: "Steps through Automatic, Always HDR and Always SDR.";
+                    TextBox {
+                        label: "Shortcut to change the mode";
+                        value: root.keys-mode;
+                        accepted(text) => {
+                            root.set-shortcut(1, text);
+                        }
+                    }
+                }
+                SubRow {
+                    title: "Pause or resume";
+                    description: "Pauses switching for an hour, or resumes it.";
+                    TextBox {
+                        label: "Shortcut to pause or resume";
+                        value: root.keys-pause;
+                        accepted(text) => {
+                            root.set-shortcut(2, text);
+                        }
+                    }
                 }
             }
             Expander {

@@ -97,6 +97,22 @@ pub fn uninstall() -> anyhow::Result<()> {
         Err(error) => anyhow::bail!("could not close the running Huedra: {error}"),
     }
     registry::remove_all().context("could not remove Huedra's registry entries")?;
+    // Auto HDR that Huedra set for games' programs goes back to Windows'
+    // own setting; the rest of each program's graphics settings stays.
+    if let Ok(locations) = Locations::resolve()
+        && let Ok(config) = huedra_core::config::Config::load(&locations.config)
+    {
+        for program in config.games.iter().flat_map(|g| g.programs.iter()) {
+            let current = registry::gpu_preferences(program);
+            let wanted = huedra_core::autohdr::edit(
+                current.as_deref(),
+                huedra_core::autohdr::AutoHdr::Windows,
+            );
+            if wanted != current {
+                let _ = registry::set_gpu_preferences(program, wanted.as_deref());
+            }
+        }
+    }
     println!(
         "Huedra's registry entries were removed (the start-up entry and the \"Start with HDR\" menu entry)."
     );

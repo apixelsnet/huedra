@@ -219,7 +219,15 @@ pub struct Engine {
     active: BTreeMap<TriggerId, Active>,
     /// The displays Always HDR mode and the shortcut turn on.
     manual: Target,
+    /// The PC runs on battery and the settings keep automatic HDR off then.
+    on_battery: bool,
+    /// Displays from the recovery record that Windows did not list at start
+    /// (switched off, for one): Huedra's when they appear in HDR.
+    unseen_owned: Vec<DisplayId>,
 }
+
+/// Why the displays return to SDR when the PC runs on battery.
+pub const ON_BATTERY: &str = "The PC is running on battery power";
 
 impl Engine {
     /// Starts with the managed displays as they are now. Displays in `owned`
@@ -260,6 +268,12 @@ impl Engine {
             slots,
             active: BTreeMap::new(),
             manual,
+            on_battery: false,
+            unseen_owned: owned
+                .iter()
+                .filter(|id| !displays.iter().any(|(d, _)| d == *id))
+                .cloned()
+                .collect(),
         };
         engine.take_over_for_sdr();
         let mut outcome = Outcome::default();
@@ -305,8 +319,11 @@ impl Engine {
             if self.slots.contains_key(id) {
                 self.observe_one(id, *state, &mut outcome);
             } else {
+                let recovered = self.unseen_owned.contains(id);
+                self.unseen_owned.retain(|d| d != id);
                 let phase = match state {
                     HdrState::Off => Phase::Sdr,
+                    HdrState::On if recovered => Phase::HdrByHuedra,
                     HdrState::On => Phase::HdrExternal,
                 };
                 self.slots.insert(
@@ -549,6 +566,7 @@ impl Engine {
             .iter()
             .filter(|(_, s)| s.phase.is_owned())
             .map(|(id, _)| id.clone())
+            .chain(self.unseen_owned.iter().cloned())
             .collect()
     }
 
@@ -571,6 +589,21 @@ impl Engine {
                 .map(|(id, s)| (id.clone(), s.phase))
                 .collect(),
         }
+    }
+
+    /// Keeps automatic HDR off while `on` (the PC runs on battery and the
+    /// settings ask for it): games and video no longer turn HDR on, and HDR
+    /// Huedra turned on for them goes back to SDR at once. Always HDR and
+    /// Always SDR, chosen by hand, are not affected, nor HDR turned on
+    /// outside Huedra.
+    pub fn set_on_battery(&mut self, now: Instant, on: bool) -> Outcome {
+        self.on_battery = on;
+        self.run(now)
+    }
+
+    /// Whether automatic HDR is held off for battery power.
+    pub fn is_on_battery(&self) -> bool {
+        self.on_battery
     }
 
     fn run(&mut self, now: Instant) -> Outcome {
@@ -643,6 +676,7 @@ impl Engine {
             .cloned()
             .collect();
         let default_hold = self.default_hold;
+        let on_battery = self.on_battery;
         let active = &self.active;
         for (id, slot) in &mut self.slots {
             // Only the triggers that want this display count for it.
@@ -671,6 +705,18 @@ impl Engine {
                 Mode::AlwaysHdr if !manual.contains(id) => Mode::Automatic,
                 mode => mode,
             };
+            if on_battery && mode == Mode::Automatic {
+                match slot.phase {
+                    Phase::HdrByHuedra | Phase::Holding { .. } => {
+                        slot.phase = Phase::Sdr;
+                        slot.holder = None;
+                        switch(outcome, id, slot, HdrState::Off, ON_BATTERY);
+                    }
+                    Phase::Waiting { .. } => slot.phase = Phase::Sdr,
+                    Phase::Sdr | Phase::HdrExternal => {}
+                }
+                continue;
+            }
             match mode {
                 Mode::AlwaysHdr => match slot.phase {
                     Phase::Sdr | Phase::Waiting { .. } => {
@@ -820,6 +866,62 @@ mod tests {
 
     fn secs(n: u64) -> Duration {
         Duration::from_secs(n)
+    }
+
+    #[test]
+    fn owned_display_listed_later_is_still_huedras() {
+        let t0 = Instant::now();
+        let (mut e, out) = Engine::new(Mode::Automatic, HOLD, &[], &[display()], Target::All, t0);
+        assert!(out.actions.is_empty(), "nothing to do without displays");
+        assert_eq!(e.owned(), vec![display()], "the record is kept");
+        assert!(
+            e.set_displays(t0, &[(display(), HdrState::On)])
+                .actions
+                .is_empty(),
+            "held first"
+        );
+        assert_eq!(
+            e.tick(t0 + HOLD).actions,
+            off(),
+            "Huedra's HDR goes off after the hold, as after a crash"
+        );
+    }
+
+    #[test]
+    fn battery_keeps_automatic_hdr_off() {
+        let (mut e, t0) = engine(HdrState::Off, false);
+        let id = TriggerId::new("steam:1");
+        assert_eq!(e.trigger_started(t0, id, game(0)).actions, on(), "on");
+        let out = e.set_on_battery(t0 + secs(1), true);
+        assert_eq!(out.actions, off(), "off at once on battery, no hold");
+        assert_eq!(out.notes[0].reason, ON_BATTERY, "says why");
+        assert!(
+            e.trigger_started(t0 + secs(2), TriggerId::new("steam:2"), game(0))
+                .actions
+                .is_empty(),
+            "another game does not turn it on"
+        );
+        assert_eq!(
+            e.set_on_battery(t0 + secs(3), false).actions,
+            on(),
+            "back on mains power the running game gets HDR again"
+        );
+        let mut always = e;
+        always.set_on_battery(t0 + secs(4), true);
+        assert_eq!(
+            always.set_mode(t0 + secs(5), Mode::AlwaysHdr).actions,
+            on(),
+            "Always HDR, chosen by hand, still applies"
+        );
+    }
+
+    #[test]
+    fn battery_leaves_hdr_turned_on_elsewhere() {
+        let (mut e, t0) = engine(HdrState::On, false);
+        assert!(
+            e.set_on_battery(t0, true).actions.is_empty(),
+            "HDR turned on outside Huedra stays"
+        );
     }
 
     #[test]

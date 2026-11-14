@@ -176,7 +176,11 @@ export component SettingsWindow inherits Window {
     callback set-game-steam-start(string, bool);
     // The installed color profiles, "Windows default" first.
     in property <[string]> sdr-profiles;
+    // "As set in Windows", then the main display's modes.
+    in property <[string]> display-modes;
     in property <[string]> hdr-profiles;
+    callback set-game-auto-hdr(string, int);
+    callback set-game-display-mode(string, int);
     callback set-game-profile(string, bool, int);
 
     // Displays
@@ -201,6 +205,7 @@ export component SettingsWindow inherits Window {
     in property <int> retries;
     in property <bool> content-only;
     in property <bool> main-only;
+    callback set-brightness(string, int);
     callback set-controlled(string, bool);
     callback set-retries(int);
     callback set-content-only(bool);
@@ -215,9 +220,17 @@ export component SettingsWindow inherits Window {
     in property <int> hold;
     in property <int> delay;
     in property <bool> hotkeys;
-    in property <string> hotkey-note;
+    // Each shortcut's keys ("Win+Alt+H"); empty when it is off.
+    in property <string> keys-hdr;
+    in property <string> keys-mode;
+    in property <string> keys-pause;
+    // Why the last shortcut typed was not taken.
+    in property <string> shortcut-error;
+    // Shortcuts Windows refused, from the tray process.
+    in property <string> shortcut-note;
     in property <bool> log-titles;
     in property <bool> notify-failures;
+    in property <bool> battery-sdr;
     in property <string> version;
     in property <string> data-folder;
     in property <string> update-note;
@@ -259,8 +272,11 @@ export component SettingsWindow inherits Window {
     callback set-hold(int);
     callback set-delay(int);
     callback set-hotkeys(bool);
+    // 0 HDR on or off, 1 mode, 2 pause; the text as typed.
+    callback set-shortcut(int, string);
     callback set-log-titles(bool);
     callback set-notify-failures(bool);
+    callback set-battery-sdr(bool);
 
     HorizontalLayout {
         // Navigation pane; an icon rail in the compact layout.
@@ -396,6 +412,8 @@ export component SettingsWindow inherits Window {
                 idle: root.idle;
                 displays: root.status-displays;
                 hotkeys: root.hotkeys;
+                mode-keys: root.keys-mode;
+                pause-keys: root.keys-pause;
                 failure: root.failure;
                 update-version: root.update-bar-closed ? "" : root.install-version;
                 version: root.version;
@@ -506,6 +524,13 @@ export component SettingsWindow inherits Window {
                 set-profile(id, hdr, i) => {
                     root.set-game-profile(id, hdr, i);
                 }
+                set-auto-hdr(id, i) => {
+                    root.set-game-auto-hdr(id, i);
+                }
+                display-modes: root.display-modes;
+                set-display-mode(id, i) => {
+                    root.set-game-display-mode(id, i);
+                }
             }
             VideoPage {
                 property <bool> active: root.page == 2;
@@ -564,6 +589,9 @@ export component SettingsWindow inherits Window {
                 set-controlled(id, on) => {
                     root.set-controlled(id, on);
                 }
+                set-brightness(id, v) => {
+                    root.set-brightness(id, v);
+                }
                 set-content-only(on) => {
                     root.set-content-only(on);
                 }
@@ -586,9 +614,14 @@ export component SettingsWindow inherits Window {
                 hold: root.hold;
                 delay: root.delay;
                 hotkeys: root.hotkeys;
-                hotkey-note: root.hotkey-note;
+                keys-hdr: root.keys-hdr;
+                keys-mode: root.keys-mode;
+                keys-pause: root.keys-pause;
+                shortcut-error: root.shortcut-error;
+                shortcut-note: root.shortcut-note;
                 log-titles: root.log-titles;
                 notify-failures: root.notify-failures;
+                battery-sdr: root.battery-sdr;
                 version: root.version;
                 data-folder: root.data-folder;
                 update-note: root.update-note;
@@ -639,11 +672,17 @@ export component SettingsWindow inherits Window {
                 set-hotkeys(on) => {
                     root.set-hotkeys(on);
                 }
+                set-shortcut(i, text) => {
+                    root.set-shortcut(i, text);
+                }
                 set-log-titles(on) => {
                     root.set-log-titles(on);
                 }
                 set-notify-failures(on) => {
                     root.set-notify-failures(on);
+                }
+                set-battery-sdr(on) => {
+                    root.set-battery-sdr(on);
                 }
             }
         }
@@ -733,6 +772,7 @@ export component SettingsWindow inherits Window {
             total: root.game-total;
             game-info: root.game-info;
             mode: root.mode;
+            mode-keys: root.hotkeys ? root.keys-mode : "";
             start-with-windows: root.start-with-windows;
             set-controlled(id, on) => {
                 root.set-controlled(id, on);
