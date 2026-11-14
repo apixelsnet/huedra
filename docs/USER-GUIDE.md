@@ -124,7 +124,7 @@ Select a game to open its settings:
 | **Wait before turning HDR on** | Waits this many seconds after the game starts. Useful for games that show a launcher first. |
 | **Keep HDR on after the game closes** | Seconds HDR stays on after the game closes, so restarting it, or a launcher starting the game again, does not switch the display off and on twice. |
 | **Auto HDR** | Whether Windows Auto HDR turns this game's SDR picture into HDR: **As set in Windows**, **On** or **Off**. Huedra sets it on the game's program (a store game's once Huedra has seen it run); it applies from the game's next start. |
-| **Resolution and refresh rate** | While the game runs, the display it's on uses this mode, set after HDR has turned on; Windows' own mode comes back when it closes. When HDR leaves too little bandwidth for the rate, the fastest one offered then is used. The list shows the main display's modes of the same shape as now, at 50 Hz or more. |
+| **Resolution and refresh rate** | While the game runs, the display it's on uses this mode, set after HDR has turned on; Windows' own mode comes back when it closes. When HDR leaves too little bandwidth for the rate, the fastest one offered then is used. The list shows the main display's modes of the same shape as now, at 50 Hz or more. A game that sets its own refresh rate in full screen keeps its own. |
 
 When **Game information and icons** is on, the page also shows what PCGamingWiki reports about the game's HDR support and may suggest a setting. Suggestions are never applied without your choice.
 

@@ -65,3 +65,6 @@ Not verified: a store game's program being picked up while it runs (the same `se
 ## Result (2026-11-14) — Auto HDR tried with a real game
 - With `auto_hdr = "on"` for Hollow Knight (Steam, DirectX 11), the tray wrote `AutoHDREnable=4147;AppStatus=4;` at start, and choosing As set in Windows afterwards put back exactly `AppStatus=4;`. The game ran with HDR on its display.
 - Whether Windows then applied Auto HDR to it is still open. No Auto HDR notice appeared, and the Game Bar Display widget shows only Windows' global Auto HDR switch, which is off on this PC, not the per-game state. The objective check (Microsoft's Auto HDR split-screen debug value under HKLM) was not run, at the owner's choice. If per-game On needs the global switch, the game page should say so.
+
+## Result (2026-11-14) — Auto HDR picked up from a store game
+Verified on this PC: Hollow Knight (Steam) set to Auto HDR On with no program remembered yet, started through `steam://rungameid`. When its program came to the front the tray wrote `AutoHDREnable=4147;AppStatus=4;` and saved the program in `programs` ("Auto HDR for Hollow Knight (hollow_knight.exe): on."). Choosing As set in Windows afterwards restored `AppStatus=4;` and emptied `programs`.

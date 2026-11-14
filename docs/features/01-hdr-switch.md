@@ -66,3 +66,5 @@ Code: `SdrBrightness` in `crates/huedra-core/src/display.rs`, `sdr_brightness` a
 
 Verified on this PC (display 1 in HDR): `hdr brightness` read 160 nits (the value set in Windows); 320 and 120 were set and read back; 500 and 79 were refused with the range message; in SDR the change was refused with a clear message. On the Displays page the box showed 160; Up 20 times gave 180 nits and Down 20 times 160 (read back with the CLI). The display was left at 160 nits.
 Not verified: a second display; a display that ignores the request.
+
+Later the same day on display 2 (LG ULTRAGEAR, HDR on through the CLI): `hdr brightness --display 2` read 240 nits, 200 was set and read back, 240 restored, HDR off again.
