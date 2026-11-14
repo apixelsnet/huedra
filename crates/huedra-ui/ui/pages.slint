@@ -2482,21 +2482,25 @@ export component DisplaysPage inherits Rectangle {
                         Caption {
                             text: d.detail;
                         }
-                        if d.hdr-on && d.brightness > 0: HorizontalLayout {
+                        // Label above the box, so neither is squeezed when
+                        // the window is narrow or the display scale large.
+                        if d.hdr-on && d.brightness > 0: VerticalLayout {
                             alignment: start;
-                            spacing: 8px;
+                            spacing: 4px;
                             padding-top: 6px;
                             Caption {
-                                vertical-alignment: center;
                                 text: "SDR content brightness (nits)";
                             }
-                            NumberBox {
-                                accessible-label: "SDR content brightness on " + d.title + " (nits)";
-                                minimum: 80;
-                                maximum: 480;
-                                value: d.brightness;
-                                edited(v) => {
-                                    root.set-brightness(d.id, v);
+                            HorizontalLayout {
+                                alignment: start;
+                                NumberBox {
+                                    accessible-label: "SDR content brightness on " + d.title + " (nits)";
+                                    minimum: 80;
+                                    maximum: 480;
+                                    value: d.brightness;
+                                    edited(v) => {
+                                        root.set-brightness(d.id, v);
+                                    }
                                 }
                             }
                         }

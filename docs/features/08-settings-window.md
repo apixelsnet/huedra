@@ -231,3 +231,10 @@ Decided 2026-11-07 (owner): people who used Huedra before the new window never s
 ## Result (2026-11-07) — Mica behind the pages too
 Code: the page area's background in `crates/huedra-ui/ui/app.slint` (`root.mica`), the comment in `run` (`crates/huedra-ui/src/app.rs`).
 - Owner's request: the navigation pane showed Mica while the pages kept the plain background, a visible change of color. With Mica the page area is now transparent as well, so the whole window shares one backdrop, as in Windows' own apps; the cards keep their solid surface. Without Mica (before Windows 11 22H2) nothing changes.
+
+## Result (2026-11-14) — new controls in both themes and at larger scales
+- The new controls were captured with the sample build on a hidden desktop, dark and light (`HUEDRA_SAMPLE_THEME`), at scale 1, 1.5 and 2 (`SLINT_SCALE_FACTOR`), in a 1100-pixel-wide window: Settings with the battery row and the Keyboard shortcuts boxes, a game's page with Auto HDR and Resolution and refresh rate, and Displays with the SDR content brightness box.
+- Fixed from it: at 1.5 and 2 the brightness label beside its box was squeezed to three or four lines; the label now sits above the box (`crates/huedra-ui/ui/pages.slint`). The README tour was retaken with it.
+
+Verified on this PC: all six captures read cleanly after the fix (the Displays page rechecked dark at 1 and 2, light at 1.5). Not verified: real Windows display scaling (simulated with `SLINT_SCALE_FACTOR`, as before); the Keyboard shortcuts boxes at scale 2 (the expander was out of view in the narrow window).
+
