@@ -95,6 +95,24 @@ Thank you to everyone in [SUPPORTERS.md](SUPPORTERS.md).
 
 Contributions are welcome. [CONTRIBUTING.md](CONTRIBUTING.md) explains how to build Huedra, the project layout and what a pull request needs. Changes are listed in [CHANGELOG.md](CHANGELOG.md).
 
+## Code signing policy
+
+Free code signing provided by [SignPath.io](https://about.signpath.io/), certificate by [SignPath Foundation](https://signpath.org/).
+
+The project has applied to the SignPath Foundation, and releases are not Windows-signed until the application is approved. Every release is already signed with the project's own key (minisign), and Huedra installs updates only when that signature is valid.
+
+- **What is signed:** only `huedra.exe`, built from this repository by the [Release workflow](.github/workflows/release.yml) on GitHub Actions, from a version tag on `main`. Nothing built elsewhere and no third-party program is signed.
+- **Committers and reviewers:** the maintainers of the [apixelsnet](https://github.com/apixelsnet) organization on GitHub. Changes reach `main` only through pull requests that pass the project's checks.
+- **Approvers:** the same maintainers. Each release is started by hand, and each signing request is approved by a maintainer.
+- **Accounts:** the maintainers' GitHub and SignPath accounts must use multi-factor authentication.
+
+**Privacy.** Huedra connects to other systems only for these features, both on by default and both can be turned off under **Settings**:
+
+- **Updates:** once a day it downloads the release files from this repository's GitHub releases (`github.com`).
+- **Game information and icons:** the settings window looks up installed games on PCGamingWiki (`www.pcgamingwiki.com`) and downloads Discord's public game list and game icons (`discord.com`, `cdn.discordapp.com`).
+
+Nothing else is sent anywhere. See [PRIVACY.md](PRIVACY.md) for details.
+
 ## License
 
 Huedra is licensed under the [Apache License, Version 2.0](LICENSE). The settings window uses [Slint](https://slint.dev) under the Slint Royalty-free Desktop, Mobile, and Web Applications License 2.0.
