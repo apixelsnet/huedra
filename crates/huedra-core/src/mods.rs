@@ -1069,7 +1069,7 @@ fn deletion_order(removal: &HandRemoval) -> Vec<&str> {
 }
 
 /// Takes a mod installed by hand out of its folder: copies every item to
-/// `keep` first, then deletes them in [`deletion_order`]. Running it
+/// `keep` first, then deletes them in the order `deletion_order` gives. Running it
 /// again after an error continues with what is left.
 ///
 /// # Errors
