@@ -2,7 +2,7 @@
 
 Changes that matter to people using Huedra (not the project's own build and workflow changes). Versions follow `MAJOR.MINOR.PATCH`; the updater installs only versions newer than the running one.
 
-## Unreleased
+## 1.3.0 — 2026-11-16
 
 ### Added
 - **HDR mods**: games with a [RenoDX](https://github.com/clshortfuse/renodx) or [Luma](https://github.com/Filoppi/Luma-Framework) HDR mod are marked **Mod available** in the cover grid and listed by the new **HDR mods** filter. A game's **HDR mod** section installs the mod with **Install**: Huedra downloads it (and ReShade, for RenoDX) and puts it next to the game's program, which it finds in the game's folder, so the game usually doesn't have to run first. A dialog lists every change before anything is copied. **Remove** deletes the files Huedra added and puts back the ones it replaced. Mods listed only on a page get a link to it. `huedra uninstall` removes every mod Huedra installed.
