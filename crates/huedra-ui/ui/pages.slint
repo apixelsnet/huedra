@@ -1190,7 +1190,7 @@ component GameDetailPanel inherits Rectangle {
                     text: "Install";
                     enabled: false;
                 }
-                if root.detail.mod-state == "installed": ActionButton {
+                if root.detail.mod-state == "installed" || root.detail.mod-state == "found": ActionButton {
                     text: "Remove";
                     clicked => {
                         root.remove-mod(root.detail.id);

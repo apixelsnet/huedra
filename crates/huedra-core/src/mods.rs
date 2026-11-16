@@ -2,8 +2,9 @@
 //! ReShade) and Luma. This module reads the two projects' lists of mods,
 //! matches a game to one, reads which graphics API a program uses, and keeps
 //! a record of every file an install writes, so removing the mod puts the
-//! folder back as it was. Downloads and unpacking run in the settings
-//! process.
+//! folder back as it was. It also finds mods installed by hand and takes
+//! them out again, keeping a copy. Downloads and unpacking run in the
+//! settings process.
 //! Feature doc: `docs/features/16-hdr-mods.md`.
 
 use std::fs;
@@ -871,6 +872,235 @@ pub fn find_in(folders: &[PathBuf]) -> Option<Found> {
     None
 }
 
+// ---- Removing a mod installed by hand --------------------------------------
+
+/// Largest DLL read to see whether it is ReShade (ReShade is about 6 MB).
+const MAX_RESHADE_BYTES: u64 = 32 << 20;
+
+/// The `ProductName` in a program's version information, read from its
+/// bytes; `None` when it has none.
+pub fn product_name(bytes: &[u8]) -> Option<String> {
+    let key: Vec<u8> = "ProductName\0"
+        .encode_utf16()
+        .flat_map(u16::to_le_bytes)
+        .collect();
+    let mut from = 0;
+    while let Some(at) = bytes
+        .get(from..)?
+        .windows(key.len())
+        .position(|w| w == key.as_slice())
+    {
+        let start = from + at;
+        from = start + 1;
+        if start % 2 != 0 {
+            continue;
+        }
+        // The value follows after zero padding.
+        let mut i = start + key.len();
+        while u16_at(bytes, i) == Some(0) && i - start - key.len() < 6 {
+            i += 2;
+        }
+        let mut units = Vec::new();
+        while let Some(unit) = u16_at(bytes, i) {
+            if unit == 0 || units.len() > 64 {
+                break;
+            }
+            units.push(unit);
+            i += 2;
+        }
+        if !units.is_empty() {
+            return String::from_utf16(&units).ok();
+        }
+    }
+    None
+}
+
+/// Whether a file is ReShade, by the product name in its version
+/// information.
+pub fn is_reshade(path: &Path) -> bool {
+    let small = fs::metadata(path).is_ok_and(|m| m.is_file() && m.len() <= MAX_RESHADE_BYTES);
+    small
+        && fs::read(path)
+            .ok()
+            .and_then(|bytes| product_name(&bytes))
+            .is_some_and(|name| name == "ReShade")
+}
+
+/// What removing a mod installed by hand takes out of the folder its
+/// add-on is in. Names are relative to that folder.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HandRemoval {
+    /// The folder the add-on is in.
+    pub folder: PathBuf,
+    /// Files and folders to take out; ReShade's program, when it goes, first.
+    pub items: Vec<String>,
+    /// ReShade's program in the folder, when one was found.
+    pub reshade: Option<String>,
+    /// Other ReShade add-ons are in the folder, so ReShade and its files
+    /// stay.
+    pub reshade_kept: bool,
+}
+
+/// Works out what removing the RenoDX or Luma mod in `folder` takes out:
+/// the mod's add-ons, Luma's folder, and ReShade with its settings, log and
+/// shaders, unless other add-ons use ReShade. Nothing outside the folder.
+///
+/// # Errors
+/// I/O errors reading the folder.
+pub fn plan_hand_removal(folder: &Path) -> io::Result<HandRemoval> {
+    let mut add_ons = Vec::new();
+    let mut other_add_ons = false;
+    let mut reshade = None;
+    let mut luma_dir = None;
+    let mut present = Vec::new();
+    let mut entries: Vec<_> = fs::read_dir(folder)?.filter_map(Result::ok).collect();
+    entries.sort_by_key(fs::DirEntry::file_name);
+    for entry in entries.iter().take(MAX_FILES) {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let lower = name.to_ascii_lowercase();
+        let Ok(kind) = entry.file_type() else {
+            continue;
+        };
+        if kind.is_dir() || kind.is_symlink() {
+            if lower == "luma" {
+                luma_dir = Some(name);
+            } else if lower == "reshade-shaders" {
+                present.push(name);
+            }
+            continue;
+        }
+        if add_on_source(&lower).is_some() {
+            add_ons.push(name);
+        } else if [".addon", ".addon64", ".addon32"]
+            .iter()
+            .any(|ext| lower.ends_with(ext))
+        {
+            other_add_ons = true;
+        } else if lower.ends_with(".dll") && reshade.is_none() && is_reshade(&entry.path()) {
+            reshade = Some(name);
+        } else if RUNTIME_FILES.iter().any(|f| f.eq_ignore_ascii_case(&name)) {
+            present.push(name);
+        }
+    }
+    let mut items = Vec::new();
+    let reshade_goes = reshade.is_some() && !other_add_ons;
+    if reshade_goes {
+        items.extend(reshade.clone());
+    }
+    let luma = add_ons
+        .iter()
+        .any(|n| add_on_source(n) == Some(Source::Luma));
+    items.extend(add_ons);
+    if luma {
+        items.extend(luma_dir);
+    }
+    if reshade_goes {
+        items.extend(present);
+    }
+    Ok(HandRemoval {
+        folder: folder.to_path_buf(),
+        items,
+        reshade_kept: reshade.is_some() && !reshade_goes,
+        reshade,
+    })
+}
+
+/// Where the files of a mod installed by hand are kept once removed: a new
+/// folder per removal, outside the game's work folder, which a later
+/// removal by Huedra deletes.
+pub fn removed_folder(mods: &Path, id: &GameId, now: u64) -> PathBuf {
+    mods.join("removed").join(format!("{}-{now}", key(id)))
+}
+
+/// Copies a file or folder; links are not followed, and inside a folder
+/// they are skipped (their target is not the mod's).
+fn copy_item(from: &Path, to: &Path) -> io::Result<()> {
+    let kind = fs::symlink_metadata(from)?.file_type();
+    if kind.is_symlink() {
+        Ok(())
+    } else if kind.is_dir() {
+        fs::create_dir_all(to)?;
+        for entry in fs::read_dir(from)? {
+            let entry = entry?;
+            copy_item(&entry.path(), &to.join(entry.file_name()))?;
+        }
+        Ok(())
+    } else {
+        fs::copy(from, to).map(|_| ())
+    }
+}
+
+/// Deletes a file, a folder with what is in it, or only the link when it
+/// is one.
+fn delete_item(path: &Path) -> io::Result<()> {
+    let kind = match fs::symlink_metadata(path) {
+        Ok(meta) => meta.file_type(),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(error) => return Err(error),
+    };
+    if kind.is_symlink() {
+        // A link to a folder is removed as a folder on Windows.
+        fs::remove_file(path).or_else(|_| fs::remove_dir(path))
+    } else if kind.is_dir() {
+        fs::remove_dir_all(path)
+    } else {
+        fs::remove_file(path)
+    }
+}
+
+/// The order items are deleted in: ReShade's files and Luma's folder, then
+/// ReShade's program, then the add-ons. A removal that stops part way thus
+/// leaves the add-on, so the mod is still found and Remove offered, and
+/// leaves ReShade's program while any of its files remain, so a new plan
+/// lists them again.
+fn deletion_order(removal: &HandRemoval) -> Vec<&str> {
+    let rank = |item: &str| {
+        if add_on_source(item).is_some() {
+            2
+        } else if removal.reshade.as_deref() == Some(item) {
+            1
+        } else {
+            0
+        }
+    };
+    let mut order: Vec<&str> = removal.items.iter().map(String::as_str).collect();
+    order.sort_by_key(|item| rank(item));
+    order
+}
+
+/// Takes a mod installed by hand out of its folder: copies every item to
+/// `keep` first, then deletes them in [`deletion_order`]. Running it
+/// again after an error continues with what is left.
+///
+/// # Errors
+/// I/O errors; when copying or the first deletion fails, nothing was
+/// deleted and the copy is dropped again.
+pub fn remove_by_hand(removal: &HandRemoval, keep: &Path) -> io::Result<()> {
+    let copied = (|| {
+        fs::create_dir_all(keep)?;
+        for item in &removal.items {
+            let from = removal.folder.join(item);
+            if fs::symlink_metadata(&from).is_ok() {
+                copy_item(&from, &keep.join(item))?;
+            }
+        }
+        Ok(())
+    })();
+    if let Err(error) = copied {
+        let _ = fs::remove_dir_all(keep);
+        return Err(error);
+    }
+    for (n, item) in deletion_order(removal).into_iter().enumerate() {
+        if let Err(error) = delete_item(&removal.folder.join(item)) {
+            if n == 0 {
+                let _ = fs::remove_dir_all(keep);
+            }
+            return Err(error);
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1160,6 +1390,187 @@ mod tests {
         let kept = remove(&mods, &record, &text_hash).expect("remove");
         assert_eq!(kept, ["x.addon64"], "changed file kept");
         assert!(game.join("x.addon64").exists(), "still there");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    /// A DLL whose version information names `product`.
+    fn dll(product: &str) -> Vec<u8> {
+        let utf16 = |s: &str| -> Vec<u8> { s.encode_utf16().flat_map(u16::to_le_bytes).collect() };
+        let mut bytes = b"MZ".to_vec();
+        bytes.resize(64, 0);
+        bytes.extend(utf16("CompanyName\0"));
+        bytes.extend(utf16("crosire\0"));
+        bytes.extend(utf16("ProductName\0"));
+        bytes.extend([0, 0]);
+        bytes.extend(utf16(product));
+        bytes.extend([0, 0, 0, 0]);
+        bytes
+    }
+
+    #[test]
+    fn reads_the_product_name() {
+        assert_eq!(
+            product_name(&dll("ReShade")).as_deref(),
+            Some("ReShade"),
+            "ReShade"
+        );
+        assert_eq!(
+            product_name(&dll("Microsoft® Windows® Operating System")).as_deref(),
+            Some("Microsoft® Windows® Operating System"),
+            "Windows"
+        );
+        assert_eq!(product_name(b"MZ no version"), None, "none");
+    }
+
+    fn game_folder(name: &str) -> PathBuf {
+        let root = std::env::temp_dir().join(format!("huedra-mods-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("game")).expect("folders");
+        root
+    }
+
+    #[test]
+    fn removes_a_mod_installed_by_hand() {
+        let root = game_folder("hand");
+        let game = root.join("game");
+        fs::write(game.join("dxgi.dll"), dll("ReShade")).expect("write");
+        fs::write(game.join("steam_api64.dll"), dll("Steamworks")).expect("write");
+        fs::write(game.join("Game.exe"), "game").expect("write");
+        fs::write(game.join("renodx-game.addon64"), "addon").expect("write");
+        fs::write(game.join("ReShade.ini"), "ini").expect("write");
+        fs::write(game.join("ReShade.log"), "log").expect("write");
+        fs::create_dir_all(game.join("reshade-shaders").join("Shaders")).expect("folders");
+        fs::write(
+            game.join("reshade-shaders").join("Shaders").join("a.fx"),
+            "fx",
+        )
+        .expect("write");
+        let plan = plan_hand_removal(&game).expect("plan");
+        assert_eq!(
+            plan.items,
+            [
+                "dxgi.dll",
+                "renodx-game.addon64",
+                "ReShade.ini",
+                "ReShade.log",
+                "reshade-shaders"
+            ],
+            "ReShade first, then the add-on and ReShade's files"
+        );
+        assert_eq!(plan.reshade.as_deref(), Some("dxgi.dll"), "ReShade found");
+        assert!(!plan.reshade_kept, "ReShade goes");
+        let keep = removed_folder(&root.join("mods"), &GameId::from_raw("steam:1"), 7);
+        remove_by_hand(&plan, &keep).expect("remove");
+        let mut left: Vec<String> = fs::read_dir(&game)
+            .expect("read")
+            .map(|e| e.expect("entry").file_name().to_string_lossy().into_owned())
+            .collect();
+        left.sort();
+        assert_eq!(
+            left,
+            ["Game.exe", "steam_api64.dll"],
+            "only the game's files stay"
+        );
+        assert_eq!(
+            fs::read(keep.join("reshade-shaders").join("Shaders").join("a.fx")).expect("kept"),
+            b"fx",
+            "copies kept"
+        );
+        assert!(keep.join("dxgi.dll").is_file(), "ReShade kept");
+        assert_eq!(
+            plan_hand_removal(&game).expect("plan").items,
+            Vec::<String>::new(),
+            "nothing left to remove"
+        );
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn a_removal_that_stopped_can_be_finished() {
+        let root = game_folder("stopped");
+        let game = root.join("game");
+        fs::write(game.join("dxgi.dll"), dll("ReShade")).expect("write");
+        fs::write(game.join("renodx-game.addon64"), "addon").expect("write");
+        fs::write(game.join("ReShade.ini"), "ini").expect("write");
+        fs::write(game.join("ReShade.log"), "log").expect("write");
+        let plan = plan_hand_removal(&game).expect("plan");
+        assert_eq!(
+            deletion_order(&plan),
+            [
+                "ReShade.ini",
+                "ReShade.log",
+                "dxgi.dll",
+                "renodx-game.addon64"
+            ],
+            "ReShade's files, then ReShade, then the add-on"
+        );
+        // Stopped after ReShade.ini: ReShade is still there, so the rest is
+        // listed again.
+        fs::remove_file(game.join("ReShade.ini")).expect("delete");
+        assert_eq!(
+            plan_hand_removal(&game).expect("plan").items,
+            ["dxgi.dll", "renodx-game.addon64", "ReShade.log"],
+            "the rest"
+        );
+        // Stopped before the add-on: the mod is still found.
+        fs::remove_file(game.join("ReShade.log")).expect("delete");
+        fs::remove_file(game.join("dxgi.dll")).expect("delete");
+        assert!(
+            find_in(std::slice::from_ref(&game)).is_some(),
+            "still found"
+        );
+        let plan = plan_hand_removal(&game).expect("plan");
+        assert_eq!(plan.items, ["renodx-game.addon64"], "the add-on");
+        remove_by_hand(&plan, &root.join("kept")).expect("remove");
+        assert_eq!(fs::read_dir(&game).expect("read").count(), 0, "clean");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn removes_luma_and_keeps_reshade_for_other_add_ons() {
+        let root = game_folder("luma");
+        let game = root.join("game");
+        fs::write(game.join("dxgi.dll"), dll("ReShade")).expect("write");
+        fs::write(game.join("Luma-Unity Engine.addon"), "addon").expect("write");
+        fs::create_dir_all(game.join("Luma").join("Global")).expect("folders");
+        fs::write(game.join("Luma").join("Global").join("a.hlsl"), "x").expect("write");
+        fs::write(game.join("ReShade.ini"), "ini").expect("write");
+        let plan = plan_hand_removal(&game).expect("plan");
+        assert_eq!(
+            plan.items,
+            ["dxgi.dll", "Luma-Unity Engine.addon", "Luma", "ReShade.ini"],
+            "Luma with its folder"
+        );
+        fs::write(game.join("other.addon64"), "another add-on").expect("write");
+        let plan = plan_hand_removal(&game).expect("plan");
+        assert_eq!(
+            plan.items,
+            ["Luma-Unity Engine.addon", "Luma"],
+            "ReShade stays for the other add-on"
+        );
+        assert!(plan.reshade_kept, "said so");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn removes_only_the_link_to_a_shared_folder() {
+        let root = game_folder("link");
+        let game = root.join("game");
+        let shared = root.join("shared");
+        fs::create_dir_all(&shared).expect("folders");
+        fs::write(shared.join("mine.fx"), "keep").expect("write");
+        std::os::unix::fs::symlink(&shared, game.join("reshade-shaders")).expect("link");
+        fs::write(game.join("dxgi.dll"), dll("ReShade")).expect("write");
+        fs::write(game.join("renodx-game.addon64"), "addon").expect("write");
+        let plan = plan_hand_removal(&game).expect("plan");
+        assert!(
+            plan.items.iter().any(|i| i == "reshade-shaders"),
+            "link listed"
+        );
+        remove_by_hand(&plan, &root.join("kept")).expect("remove");
+        assert!(!game.join("reshade-shaders").exists(), "link gone");
+        assert!(shared.join("mine.fx").is_file(), "its target untouched");
         let _ = fs::remove_dir_all(&root);
     }
 }

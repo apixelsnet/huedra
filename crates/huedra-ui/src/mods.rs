@@ -1,7 +1,7 @@
 //! HDR mods in the settings window: the RenoDX and Luma lists, kept for a
-//! day, and installing or removing a mod on a background thread. What is
-//! checked, and the record that makes every install reversible, are in
-//! `huedra_core::mods`.
+//! day, and installing or removing a mod (also one installed by hand) on a
+//! background thread. What is checked, and the record that makes every
+//! install reversible, are in `huedra_core::mods`.
 //! Feature doc: `docs/features/16-hdr-mods.md`.
 
 use std::ffi::OsStr;
@@ -407,6 +407,43 @@ pub fn uninstall(
             } else {
                 mods::remove(&mods_dir, &manifest, &hash::sha256_hex).map_err(|e| {
                     format!("Removing stopped ({e}). Close the game and try again; Huedra continues where it stopped.")
+                })
+            };
+            done(result);
+        });
+}
+
+/// Works out on a background thread what removing the mod installed by hand
+/// in `folder` takes out (reading DLLs to find ReShade takes a moment).
+pub fn plan_by_hand(
+    folder: PathBuf,
+    done: impl FnOnce(Result<mods::HandRemoval, String>) + Send + 'static,
+) {
+    let _ = thread::Builder::new()
+        .name("huedra-mod-look".into())
+        .spawn(move || {
+            done(
+                mods::plan_hand_removal(&folder)
+                    .map_err(|e| format!("Huedra couldn't read {} ({e}).", folder.display())),
+            );
+        });
+}
+
+/// Removes a mod installed by hand on a background thread, keeping a copy
+/// of every file in `keep`; `done` gets why it stopped, if it did.
+pub fn uninstall_by_hand(
+    removal: mods::HandRemoval,
+    keep: PathBuf,
+    done: impl FnOnce(Result<(), String>) + Send + 'static,
+) {
+    let _ = thread::Builder::new()
+        .name("huedra-mod-remove".into())
+        .spawn(move || {
+            let result = if running_in(&removal.folder) {
+                Err("Close the game first, then remove the mod.".to_owned())
+            } else {
+                mods::remove_by_hand(&removal, &keep).map_err(|e| {
+                    format!("Removing stopped ({e}). Close the game and try again; Huedra continues with what is left.")
                 })
             };
             done(result);

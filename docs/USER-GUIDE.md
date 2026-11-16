@@ -173,7 +173,12 @@ When a game has online play, Huedra warns before the install: play offline while
 
 **Removing.** Close the game and choose **Remove**. Huedra keeps a record of every file it added and a copy of every file it replaced (in `%LOCALAPPDATA%\Huedra\mods`). Removing deletes the files it added, unless they changed since, puts back the files it replaced, and deletes the files ReShade created while the game ran (`ReShade.ini`, `ReShade.log`, `ReShadePreset.ini`) when they weren't there before. `huedra uninstall` removes every mod Huedra installed.
 
-**Mods you installed yourself.** When you open the window, Huedra looks in your games' folders for RenoDX and Luma add-ons. A game where it finds one shows **RenoDX is installed** (or **Luma is installed**) and the folder, and Auto HDR and RTX HDR stay off for it too. Huedra didn't install those files, so it leaves them alone; remove them the way you installed them.
+**Mods you installed yourself.** When you open the window, Huedra looks in your games' folders for RenoDX and Luma add-ons. A game where it finds one shows **RenoDX is installed** (or **Luma is installed**) and the folder, and Auto HDR and RTX HDR stay off for it too. Huedra doesn't touch those files unless you choose **Remove** there. Close the game first. The dialog lists everything that goes, all from the folder the add-on is in:
+
+- the RenoDX or Luma add-on, and Luma's `Luma` folder;
+- ReShade (whichever DLL's version information names ReShade, usually `dxgi.dll`) with `ReShade.ini`, `ReShade.log`, `ReShadePreset.ini` and `reshade-shaders`. When other ReShade add-ons are in the folder, ReShade and its files stay, and the dialog says so.
+
+Huedra first copies all of it to `%LOCALAPPDATA%\Huedra\mods\removed\<game>-<number>`, then deletes it from the game's folder; the result names that folder, so you can put the files back or delete the copy. Huedra can't know whether the mod replaced one of the game's own files when you installed it, so if the game misbehaves afterwards, have Steam (**Properties › Installed Files › Verify integrity of game files**) or the game's launcher check its files.
 
 **Risks.** Mods change game files. Online games and anti-cheat systems may treat that as cheating, and accounts have been banned for it. A mod can break with a game update, and the game's makers don't support modded games. You install mods at your own risk; Huedra's authors are not responsible for bans, crashes or lost progress.
 

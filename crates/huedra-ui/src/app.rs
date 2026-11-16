@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
 use huedra_core::color::Installed;
 use huedra_core::command;
@@ -136,6 +136,9 @@ struct State {
     mod_plan: Option<Plan>,
     /// The removal waiting for the user's confirmation.
     mod_remove: Option<Manifest>,
+    /// The removal of a mod installed by hand waiting for the user's
+    /// confirmation: the game, its name, the project and what goes.
+    mod_remove_hand: Option<(GameId, String, hdr_mods::Source, hdr_mods::HandRemoval)>,
     /// The game whose mod is being installed or removed.
     mod_busy: Option<GameId>,
     /// Set to stop the install under way.
@@ -301,6 +304,7 @@ pub fn run(locations: Locations, page: Page) -> Result<(), slint::PlatformError>
         mod_pending: None,
         mod_plan: None,
         mod_remove: None,
+        mod_remove_hand: None,
         mod_busy: None,
         mod_cancel: Arc::new(AtomicBool::new(false)),
         mod_removing: false,
@@ -1049,7 +1053,7 @@ fn mod_view(state: &State, game: &Game) -> (&'static str, String, String, String
                 "Installed outside Huedra, in {}",
                 found.folder.display()
             ),
-            "Huedra didn't install it, so it leaves its files alone; remove it the way you installed it.".to_owned(),
+            "Huedra didn't install it. Remove takes out the mod and its ReShade and keeps a copy of every file.".to_owned(),
             mod_for(state, game).map(link).unwrap_or_default(),
         );
     }
@@ -1957,6 +1961,7 @@ fn wire_mods(ui: &SettingsWindow) {
                 return;
             }
             let Some(record) = installed_mod(s, &id).cloned() else {
+                offer_hand_removal(&ui, s, &id);
                 return;
             };
             let mut lines: Vec<String> = record
@@ -2003,6 +2008,7 @@ fn wire_mods(ui: &SettingsWindow) {
             s.mod_pending = None;
             s.mod_plan = None;
             s.mod_remove = None;
+            s.mod_remove_hand = None;
             ui.set_mod_dialog(0);
         });
     });
@@ -2013,6 +2019,7 @@ fn wire_mods(ui: &SettingsWindow) {
         };
         with_state(|s| match ui.get_mod_dialog() {
             2 => start_install(&ui, s),
+            4 if s.mod_remove_hand.is_some() => start_hand_removal(&ui, s),
             4 => start_remove(&ui, s),
             _ => {}
         });
@@ -2132,6 +2139,139 @@ fn start_remove(ui: &SettingsWindow, state: &mut State) {
         });
     };
     mod_jobs::uninstall(record, state.locations.mods.clone(), done);
+}
+
+/// Works out what removing a mod installed by hand takes out and asks to
+/// confirm it, listing every file and folder.
+fn offer_hand_removal(ui: &SettingsWindow, state: &State, id: &GameId) {
+    let Some(found) = state.found.get(id).cloned() else {
+        return;
+    };
+    let name = state
+        .games
+        .iter()
+        .find(|g| &g.id == id)
+        .map(|g| g.name.clone())
+        .unwrap_or_default();
+    let id = id.clone();
+    let weak = ui.as_weak();
+    mod_jobs::plan_by_hand(found.folder.clone(), move |result| {
+        let _ = weak.upgrade_in_event_loop(move |ui| {
+            let nothing = with_state(|s| {
+                if s.mod_busy.is_some() || ui.get_mod_dialog() != 0 {
+                    return false;
+                }
+                let label = found.source.label();
+                match result {
+                    Ok(removal) if !removal.items.is_empty() => {
+                        let mut lines: Vec<String> = removal
+                            .items
+                            .iter()
+                            .take(8)
+                            .map(|item| format!("Take out {item}"))
+                            .collect();
+                        if removal.items.len() > 8 {
+                            lines.push(format!("And {} more", removal.items.len() - 8));
+                        }
+                        if removal.reshade_kept {
+                            lines.push(format!(
+                                "Leave ReShade ({}) and its settings: other add-ons in the folder use it",
+                                removal.reshade.clone().unwrap_or_default()
+                            ));
+                        } else if removal.reshade.is_none() {
+                            lines.push(
+                                "Only the mod's own files go: no ReShade was found next to it"
+                                    .to_owned(),
+                            );
+                        }
+                        lines.push(
+                            "Keep a copy of everything it takes out in Huedra's folder".to_owned(),
+                        );
+                        lines.push(
+                            "Let Windows Auto HDR and NVIDIA RTX HDR follow this game's settings again"
+                                .to_owned(),
+                        );
+                        ui.set_mod_title(format!("Remove {label} from {name}?").into());
+                        ui.set_mod_text(
+                            format!(
+                                "{label} was installed outside Huedra. In {}, Huedra will:",
+                                removal.folder.display()
+                            )
+                            .into(),
+                        );
+                        ui.set_mod_changes(lines_model(lines));
+                        ui.set_mod_online(false);
+                        s.mod_remove_hand = Some((id.clone(), name.clone(), found.source, removal));
+                        ui.set_mod_dialog(4);
+                        false
+                    }
+                    Ok(_) => {
+                        mod_result(
+                            &ui,
+                            "Nothing to remove",
+                            &format!("The {label} files are no longer in {}.", found.folder.display()),
+                            Vec::new(),
+                        );
+                        true
+                    }
+                    Err(why) => {
+                        mod_result(&ui, "The HDR mod can't be removed", &why, Vec::new());
+                        false
+                    }
+                }
+            });
+            if nothing == Some(true) {
+                start_found_scan(&ui);
+            }
+        });
+    });
+}
+
+/// Removes a mod installed by hand once confirmed, keeping a copy of its
+/// files, then looks for mods again.
+fn start_hand_removal(ui: &SettingsWindow, state: &mut State) {
+    let Some((game, name, source, removal)) = state.mod_remove_hand.take() else {
+        return;
+    };
+    state.mod_busy = Some(game.clone());
+    state.mod_removing = true;
+    ui.set_mod_title(format!("Removing {} from {name}", source.label()).into());
+    ui.set_mod_text(SharedString::default());
+    ui.set_mod_step("Copying the mod's files to Huedra's folder, then taking them out".into());
+    ui.set_mod_progress(0.5);
+    ui.set_mod_dialog(3);
+    refresh_games(ui, state);
+    let now = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+    let keep = hdr_mods::removed_folder(&state.locations.mods, &game, now);
+    let shown = keep.display().to_string();
+    let weak = ui.as_weak();
+    let done = move |result: Result<(), String>| {
+        let _ = weak.upgrade_in_event_loop(move |ui| {
+            with_state(|s| {
+                s.mod_busy = None;
+                s.mod_removing = false;
+                match result {
+                    Ok(()) => {
+                        s.found.remove(&game);
+                        mod_result(
+                            &ui,
+                            "HDR mod removed",
+                            &format!(
+                                "A copy of its files is in {shown}, in case you want them back. Huedra can't tell whether a mod installed by hand replaced any of the game's own files; if the game misbehaves, have Steam or the game's launcher verify its files."
+                            ),
+                            Vec::new(),
+                        );
+                    }
+                    Err(why) => mod_result(&ui, "The HDR mod wasn't removed", &why, Vec::new()),
+                }
+                refresh_games(&ui, s);
+            });
+            start_found_scan(&ui);
+        });
+    };
+    mod_jobs::uninstall_by_hand(removal, keep, done);
 }
 
 fn show_displays(ui: &SettingsWindow, state: &State) {
