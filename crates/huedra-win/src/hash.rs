@@ -14,3 +14,11 @@ pub fn sha256(data: &[u8]) -> windows::core::Result<[u8; 32]> {
     unsafe { BCryptHash(BCRYPT_SHA256_ALG_HANDLE, None, data, &mut digest) }.ok()?;
     Ok(digest)
 }
+
+/// The SHA-256 digest of `data` in lowercase hex; empty when Windows
+/// refuses the request, so it never matches a recorded digest.
+pub fn sha256_hex(data: &[u8]) -> String {
+    sha256(data)
+        .map(|digest| digest.iter().map(|b| format!("{b:02x}")).collect())
+        .unwrap_or_default()
+}

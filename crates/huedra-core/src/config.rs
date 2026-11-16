@@ -155,6 +155,17 @@ pub struct General {
     /// set on the first acceptance of the disclaimer, so only people who
     /// used Huedra before the new window see it once.
     pub new_look_seen: bool,
+    /// Windows Auto HDR for games without a choice of their own. Off unless
+    /// the user turns it on.
+    pub auto_hdr: bool,
+    /// NVIDIA RTX HDR for games without a choice of their own. Off unless
+    /// the user turns it on.
+    pub rtx_hdr: bool,
+    /// Look up HDR mods (RenoDX and Luma) for the games.
+    pub hdr_mods: bool,
+    /// The HDR mods notice (online play, anti-cheat, responsibility) was
+    /// accepted. Nothing is installed before that.
+    pub mods_disclaimer_accepted: bool,
 }
 
 impl Default for General {
@@ -174,6 +185,10 @@ impl Default for General {
             battery_sdr: false,
             disclaimer_accepted: false,
             new_look_seen: false,
+            auto_hdr: false,
+            rtx_hdr: false,
+            hdr_mods: true,
+            mods_disclaimer_accepted: false,
         }
     }
 }
@@ -341,13 +356,27 @@ pub struct GameSettings {
     /// only a game switched off writes `false`. See [`Config::steam_start`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub steam_start: Option<bool>,
-    /// Windows Auto HDR for the game's programs.
+    /// Windows Auto HDR for the game's programs; unset follows
+    /// [`General::auto_hdr`].
     #[serde(default, skip_serializing_if = "is_windows_auto_hdr")]
     pub auto_hdr: AutoHdr,
-    /// The game's programs Huedra saw running while Auto HDR was set for
-    /// it, which get the setting (full paths).
+    /// NVIDIA RTX HDR for the game's programs; unset follows
+    /// [`General::rtx_hdr`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rtx_hdr: Option<bool>,
+    /// The game's programs Huedra saw running, which get its Auto HDR and
+    /// RTX HDR settings (full paths).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub programs: Vec<String>,
+    /// The name of the HDR mod Huedra installed for the game, while it is
+    /// installed. Auto HDR and RTX HDR stay off for the game meanwhile.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub hdr_mod: Option<String>,
+    /// An HDR mod found in the game's folders that Huedra did not install
+    /// (put there by hand), as the settings window last saw it. Auto HDR and
+    /// RTX HDR stay off for the game as well; Huedra never touches its files.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub found_mod: Option<String>,
     /// The resolution and refresh rate of the display the game is on while
     /// it runs; `None` keeps the one set in Windows.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -374,7 +403,10 @@ impl GameSettings {
             launch_with_hdr: false,
             steam_start: None,
             auto_hdr: AutoHdr::Windows,
+            rtx_hdr: None,
             programs: Vec::new(),
+            hdr_mod: None,
+            found_mod: None,
             display_mode: None,
             sdr_profile: None,
             hdr_profile: None,
@@ -599,6 +631,52 @@ impl Config {
             hold: self.video.hold.unwrap_or(self.general.hold).duration(),
             target: Target::All,
         }
+    }
+
+    /// The HDR mod installed for a game, if any.
+    pub fn hdr_mod(&self, id: &GameId) -> Option<&str> {
+        self.game(id).and_then(|s| s.hdr_mod.as_deref())
+    }
+
+    /// Whether a game has an HDR mod, installed by Huedra or by hand.
+    pub fn has_mod(&self, id: &GameId) -> bool {
+        self.game(id)
+            .is_some_and(|s| s.hdr_mod.is_some() || s.found_mod.is_some())
+    }
+
+    /// Whether Windows Auto HDR is on for a game: its own choice or the
+    /// default, and always off while an HDR mod is installed.
+    pub fn auto_hdr_on(&self, id: &GameId) -> bool {
+        !self.has_mod(id)
+            && self
+                .game(id)
+                .map(|s| s.auto_hdr)
+                .unwrap_or_default()
+                .is_on(self.general.auto_hdr)
+    }
+
+    /// Whether NVIDIA RTX HDR is on for a game: its own choice or the
+    /// default, and always off while an HDR mod is installed.
+    pub fn rtx_hdr_on(&self, id: &GameId) -> bool {
+        !self.has_mod(id)
+            && self
+                .game(id)
+                .and_then(|s| s.rtx_hdr)
+                .unwrap_or(self.general.rtx_hdr)
+    }
+
+    /// Sets a game's RTX HDR switch, following the default when the choice
+    /// is what the default gives.
+    pub fn set_rtx_hdr(&mut self, id: &GameId, on: bool) {
+        let default = self.general.rtx_hdr;
+        self.game_mut(id).rtx_hdr = (on != default).then_some(on);
+    }
+
+    /// Sets a game's Auto HDR switch, following the default when the choice
+    /// is what the default gives.
+    pub fn set_auto_hdr(&mut self, id: &GameId, on: bool) {
+        let default = self.general.auto_hdr;
+        self.game_mut(id).auto_hdr = AutoHdr::choose(on, default);
     }
 
     /// Whether an HDR-capable display is managed.
@@ -895,6 +973,49 @@ mod tests {
         );
         assert_eq!(text.matches("_profile").count(), 2, "unset not written");
         assert_eq!(Config::parse(&text).expect("again"), config, "round trip");
+    }
+
+    #[test]
+    fn auto_hdr_and_rtx_hdr_are_off_unless_chosen() {
+        let id = GameId::from_raw("steam:1");
+        let mut config = Config::default();
+        assert!(!config.auto_hdr_on(&id), "Auto HDR off by default");
+        assert!(!config.rtx_hdr_on(&id), "RTX HDR off by default");
+        assert!(config.general.hdr_mods, "mod lookups on by default");
+        config.set_auto_hdr(&id, true);
+        config.set_rtx_hdr(&id, true);
+        assert!(
+            config.auto_hdr_on(&id) && config.rtx_hdr_on(&id),
+            "turned on"
+        );
+        config.game_mut(&id).hdr_mod = Some("RenoDX".into());
+        assert!(
+            !config.auto_hdr_on(&id) && !config.rtx_hdr_on(&id),
+            "off while a mod is installed"
+        );
+        config.game_mut(&id).hdr_mod = None;
+        config.game_mut(&id).found_mod = Some("Luma".into());
+        assert!(
+            !config.auto_hdr_on(&id) && !config.rtx_hdr_on(&id),
+            "off while a mod installed by hand is there"
+        );
+        config.game_mut(&id).found_mod = None;
+        config.general.auto_hdr = true;
+        config.set_auto_hdr(&id, true);
+        assert_eq!(
+            config.game(&id).map(|s| s.auto_hdr),
+            Some(AutoHdr::Windows),
+            "same as the default: follows it"
+        );
+        let text = config.to_toml().expect("serialize");
+        assert!(text.contains("rtx_hdr = true"), "written: {text}");
+        assert_eq!(Config::parse(&text).expect("again"), config, "round trip");
+        let older = Config::parse("[[game]]\nid = \"steam:2\"\nauto_hdr = \"windows\"\n")
+            .expect("1.2.1 file");
+        assert!(
+            !older.auto_hdr_on(&GameId::from_raw("steam:2")),
+            "\"as set in Windows\" now follows the default, off"
+        );
     }
 
     #[test]

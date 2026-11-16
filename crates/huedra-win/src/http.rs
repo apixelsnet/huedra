@@ -37,6 +37,9 @@ pub enum HttpError {
     /// The response was larger than allowed.
     #[error("the response is larger than {0} bytes")]
     TooLarge(usize),
+    /// The download could not be written to its file.
+    #[error("the download could not be saved: {0}")]
+    File(#[from] std::io::Error),
 }
 
 struct Handle(*mut c_void);
@@ -69,6 +72,49 @@ pub fn get(
     user_agent: &str,
     max_bytes: usize,
 ) -> Result<Response, HttpError> {
+    let mut body = Vec::new();
+    let (status, final_url) = request(host, path, user_agent, max_bytes, &mut |chunk| {
+        body.extend_from_slice(chunk);
+        Ok(())
+    })?;
+    Ok(Response {
+        status,
+        body,
+        final_url,
+    })
+}
+
+/// `GET https://{host}{path}` into a file, following redirects, reading at
+/// most `max_bytes`, without holding the body in memory. Returns the HTTP
+/// status; the file holds whatever body came with it.
+///
+/// # Errors
+/// [`HttpError`] on network failures, oversized responses and file errors.
+pub fn download(
+    host: &str,
+    path: &str,
+    user_agent: &str,
+    max_bytes: usize,
+    file: &std::path::Path,
+) -> Result<u32, HttpError> {
+    use std::io::Write as _;
+    let mut out = std::io::BufWriter::new(std::fs::File::create(file)?);
+    let (status, _) = request(host, path, user_agent, max_bytes, &mut |chunk| {
+        out.write_all(chunk)
+    })?;
+    out.flush()?;
+    Ok(status)
+}
+
+/// One request; each piece of the body goes to `sink`. Returns the status
+/// and the address after redirects.
+fn request(
+    host: &str,
+    path: &str,
+    user_agent: &str,
+    max_bytes: usize,
+    sink: &mut dyn FnMut(&[u8]) -> std::io::Result<()>,
+) -> Result<(u32, String), HttpError> {
     // SAFETY: all strings outlive the calls; handles are closed by guards in
     // reverse order of opening.
     let session = check(unsafe {
@@ -123,8 +169,8 @@ pub fn get(
         )
     }?;
 
-    let mut body = Vec::new();
-    let mut chunk = vec![0_u8; 16 * 1024];
+    let mut total = 0_usize;
+    let mut chunk = vec![0_u8; 64 * 1024];
     loop {
         let mut read = 0_u32;
         // SAFETY: `chunk` holds the requested number of bytes.
@@ -139,17 +185,14 @@ pub fn get(
         if read == 0 {
             break;
         }
-        body.extend_from_slice(&chunk[..read as usize]);
-        if body.len() > max_bytes {
+        total += read as usize;
+        if total > max_bytes {
             return Err(HttpError::TooLarge(max_bytes));
         }
+        sink(&chunk[..read as usize])?;
     }
 
-    Ok(Response {
-        status,
-        body,
-        final_url: final_url(&request).unwrap_or_default(),
-    })
+    Ok((status, final_url(&request).unwrap_or_default()))
 }
 
 fn final_url(request: &Handle) -> Option<String> {

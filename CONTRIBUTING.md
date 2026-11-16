@@ -54,6 +54,7 @@ Commit messages and pull request titles follow [Conventional Commits](https://ww
 
 - Read the feature's document in [`docs/features`](docs/features) before changing it, and add a dated Result section describing what changed and how it was checked.
 - Add a line under `## Unreleased` in [CHANGELOG.md](CHANGELOG.md) for changes users will notice; changes to the browser extension go in [extras/browser/CHANGELOG.md](extras/browser/CHANGELOG.md).
+- Keep the user-facing documents true to the code: when a change adds, removes or renames a feature, a setting, a label or a command, update [README.md](README.md), [docs/USER-GUIDE.md](docs/USER-GUIDE.md), [docs/SETUP.md](docs/SETUP.md) and, for anything that uses the internet, [PRIVACY.md](PRIVACY.md) in the same pull request. When the window looks different, retake the README images with the sample build (sample data only).
 - Every pull request must pass the checks in GitHub Actions.
 - Code conventions: `unsafe` only in `huedra-win`, each block with a `// SAFETY:` comment; no `unwrap` outside tests; `thiserror` in libraries and `anyhow` only in the executable.
 - Huedra runs without administrator rights, admits only the current user to its command channel, installs only signed updates, and never reads or writes other programs' memory. Changes must keep it that way.

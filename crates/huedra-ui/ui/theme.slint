@@ -1,6 +1,8 @@
-// Design tokens: the BT.2020-derived palette over ink-violet neutrals, sizes
-// from the Windows 11 layout, and motion that turns off when Windows
-// "Animation effects" is off. No yellow anywhere.
+// Design tokens (docs/features/15-design.md): Windows 11 neutral layers,
+// one fixed accent (Windows' default blue, never the user's accent, which
+// could be pink, the color of HDR here), the Windows status colors, the
+// BT.2020 spectrum for HDR only, and motion that turns off when Windows
+// "Animation effects" is off.
 
 import { Palette } from "std-widgets.slint";
 
@@ -25,22 +27,31 @@ export global Theme {
     out property <image> chart-hdr: @image-url("assets/chart-hdr.svg");
     out property <image> chart-sdr: @image-url("assets/chart-sdr.svg");
 
-    // Neutrals.
-    out property <color> background: dark ? #16141E : #F4F2F9;
-    out property <color> surface: dark ? #201D2B : #FFFFFF;
-    out property <color> surface-raised: dark ? #2A2638 : #ECE8F4;
-    out property <color> hover: dark ? #2F2B40 : #E6E1F0;
-    out property <color> border: dark ? #353049 : #DDD7E8;
-    out property <color> text: dark ? #F2F0F7 : #1B1826;
-    out property <color> text-muted: dark ? #A9A4B6 : #5E5870;
-    out property <color> sdr: #A9A4B6;
-    // Controls use ultramarine; a lighter tint keeps contrast on dark.
-    out property <color> accent: dark ? #8B93FF : #3341E6;
-    out property <color> on-accent: dark ? #16141E : #FFFFFF;
+    // Neutrals, as Windows 11's layers.
+    out property <color> background: dark ? #202020 : #F3F3F3;
+    out property <color> surface: dark ? #2B2B2B : #FBFBFB;
+    out property <color> surface-raised: dark ? #383838 : #EDEDED;
+    out property <color> hover: dark ? #323232 : #F3F3F3;
+    out property <color> border: dark ? #1D1D1D : #E5E5E5;
+    out property <color> divider: dark ? #3A3A3A : #EAEAEA;
+    out property <color> text: dark ? #FFFFFF : #1A1A1A;
+    out property <color> text-muted: dark ? #C8C8C8 : #5F5F5F;
+    out property <color> sdr: #9E9E9E;
+    // The main action, switches that are on and selection marks.
+    out property <color> accent: dark ? #60CDFF : #005FB8;
+    out property <color> on-accent: dark ? #000000 : #FFFFFF;
     // Keyboard focus outline, as in Windows 11: the strongest neutral.
-    out property <color> focus: dark ? #FFFFFF : #1B1826;
-    // HDR labels use pink.
-    out property <color> hdr-label: dark ? #FF5C8D : #D81B57;
+    out property <color> focus: dark ? #FFFFFF : #1A1A1A;
+    // Status, as Windows' InfoBar: done, warnings, errors.
+    out property <color> success: dark ? #6CCB5F : #0F7B0F;
+    out property <color> success-bg: dark ? #393D1B : #DFF6DD;
+    out property <color> caution: dark ? #FCE100 : #9D5D00;
+    out property <color> caution-bg: dark ? #433519 : #FFF4CE;
+    out property <color> critical: dark ? #FF99A4 : #C42B1C;
+    out property <color> critical-bg: dark ? #442726 : #FDE7E9;
+    out property <color> info-bg: dark ? #1F3242 : #E5F1FB;
+    // HDR labels use pink, and only they do.
+    out property <color> hdr-label: dark ? #FF6F9A : #C4174F;
     // Violet text and marks (suggestions, information), readable on both.
     out property <color> violet-text: dark ? #B57BFF : #7A2BE0;
 

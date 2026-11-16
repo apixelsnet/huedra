@@ -102,6 +102,7 @@ This happens only once.
 1. Double-click `huedra.exe`.
 2. The Huedra window opens with a disclaimer. Huedra changes a Windows display setting, so please read it.
 3. Choose **Accept and continue**. (Choosing **Exit** closes Huedra without changing anything.)
+4. A short setup follows: which displays Huedra may control, the games it found and whether to look up their HDR support on PCGamingWiki, and the mode. **Skip setup** keeps the defaults.
 
 Huedra then does the following on its own:
 
@@ -117,7 +118,7 @@ Huedra then does the following on its own:
 | Colored gamut shape | HDR is on |
 | Gray outline | SDR (HDR off) |
 
-**Closing the window keeps Huedra running** in the tray. To bring the window back, left-click the tray icon, or start `huedra.exe` again. To close Huedra completely, right-click the tray icon and choose **Exit**.
+**Closing the window keeps Huedra running** in the tray. To bring the window back, start `huedra.exe` again, or left-click the tray icon and choose **Open Huedra** in the quick panel. To close Huedra completely, right-click the tray icon and choose **Exit**.
 
 ---
 
@@ -169,7 +170,7 @@ Games installed without a store, or from a store Huedra does not read, can be ad
 
 ### Choose how a game is treated
 
-Select a game to open its settings:
+Select a game to open its details. The first choice, **When this game runs**, offers the first three:
 
 | Setting | Use it when |
 | --- | --- |
@@ -177,24 +178,34 @@ Select a game to open its settings:
 | **Leave HDR alone** | You never want Huedra to switch HDR for this game. |
 | **Let the game switch HDR** | The game has its own HDR switch and turns Windows HDR on by itself. |
 | **Wait before turning HDR on** | The game shows a launcher or splash screen first, or crashes if HDR changes while it starts. Try 5 to 10 seconds. |
-| **Keep HDR on after the game closes** | The game restarts itself, or its launcher starts it again, and the display would otherwise switch off and on twice. |
+| **Keep HDR on after it closes** | The game restarts itself, or its launcher starts it again, and the display would otherwise switch off and on twice. |
 
 ### Games that need HDR on before they start
 
 Some games misbehave when HDR changes while they start, or gray out their HDR settings because HDR was still off when they checked. For those, start the game with HDR already on:
 
-- **Steam (recommended):** **Turn HDR on when I press Play in Steam** is on by default (on the game's page in Huedra). HDR turns on as soon as Steam reports the game running, about a second after you choose **Play** and before the game's window shows. Huedra only reads which game Steam reports as running and never touches the game, so this works with anti-cheat.
+- **Steam (recommended):** **When I press Play in Steam** is on by default (in the game's details, under **Turn HDR on before the game starts**). HDR turns on as soon as Steam reports the game running, about a second after you choose **Play** and before the game's window shows. Huedra only reads which game Steam reports as running and never touches the game, so this works with anti-cheat.
 - **Steam launch option** (games without anti-cheat; anti-cheat such as Battlefield 6's may end a game started this way):
-  1. Open the game's page in Huedra and copy the **Steam launch option**.
+  1. Open the game's details in Huedra and copy the launch option under **When I press Play in Steam** (**Another way**).
   2. In Steam, right-click the game › **Properties** › **General** › **Launch options**.
   3. Paste it. It looks like this:
      ```text
      "C:\path\to\huedra.exe" launch -- %command%
      ```
-- **Desktop shortcut:** on the game's page, choose **Create a desktop shortcut**, and start the game from it.
-- **Any program:** turn on **General › Add "Start with HDR" to the right-click menu**. Then right-click the program in File Explorer, choose **Show more options**, and choose **Start with HDR**.
+- **Desktop shortcut:** in the game's details, choose **Desktop shortcut › Create**, and start the game from it.
+- **Any program:** turn on **Settings › Advanced › Add "Start with HDR" to the right-click menu**. Then right-click the program in File Explorer, choose **Show more options**, and choose **Start with HDR**.
 
 HDR stays on until the game, and every program it started, has closed.
+
+### Fix a game's HDR with an HDR mod (optional)
+
+For games with no HDR or poor HDR, Huedra can install a RenoDX or Luma HDR mod:
+
+1. On the **Games** page, choose the **HDR mods** filter to see which of your games have one.
+2. Close the game, select it, and choose **Install** in its **HDR mod** section. Read the notice about the risks the first time, and check the list of changes before confirming.
+3. Start the game. To undo it, close the game and choose **Remove**.
+
+Huedra won't install mods in games with anti-cheat. The [user guide](USER-GUIDE.md#hdr-mods) has the details and the risks.
 
 ---
 
@@ -317,10 +328,10 @@ Nothing needs to be done day to day. Huedra starts when you sign in and switches
 
 | To... | Do this |
 | --- | --- |
-| Open the window | Left-click the tray icon, or start `huedra.exe`. |
+| Open the window | Start `huedra.exe`, or left-click the tray icon and choose **Open Huedra**. |
 | Turn HDR on or off by hand | **Win+Alt+H** |
 | Change the mode (Automatic, Always HDR, Always SDR) | **Win+Alt+O**, or right-click the tray icon. |
-| Pause automatic switching for an hour | **Win+Alt+P**, or right-click the tray icon › **Pause for 1 hour**. |
+| Pause automatic switching for an hour | **Win+Alt+P**, **Pause 1 hour** in the quick panel, or right-click the tray icon › **Pause automatic switching**. |
 | Stop Huedra switching for the game in front | Right-click the tray icon › **Never use HDR for *game***. |
 | Close Huedra | Right-click the tray icon › **Exit**. Displays Huedra turned to HDR go back to SDR. |
 
@@ -356,7 +367,7 @@ Open the small arrow (**^**) beside the clock. To keep the icon visible, drag it
 
 #### Huedra does not start with Windows
 
-1. Check **General › Start with Windows** in Huedra.
+1. Check **Settings › Start with Windows** in Huedra.
 2. Open **Task Manager › Startup apps** and make sure Huedra is **Enabled**.
 3. A portable copy (a file named `portable` next to `huedra.exe`) never adds itself to start-up.
 
@@ -393,12 +404,12 @@ It should not: Huedra only turns off HDR it turned on itself. If you want HDR to
 
 1. Open the **Displays** page.
 2. Turn on **Switch only the display with the game or video**: HDR then turns on only for the display the game or video is on, and follows the window to another display.
-3. Check that each display is **Managed** as you want. A display that is not managed is never switched.
+3. Check **Let Huedra control HDR** for each display as you want. A display Huedra doesn't control is never switched.
 4. **Always HDR** mode and **Win+Alt+H** switch only the main display unless **Always HDR on the main display only** is turned off.
 
 #### The shortcuts Win+Alt+H, O or P do nothing
 
-1. Check that **General › Keyboard shortcuts** is on.
+1. Check that the switch in the header of **Settings › Keyboard shortcuts** is on, and which keys it lists.
 2. If another program already uses a shortcut, Huedra's log says so: "The shortcut Win+Alt+H is used by another program and is not available." (see [Find the log by hand](#find-the-log-by-hand)). Change or close that program, then turn the setting off and on again.
 
 ### Games
@@ -409,28 +420,28 @@ Work through these in order:
 
 1. **Mode:** the **Status** page must show **Automatic** mode, not paused.
 2. **Listed:** the game must be on the **Games** page. If not, choose **Find new games**, or **Add game** and select its program file.
-3. **Setting:** the game must be set to **Turn HDR on**. Choosing **Never use HDR for *game*** in the tray menu changes this; set it back on the game's page.
+3. **Setting:** the game must be set to **Turn HDR on**. Choosing **Never use HDR for *game*** in the tray menu changes this; set it back in the game's details.
 4. **Launcher:** if the game starts through a launcher, the launcher may be what Huedra sees first. Set a **Wait before turning HDR on** of 5 to 10 seconds. If the game's real program has a different name from the one listed, add it with **Add game**.
-5. **Display:** the display the game is on must be **Managed** on the **Displays** page.
+5. **Display:** **Let Huedra control HDR** must be on for the display the game is on, on the **Displays** page.
 
 #### A game crashes, shows wrong colors, or starts in SDR when HDR turns on
 
 The game does not cope with HDR changing while it starts. Either:
 
 - set a **Wait before turning HDR on** so HDR changes after it has started, or
-- start it with HDR already on: for a Steam game check that **Turn HDR on when I press Play in Steam** is on, otherwise use a desktop shortcut or **Start with HDR** (see [section 5](#games-that-need-hdr-on-before-they-start)).
+- start it with HDR already on: for a Steam game check that **When I press Play in Steam** (under **Turn HDR on before the game starts**) is on, otherwise use a desktop shortcut or **Start with HDR** (see [section 5](#games-that-need-hdr-on-before-they-start)).
 
 #### A game's HDR settings are grayed out
 
-The game checked HDR while it started, before Huedra turned it on: Huedra waits for the game's window. Start it with HDR already on (see above). For a Steam game, **Turn HDR on when I press Play in Steam** (on by default) is the way that also works with anti-cheat.
+The game checked HDR while it started, before Huedra turned it on: Huedra waits for the game's window. Start it with HDR already on (see above). For a Steam game, **When I press Play in Steam** (under **Turn HDR on before the game starts**) (on by default) is the way that also works with anti-cheat.
 
 #### HDR switches off and on twice when a game starts or restarts
 
-Raise **Keep HDR on after the game closes** for that game, or the default under **General › Keep HDR on after a game or video ends**.
+Raise **Keep HDR on after it closes** in that game's details, or the default under **Settings › Timing › Keep HDR on after a game or video ends**.
 
 #### Is Huedra safe with anti-cheat software?
 
-Huedra reads only the name and path of the program in front and waits for programs to close. It never reads or writes another program's memory and never injects code. No game publisher has reviewed it, so this cannot be guaranteed.
+Huedra reads only the name and path of the program in front and waits for programs to close. It never reads or writes another program's memory and never injects code. No game publisher has reviewed it, so this cannot be guaranteed. HDR mods are different: they change game files, so Huedra won't install one in a game that PCGamingWiki lists with anti-cheat.
 
 ### Video players
 
@@ -460,7 +471,7 @@ Raise **Keep HDR on after the video ends** on the **Video players** page.
 1. On Huedra's **Video players** page, under **Browsers**, check that your browser is set to **When HDR video plays**, not **Never**. Choosing **Never use HDR for *browser*** in the tray menu sets it to **Never**.
 2. Huedra must be in **Automatic** mode and not paused.
 3. If **Only in full screen** is on, put the video in full screen (press **F** on YouTube).
-4. The display the browser is on must be **Managed** on the **Displays** page.
+4. **Let Huedra control HDR** must be on for the display the browser is on, on the **Displays** page.
 
 #### HDR is on, but YouTube still looks like SDR
 
@@ -483,13 +494,13 @@ This happens only when the extension was loaded by hand (**Load unpacked**). To 
 
 #### An update fails to install
 
-1. Huedra's folder must be writable. If it is in `C:\Program Files`, move the whole folder to `%LOCALAPPDATA%\Programs\Huedra`, start it from there, and check again with **General › About › Check for updates**.
+1. Huedra's folder must be writable. If it is in `C:\Program Files`, move the whole folder to `%LOCALAPPDATA%\Programs\Huedra`, start it from there, and check again with **Settings › About › Check for updates**.
 2. An update is refused when its signature is not valid. That protects you; try again later, or download the newest release from GitHub by hand.
 3. A leftover `huedra.previous.exe` in the folder is deleted by the new version when it starts. It is safe to delete by hand once Huedra is closed.
 
 #### No update dialog appears
 
-The dialog never opens while a game or video is using HDR; it waits until they end. Check that **General › Updates** is not set to **Off**, or choose **General › About › Check for updates**.
+The dialog never opens while a game or video is using HDR; it waits until they end. Check that **Settings › Updates** is not set to **Off**, or choose **Settings › About › Check for updates**.
 
 ---
 
@@ -516,7 +527,7 @@ If Huedra closed unexpectedly, it offers to copy the same details the next time 
 | Normal | `%LOCALAPPDATA%\Huedra\huedra.log` |
 | Portable | `data\huedra.log`, next to `huedra.exe` |
 
-**General › About** shows the folder. Window titles (tab names and file names) are not written to the log unless **General › Write tab and file names to the log** is on; turn it on only while reproducing a video or browser problem, and off again afterwards.
+**Settings › About** shows the folder. Window titles (tab names and file names) are not written to the log unless **Settings › Advanced › Write tab and file names to the log** is on; turn it on only while reproducing a video or browser problem, and off again afterwards.
 
 ### Also include
 

@@ -3,11 +3,14 @@
 //! touched, which keeps anti-cheat software unaffected.
 //! Feature doc: `docs/features/03-watchers.md`.
 
-use std::ffi::c_void;
+use std::ffi::{OsStr, c_void};
 use std::mem::size_of;
 use std::os::windows::process::CommandExt as _;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::time::{Duration, Instant};
+
+use windows::Win32::System::SystemInformation::GetSystemDirectoryW;
 
 use windows::Win32::Foundation::{
     HANDLE, HANDLE_FLAG_INHERIT, HANDLE_FLAGS, INVALID_HANDLE_VALUE, SetHandleInformation,
@@ -86,6 +89,44 @@ pub fn spawn_detached(program: &Path, args: &[&str]) -> bool {
             .is_ok()
     };
     spawn(CREATE_NO_WINDOW.0 | CREATE_BREAKAWAY_FROM_JOB.0) || spawn(CREATE_NO_WINDOW.0)
+}
+
+/// Runs a program with no window and waits for it, at most `timeout`
+/// (then it is stopped). Returns whether it ended with exit code 0.
+/// Arguments are passed directly, never through a shell.
+pub fn run_hidden(program: &Path, args: &[&OsStr], timeout: Duration) -> bool {
+    let Ok(mut child) = std::process::Command::new(program)
+        .args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .creation_flags(CREATE_NO_WINDOW.0)
+        .spawn()
+    else {
+        return false;
+    };
+    let start = Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => return status.success(),
+            Ok(None) if start.elapsed() < timeout => {
+                std::thread::sleep(Duration::from_millis(50));
+            }
+            _ => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return false;
+            }
+        }
+    }
+}
+
+/// The Windows System32 folder.
+pub fn system_folder() -> Option<PathBuf> {
+    let mut buffer = [0_u16; 260];
+    // SAFETY: Windows writes at most the buffer's length.
+    let len = unsafe { GetSystemDirectoryW(Some(&mut buffer)) } as usize;
+    (len > 0 && len < buffer.len()).then(|| PathBuf::from(String::from_utf16_lossy(&buffer[..len])))
 }
 
 /// The ids of all running processes. Used only while following a launcher.

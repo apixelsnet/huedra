@@ -6,6 +6,7 @@
 //! from and saved to the copy's own settings file.
 //! Feature doc: `docs/features/08-settings-window.md`.
 
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Mutex, PoisonError};
 use std::time::{Duration, Instant};
@@ -17,6 +18,7 @@ use huedra_core::engine::Mode;
 use huedra_core::gameinfo::{Cache, GameInfo, WikiHdr};
 use huedra_core::ipc::{DisplayReport, HistoryEntry, HistoryKind, Request, StatusReport};
 use huedra_core::library::{Game, GameId, Store};
+use huedra_core::mods::{Manifest, Mod};
 
 /// Shown where the window would name the program's own path.
 pub const EXE: &str = r"C:\Program Files\Huedra\huedra.exe";
@@ -97,16 +99,75 @@ pub fn games() -> Vec<Game> {
 pub fn info() -> Cache {
     let mut cache = Cache::default();
     for (name, store, id, hdr) in GAMES {
+        // Elden Ring shows how a game with anti-cheat is kept from mods.
+        let anticheat = if name == "Elden Ring" {
+            "Easy Anti-Cheat".to_owned()
+        } else {
+            String::new()
+        };
         cache.put(GameInfo {
-            id: GameId::new(store, id),
             page: Some(name.replace(' ', "_")),
             hdr,
-            hdr_notes: String::new(),
-            ray_tracing: String::new(),
-            fetched: u64::MAX / 2,
+            online: !anticheat.is_empty(),
+            anticheat,
+            ..GameInfo::not_found(GameId::new(store, id), u64::MAX / 2)
         });
     }
     cache
+}
+
+/// Rows of the RenoDX list for sample games, as the wiki writes them.
+const MOD_LIST: &str = "# List\n\n\
+| Name | Maintainer | Links | Status |\n\
+| --- | --- | --- | --- |\n\
+| Cyberpunk 2077 | ShortFuse | [![Nexus Mods](https://img.shields.io/badge/Nexus)](https://www.nexusmods.com/cyberpunk2077/mods/13912) &middot; [![Snapshot](https://img.shields.io/badge/Snapshot)](https://clshortfuse.github.io/renodx/renodx-cp2077.addon64) | :white_check_mark: |\n\
+| ELDEN RING | Ritsu | [![Snapshot](https://img.shields.io/badge/Snapshot)](https://clshortfuse.github.io/renodx/renodx-fromsoft_engine.addon64) | :white_check_mark: |\n\
+| Hades | ShortFuse | [![Snapshot](https://img.shields.io/badge/Snapshot)](https://clshortfuse.github.io/renodx/renodx-hades.addon64) | :construction: |\n\
+| [Hollow Knight](https://github.com/clshortfuse/renodx/discussions/230) | ShortFuse | [![Snapshot](https://img.shields.io/badge/Snapshot)](https://clshortfuse.github.io/renodx/renodx-hollowknight.addon64) | :white_check_mark: |\n\
+| Terraria | Scrungus | [![Snapshot](https://img.shields.io/badge/Snapshot)](https://clshortfuse.github.io/renodx/renodx-terraria.addon32) | :construction: |\n";
+
+/// The HDR mods listed for the sample library.
+pub fn mods() -> Vec<Mod> {
+    huedra_core::mods::parse_renodx(MOD_LIST)
+}
+
+/// Hollow Knight's mod, as if Huedra installed it. Only the record: no
+/// files exist, and removing it in a sample window just drops it.
+pub fn installed() -> Vec<Manifest> {
+    let Some(entry) = mods().into_iter().find(|m| m.name == "Hollow Knight") else {
+        return Vec::new();
+    };
+    vec![Manifest {
+        game: GameId::new(Store::Steam, "367520"),
+        name: entry.name,
+        source: entry.source,
+        author: entry.author,
+        url: entry.url64.unwrap_or_default(),
+        folder: r"D:\Games\Hollow Knight".to_owned(),
+        installed: 0,
+        complete: true,
+        files: Vec::new(),
+        dirs: Vec::new(),
+        absent: Vec::new(),
+    }]
+}
+
+/// The programs a mod would go next to, as if found in the games' folders.
+pub fn programs() -> HashMap<GameId, PathBuf> {
+    [
+        (Store::Steam, "1091500", r"bin\x64\Cyberpunk2077.exe"),
+        (Store::Steam, "1145360", r"x64\Hades.exe"),
+        (Store::Steam, "105600", "Terraria.exe"),
+        (Store::Steam, "1245620", r"Game\eldenring.exe"),
+    ]
+    .into_iter()
+    .filter_map(|(store, id, exe)| {
+        let game = games()
+            .into_iter()
+            .find(|g| g.id == GameId::new(store, id))?;
+        Some((game.id, PathBuf::from(game.install_dir).join(exe)))
+    })
+    .collect()
 }
 
 fn display_id(number: usize) -> DisplayId {

@@ -16,6 +16,8 @@ mod flyout;
 mod icons;
 #[cfg(windows)]
 mod lookups;
+#[cfg(windows)]
+mod mods;
 #[cfg(all(windows, feature = "sample"))]
 mod sample;
 

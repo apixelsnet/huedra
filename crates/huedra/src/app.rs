@@ -16,6 +16,7 @@ use huedra_core::engine::{
     Action, Engine, Mode, Note, NoteKind, Outcome, Phase, Status, Target, Trigger, TriggerId,
 };
 use huedra_core::files;
+use huedra_core::graphics;
 use huedra_core::icon::TrayIcon;
 use huedra_core::ipc::{DisplayReport, HistoryEntry, HistoryKind, Request, Response, StatusReport};
 use huedra_core::launch;
@@ -34,7 +35,7 @@ use huedra_win::pipe::{PipeCall, PipeError, PipeServer};
 use huedra_win::process::{self, ExitWatch};
 use huedra_win::switcher::Switcher;
 use huedra_win::window::{ProcessHook, Watch};
-use huedra_win::{audio, clock, display, foreground, registry, tray, window};
+use huedra_win::{audio, clock, display, foreground, nvapi, registry, tray, window};
 
 use huedra_core::locations::Locations;
 use huedra_win::color::Displays as ColorDisplays;
@@ -149,6 +150,10 @@ struct App {
     /// Whether NVIDIA RTX Video HDR is on, read when a video program comes
     /// to the front and on reload.
     rtx_video_hdr: bool,
+    /// RTX HDR as this run last set it per program (lowercase path), so
+    /// the NVIDIA driver is opened only for changes. Programs are marked
+    /// too when there is no NVIDIA driver (other graphics).
+    rtx_applied: HashMap<String, bool>,
     /// The process in the foreground.
     foreground: u32,
     /// Whether [`VIDEO_TIMER`] runs.
@@ -252,6 +257,7 @@ impl App {
             follow_known: HashSet::new(),
             videos: HashMap::new(),
             rtx_video_hdr: registry::rtx_video_hdr() == Some(true),
+            rtx_applied: HashMap::new(),
             foreground: 0,
             video_polling: false,
             launches: HashMap::new(),
@@ -297,7 +303,7 @@ impl App {
         app.sync_colors();
         app.reset_modes_after_crash();
         app.sync_modes();
-        app.sync_auto_hdr();
+        app.sync_graphics();
         if let Some(pid) = foreground::foreground_pid() {
             app.on_foreground(host, now, pid);
         }
@@ -551,71 +557,55 @@ impl App {
         }
     }
 
-    // --- Auto HDR ---------------------------------------------------------
+    // --- Auto HDR and RTX HDR ---------------------------------------------
 
-    /// A game's program is running: when the game has its own Auto HDR
-    /// setting, the program gets it (Windows reads it when the game starts,
-    /// so it takes effect from the next start) and is remembered.
+    /// A game's program is running: it is remembered for the game and gets
+    /// the game's Auto HDR and RTX HDR settings. Windows and the NVIDIA
+    /// driver read them when a program starts, so they take effect from
+    /// the next start.
     fn note_program(&mut self, game: &GameId, path: &str) {
-        let Some(settings) = self.config.game(game) else {
-            return;
-        };
-        if settings.auto_hdr == AutoHdr::Windows
-            || settings
-                .programs
-                .iter()
-                .any(|p| p.eq_ignore_ascii_case(path))
-        {
+        let known = self
+            .config
+            .game(game)
+            .is_some_and(|s| s.programs.iter().any(|p| p.eq_ignore_ascii_case(path)));
+        if known {
             return;
         }
-        let choice = settings.auto_hdr;
         self.edit_config(|c| c.game_mut(game).programs.push(path.to_owned()));
-        self.set_auto_hdr(&self.game_name(game), path, choice);
+        self.sync_graphics();
     }
 
-    /// Brings every game's programs in line with its Auto HDR setting. A
-    /// game set back to "As set in Windows" has Huedra's part removed from
-    /// its programs, which are then forgotten.
-    fn sync_auto_hdr(&mut self) {
-        // (game, choice, programs to set, programs to remember)
-        let mut work = Vec::new();
+    /// Brings every known program of every game in line with the game's
+    /// Auto HDR and RTX HDR switches: off unless the user turned them on,
+    /// and off while an HDR mod is installed. What a program had before
+    /// Huedra's first change is recorded, so uninstalling puts it back.
+    fn sync_graphics(&mut self) {
+        let mut record = graphics::Record::load(&self.paths.graphics);
+        // (game name, program, RTX HDR on)
+        let mut rtx = Vec::new();
+        // Programs of games added by hand, remembered once.
+        let mut remember = Vec::new();
         for g in &self.config.games {
-            if g.auto_hdr == AutoHdr::Windows && g.programs.is_empty() {
-                continue;
-            }
             let mut programs = g.programs.clone();
-            let mut new = Vec::new();
-            // A game added by hand names its program, so it gets the
-            // setting at once; it is remembered so it can be taken back.
-            if g.auto_hdr != AutoHdr::Windows
-                && let Some(exe) = &g.exe
+            if let Some(exe) = &g.exe
                 && !programs.iter().any(|p| p.eq_ignore_ascii_case(exe))
             {
                 programs.push(exe.clone());
-                new.push(exe.clone());
+                remember.push((g.id.clone(), exe.clone()));
             }
-            work.push((g.id.clone(), g.auto_hdr, programs, new));
-        }
-        let mut changes: Vec<(GameId, Option<Vec<String>>)> = Vec::new();
-        for (id, choice, programs, new) in work {
-            let name = self.game_name(&id);
-            for program in &programs {
-                self.set_auto_hdr(&name, program, choice);
-            }
-            if choice == AutoHdr::Windows {
-                changes.push((id, None));
-            } else if !new.is_empty() {
-                changes.push((id, Some(new)));
+            let auto = self.config.auto_hdr_on(&g.id);
+            let rtx_on = self.config.rtx_hdr_on(&g.id);
+            let name = self.game_name(&g.id);
+            for program in programs {
+                self.set_auto_hdr(&mut record, &name, &program, auto);
+                rtx.push((name.clone(), program, rtx_on));
             }
         }
-        if !changes.is_empty() {
+        self.sync_rtx_hdr(&mut record, rtx);
+        if !remember.is_empty() {
             self.edit_config(|c| {
-                for (id, new) in &changes {
-                    let programs = &mut c.game_mut(id).programs;
-                    match new {
-                        None => programs.clear(),
-                        Some(new) => programs.extend(new.iter().cloned()),
-                    }
+                for (id, exe) in &remember {
+                    c.game_mut(id).programs.push(exe.clone());
                 }
             });
         }
@@ -628,27 +618,98 @@ impl App {
             .map_or_else(|| id.as_str().to_owned(), |g| g.name.clone())
     }
 
-    /// Writes one program's Auto HDR choice where Windows reads it, keeping
-    /// the program's other graphics settings.
-    fn set_auto_hdr(&self, game: &str, program: &str, choice: AutoHdr) {
+    /// Writes one program's Auto HDR where Windows reads it, keeping the
+    /// program's other graphics settings. The value Windows had before
+    /// Huedra's first change is recorded first.
+    fn set_auto_hdr(&self, record: &mut graphics::Record, game: &str, program: &str, on: bool) {
         let current = registry::gpu_preferences(program);
-        let wanted = autohdr::edit(current.as_deref(), choice);
+        let wanted = autohdr::edit(current.as_deref(), AutoHdr::of(on));
         if wanted == current {
+            return;
+        }
+        if record.note_auto_hdr(program, current.as_deref().and_then(autohdr::value))
+            && let Err(error) = record.save(&self.paths.graphics)
+        {
+            self.log_line(&format!("Could not save graphics.toml: {error}"));
             return;
         }
         let name = huedra_core::paths::display_name(program);
         match registry::set_gpu_preferences(program, wanted.as_deref()) {
             Ok(()) => self.log_line(&format!(
                 "Auto HDR for {game} ({name}): {}.",
-                match choice {
-                    AutoHdr::On => "on",
-                    AutoHdr::Off => "off",
-                    AutoHdr::Windows => "as set in Windows",
-                }
+                if on { "on" } else { "off" }
             )),
             Err(error) => self.log_line(&format!(
                 "Could not set Auto HDR for {game} ({name}): {error}"
             )),
+        }
+    }
+
+    /// Sets RTX HDR for each program through one session with the NVIDIA
+    /// driver; programs this run already set the same way are skipped. On
+    /// PCs without an NVIDIA driver (AMD or Intel graphics) RTX HDR does
+    /// not exist and nothing is done.
+    fn sync_rtx_hdr(&mut self, record: &mut graphics::Record, wanted: Vec<(String, String, bool)>) {
+        let todo: Vec<(String, String, bool)> = wanted
+            .into_iter()
+            .filter(|(_, p, on)| self.rtx_applied.get(&p.to_lowercase()) != Some(on))
+            .collect();
+        if todo.is_empty() {
+            return;
+        }
+        let Some(mut session) = nvapi::Session::open() else {
+            for (_, program, on) in todo {
+                self.rtx_applied.insert(program.to_lowercase(), on);
+            }
+            return;
+        };
+        let mut done = Vec::new();
+        let mut written = false;
+        for (game, program, on) in todo {
+            let file = huedra_core::paths::display_name(&program).to_owned();
+            let value = u32::from(on);
+            let current = match session.rtx_hdr(&file) {
+                Ok(current) => current,
+                Err(error) => {
+                    self.log_line(&format!(
+                        "Could not read RTX HDR for {game} ({file}): {error}"
+                    ));
+                    continue;
+                }
+            };
+            if record.note_rtx_hdr(&program, current)
+                && let Err(error) = record.save(&self.paths.graphics)
+            {
+                self.log_line(&format!("Could not save graphics.toml: {error}"));
+                continue;
+            }
+            if current == Some(value) {
+                done.push((program, on));
+                continue;
+            }
+            // A program no NVIDIA profile lists gets a profile of its own, named
+            // so it never joins one the user or NVIDIA made for something else.
+            let profile = format!("{game} (Huedra)");
+            match session.set_rtx_hdr(&file, &profile, Some(value)) {
+                Ok(()) => {
+                    written = true;
+                    self.log_line(&format!(
+                        "RTX HDR for {game} ({file}): {}.",
+                        if on { "on" } else { "off" }
+                    ));
+                    done.push((program, on));
+                }
+                Err(error) => self.log_line(&format!(
+                    "Could not set RTX HDR for {game} ({file}): {error}"
+                )),
+            }
+        }
+        if written && let Err(error) = session.save() {
+            self.log_line(&format!("Could not save the NVIDIA settings: {error}"));
+            return;
+        }
+        for (program, on) in done {
+            self.rtx_applied.insert(program.to_lowercase(), on);
         }
     }
 
@@ -1624,7 +1685,7 @@ impl App {
             }
         }
         self.library = build_library(&self.config);
-        self.sync_auto_hdr();
+        self.sync_graphics();
         self.engine
             .set_default_hold(self.config.general.hold.duration());
         self.register_hotkeys(host);

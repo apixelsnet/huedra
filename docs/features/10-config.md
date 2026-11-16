@@ -50,3 +50,10 @@ Status: done.
 - `[general] on_close = "keep-running" | "quit"` (`CloseAction`), default `keep-running`; older files without it load with the default.
 
 Verified: unit tests (default, reading and writing `quit`).
+
+## Result (2026-11-16) — Auto HDR, RTX HDR and HDR mods
+- `[general]`: `auto_hdr` and `rtx_hdr` (defaults for every game, `false`), `hdr_mods` (look up the RenoDX and Luma lists, `true`), `mods_disclaimer_accepted` (`false` until the risk notice is accepted). Older files load with these defaults.
+- `[[game]]`: `auto_hdr` keeps its 1.2 values, with `windows` (written only when it differs) now meaning "follow `[general] auto_hdr`"; `rtx_hdr = true|false` only when it differs from the default; `hdr_mod` names the project of a mod Huedra installed (`"RenoDX"` or `"Luma"`); `found_mod` the project of one found installed by hand. Either keeps Auto HDR and RTX HDR off for the game (`Config::has_mod`).
+- New files in the local folder: `graphics.toml` (each program's Auto HDR and RTX HDR value before Huedra changed it; deleted by `huedra uninstall`) and `mods\` (the lists, one record per installed mod and its backups; see 16).
+
+Verified: unit test `auto_hdr_and_rtx_hdr_are_off_unless_chosen` (defaults, per-game choices, a mod forces both off, `rtx_hdr` written and read back).

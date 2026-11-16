@@ -88,11 +88,46 @@ pub struct GameInfo {
     /// The page's ray tracing field.
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub ray_tracing: String,
+    /// The page's anti-cheat field ("Easy Anti-Cheat"), markup removed.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub anticheat: String,
+    /// The page says the game has online play.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub online: bool,
+    /// The fields this entry was read with; older entries are fetched
+    /// again (see [`SCHEMA`]).
+    #[serde(default)]
+    pub schema: u32,
     /// When it was fetched, in seconds since 1970.
     pub fetched: u64,
 }
 
+/// The fields stored per game: 2 added anti-cheat and online play.
+pub const SCHEMA: u32 = 2;
+
 impl GameInfo {
+    /// The entry for a game the wiki has no page for.
+    pub fn not_found(id: GameId, now: u64) -> Self {
+        Self {
+            id,
+            page: None,
+            hdr: WikiHdr::Unknown,
+            hdr_notes: String::new(),
+            ray_tracing: String::new(),
+            anticheat: String::new(),
+            online: false,
+            schema: SCHEMA,
+            fetched: now,
+        }
+    }
+
+    /// The anti-cheat the page names, or `None` when it names none.
+    pub fn anticheat_name(&self) -> Option<&str> {
+        let name = self.anticheat.trim();
+        let none = ["", "false", "none", "unknown", "n/a"];
+        (!none.iter().any(|n| name.eq_ignore_ascii_case(n))).then_some(name)
+    }
+
     /// The ray tracing field in plain words, or `None` when the page does
     /// not say (empty, "unknown" or "n/a").
     pub fn ray_tracing_label(&self) -> Option<&'static str> {
@@ -107,7 +142,7 @@ impl GameInfo {
 
     /// Whether the result is older than [`MAX_AGE_SECS`].
     pub fn is_stale(&self, now: u64) -> bool {
-        now.saturating_sub(self.fetched) > MAX_AGE_SECS
+        self.schema < SCHEMA || now.saturating_sub(self.fetched) > MAX_AGE_SECS
     }
 
     /// The address of the wiki page, for the "Open" link.
@@ -220,6 +255,8 @@ pub fn parse_wikitext(json: &str, id: GameId, page: String, now: u64) -> Option<
     let mut hdr = WikiHdr::Unknown;
     let mut hdr_notes = String::new();
     let mut ray_tracing = String::new();
+    let mut anticheat = String::new();
+    let mut online = false;
     for line in response.parse.wikitext.lines() {
         let Some((key, value)) = line
             .trim()
@@ -232,6 +269,13 @@ pub fn parse_wikitext(json: &str, id: GameId, page: String, now: u64) -> Option<
             "hdr" if hdr == WikiHdr::Unknown => hdr = WikiHdr::from_field(value),
             "hdr notes" if hdr_notes.is_empty() => hdr_notes = clean_markup(value),
             "ray tracing" if ray_tracing.is_empty() => ray_tracing = clean_markup(value),
+            "anticheat" if anticheat.is_empty() => anticheat = clean_markup(value),
+            "online play" => {
+                online |= matches!(
+                    value.trim().to_ascii_lowercase().as_str(),
+                    "true" | "limited"
+                );
+            }
             _ => {}
         }
     }
@@ -246,6 +290,9 @@ pub fn parse_wikitext(json: &str, id: GameId, page: String, now: u64) -> Option<
         hdr,
         hdr_notes,
         ray_tracing,
+        anticheat,
+        online,
+        schema: SCHEMA,
         fetched: now,
     })
 }
@@ -339,12 +386,8 @@ mod tests {
     #[test]
     fn ray_tracing_in_plain_words() {
         let mut info = GameInfo {
-            id: GameId::from_raw("steam:1"),
-            page: None,
-            hdr: WikiHdr::Unknown,
-            hdr_notes: String::new(),
             ray_tracing: "false".into(),
-            fetched: 0,
+            ..GameInfo::not_found(GameId::from_raw("steam:1"), 0)
         };
         assert_eq!(info.ray_tracing_label(), Some("Not supported"), "false");
         info.ray_tracing = "True".into();
@@ -384,6 +427,27 @@ mod tests {
             Some("https://www.pcgamingwiki.com/wiki/Cyberpunk_2077"),
             "link"
         );
+    }
+
+    #[test]
+    fn reads_anticheat_and_online_play() {
+        let json = serde_json::json!({
+            "parse": {
+                "title": "Elden Ring",
+                "wikitext": "{{Network/Multiplayer\n|online play                = true\n}}\n{{Middleware\n|anticheat         = Easy Anti-Cheat\n|anticheat notes   = \n}}"
+            }
+        })
+        .to_string();
+        let info =
+            parse_wikitext(&json, GameId::from_raw("steam:1245620"), "x".into(), 7).expect("info");
+        assert_eq!(info.anticheat_name(), Some("Easy Anti-Cheat"), "named");
+        assert!(info.online, "online play");
+        assert!(!info.is_stale(7), "current fields");
+        let none = GameInfo {
+            anticheat: "unknown".into(),
+            ..info
+        };
+        assert_eq!(none.anticheat_name(), None, "unknown is none");
     }
 
     #[test]
@@ -437,14 +501,15 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("huedra-gameinfo-{}", std::process::id()));
         let path = dir.join("gameinfo.toml");
         let mut cache = Cache::default();
-        let info = GameInfo {
-            id: GameId::from_raw("steam:1"),
-            page: None,
-            hdr: WikiHdr::Unknown,
-            hdr_notes: String::new(),
-            ray_tracing: String::new(),
-            fetched: 100,
-        };
+        let info = GameInfo::not_found(GameId::from_raw("steam:1"), 100);
+        assert!(
+            GameInfo {
+                schema: 1,
+                ..info.clone()
+            }
+            .is_stale(100),
+            "older fields: fetched again"
+        );
         cache.put(info.clone());
         cache.put(info.clone());
         cache.save(&path).expect("save");

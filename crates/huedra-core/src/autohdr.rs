@@ -19,7 +19,10 @@ pub const OFF: u32 = 48;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum AutoHdr {
-    /// Huedra leaves it to Windows' own setting.
+    /// The game follows Huedra's default for games (off unless turned on in
+    /// Settings). Written as `windows`, the name 1.2 used for "as set in
+    /// Windows", so older files keep working. Passed to [`edit`], it
+    /// removes Huedra's pair.
     #[default]
     Windows,
     /// On for this game's programs.
@@ -29,16 +32,29 @@ pub enum AutoHdr {
 }
 
 impl AutoHdr {
-    /// The choices in the order the window lists them.
-    pub const ALL: [Self; 3] = [Self::Windows, Self::On, Self::Off];
-
-    /// Text shown to the user.
-    pub fn label(self) -> &'static str {
+    /// On or off for a game: its own choice, or `default_on` when it
+    /// follows the default.
+    pub fn is_on(self, default_on: bool) -> bool {
         match self {
-            Self::Windows => "As set in Windows",
-            Self::On => "On",
-            Self::Off => "Off",
+            Self::Windows => default_on,
+            Self::On => true,
+            Self::Off => false,
         }
+    }
+
+    /// The choice to save when a game's switch is set to `on`: following
+    /// the default when that is what the default gives.
+    pub fn choose(on: bool, default_on: bool) -> Self {
+        if on == default_on {
+            Self::Windows
+        } else {
+            Self::of(on)
+        }
+    }
+
+    /// The choice that turns it on or off.
+    pub fn of(on: bool) -> Self {
+        if on { Self::On } else { Self::Off }
     }
 }
 
@@ -46,6 +62,19 @@ impl AutoHdr {
 /// in its place. `None` means the value should not exist (nothing is left
 /// in it). [`AutoHdr::Windows`] removes only Huedra's pair.
 pub fn edit(current: Option<&str>, choice: AutoHdr) -> Option<String> {
+    let wanted = match choice {
+        AutoHdr::Windows => None,
+        AutoHdr::On => Some(ON.to_string()),
+        AutoHdr::Off => Some(OFF.to_string()),
+    };
+    set(current, wanted.as_deref())
+}
+
+/// The program's value with the Auto HDR pair set to `value` as written,
+/// or removed for `None`, every other pair kept in its place: used to put
+/// back what Windows had before Huedra first changed it. `None` means the
+/// value should not exist.
+pub fn set(current: Option<&str>, value: Option<&str>) -> Option<String> {
     let mut pairs: Vec<(String, String)> = current
         .unwrap_or_default()
         .split(';')
@@ -55,26 +84,32 @@ pub fn edit(current: Option<&str>, choice: AutoHdr) -> Option<String> {
             (!name.is_empty()).then(|| (name.to_owned(), value.trim().to_owned()))
         })
         .collect();
-    let wanted = match choice {
-        AutoHdr::Windows => None,
-        AutoHdr::On => Some(ON.to_string()),
-        AutoHdr::Off => Some(OFF.to_string()),
-    };
     match (
         pairs.iter().position(|(n, _)| n.eq_ignore_ascii_case(KEY)),
-        wanted,
+        value,
     ) {
-        (Some(i), Some(value)) => pairs[i].1 = value,
+        (Some(i), Some(value)) => value.clone_into(&mut pairs[i].1),
         (Some(i), None) => {
             pairs.remove(i);
         }
-        (None, Some(value)) => pairs.insert(0, (KEY.to_owned(), value)),
+        (None, Some(value)) => pairs.insert(0, (KEY.to_owned(), value.to_owned())),
         (None, None) => {}
     }
     if pairs.is_empty() {
         return None;
     }
     Some(pairs.iter().map(|(n, v)| format!("{n}={v};")).collect())
+}
+
+/// The Auto HDR pair's value in a program's value, as written, if it has
+/// one.
+pub fn value(current: &str) -> Option<String> {
+    current.split(';').find_map(|pair| {
+        let (name, value) = pair.split_once('=')?;
+        name.trim()
+            .eq_ignore_ascii_case(KEY)
+            .then(|| value.trim().to_owned())
+    })
 }
 
 /// Whether a program's value turns Auto HDR on (`Some(true)`), off
@@ -125,6 +160,33 @@ mod tests {
             edit(None, AutoHdr::On).as_deref(),
             Some("AutoHDREnable=4147;"),
             "new value"
+        );
+    }
+
+    #[test]
+    fn follows_the_default_and_puts_back() {
+        assert!(!AutoHdr::Windows.is_on(false), "default off");
+        assert!(AutoHdr::Windows.is_on(true), "default on");
+        assert!(AutoHdr::On.is_on(false), "own choice wins");
+        assert_eq!(
+            AutoHdr::choose(false, false),
+            AutoHdr::Windows,
+            "same as the default"
+        );
+        assert_eq!(AutoHdr::choose(true, false), AutoHdr::On, "differs");
+        assert_eq!(AutoHdr::choose(false, true), AutoHdr::Off, "differs");
+        let current = "SwapEffectUpgradeEnable=1;AutoHDREnable=48;";
+        assert_eq!(value(current).as_deref(), Some("48"), "read as written");
+        assert_eq!(value("AppStatus=4;"), None, "none");
+        assert_eq!(
+            set(Some(current), Some("4147")).as_deref(),
+            Some("SwapEffectUpgradeEnable=1;AutoHDREnable=4147;"),
+            "put back"
+        );
+        assert_eq!(
+            set(Some(current), None).as_deref(),
+            Some("SwapEffectUpgradeEnable=1;"),
+            "removed when there was none"
         );
     }
 

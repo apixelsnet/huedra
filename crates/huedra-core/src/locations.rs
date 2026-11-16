@@ -32,6 +32,12 @@ pub struct Locations {
     pub crash: PathBuf,
     /// `crash.last.txt`, the newest crash already offered (local).
     pub last_crash: PathBuf,
+    /// `graphics.toml`, what games' programs had for Auto HDR and RTX HDR
+    /// before Huedra first changed them (local).
+    pub graphics: PathBuf,
+    /// `mods\`, the record of each installed HDR mod, the game files it
+    /// replaced, and the downloads while one installs (local).
+    pub mods: PathBuf,
     /// Whether portable mode is on.
     pub portable: bool,
 }
@@ -83,6 +89,8 @@ impl Locations {
             update: local.join("update.toml"),
             crash: local.join("crash.txt"),
             last_crash: local.join("crash.last.txt"),
+            graphics: local.join("graphics.toml"),
+            mods: local.join("mods"),
             portable,
         }
     }

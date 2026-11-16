@@ -5,10 +5,12 @@
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
+use std::path::PathBuf;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 
-use huedra_core::autohdr::AutoHdr;
 use huedra_core::color::Installed;
 use huedra_core::command;
 use huedra_core::config::{
@@ -24,6 +26,7 @@ use huedra_core::launch;
 use huedra_core::library::{self, Game, GameId, Store};
 use huedra_core::locations::Locations;
 use huedra_core::mode::DisplayMode;
+use huedra_core::mods::{self as hdr_mods, Manifest, Mod};
 use huedra_core::paths::{NormPath, display_name};
 use huedra_core::shortcut::Binding;
 use huedra_core::video::{self, StreamingSite, VideoApp};
@@ -35,6 +38,7 @@ use slint::{
 
 use crate::icons;
 use crate::lookups::{self, Lookup};
+use crate::mods::{self as mod_jobs, Plan};
 #[cfg(feature = "sample")]
 use crate::sample;
 use crate::ui::{
@@ -120,6 +124,32 @@ struct State {
     failure_closed: Option<String>,
     /// The failed switch shown in the notice, if any.
     failure: Option<String>,
+    /// The RenoDX and Luma lists.
+    mods: Vec<Mod>,
+    /// The records of the mods Huedra installed.
+    installed: Vec<Manifest>,
+    /// An NVIDIA driver answers, so RTX HDR can be set.
+    rtx_available: bool,
+    /// The game the HDR mod notice was shown for, installed once accepted.
+    mod_pending: Option<GameId>,
+    /// The install waiting for the user's confirmation.
+    mod_plan: Option<Plan>,
+    /// The removal waiting for the user's confirmation.
+    mod_remove: Option<Manifest>,
+    /// The removal of a mod installed by hand waiting for the user's
+    /// confirmation: the game, its name, the project and what goes.
+    mod_remove_hand: Option<(GameId, String, hdr_mods::Source, hdr_mods::HandRemoval)>,
+    /// The game whose mod is being installed or removed.
+    mod_busy: Option<GameId>,
+    /// Set to stop the install under way.
+    mod_cancel: Arc<AtomicBool>,
+    /// The job under way is a removal, which cannot be canceled.
+    mod_removing: bool,
+    /// HDR mods found in games' folders that Huedra did not install.
+    found: HashMap<GameId, hdr_mods::Found>,
+    /// The program found in the folder of a game Huedra has not seen run,
+    /// where its mod would go.
+    guessed: HashMap<GameId, PathBuf>,
 }
 
 thread_local! {
@@ -240,6 +270,8 @@ pub fn run(locations: Locations, page: Page) -> Result<(), slint::PlatformError>
     #[cfg(not(feature = "sample"))]
     let info = Cache::load(&locations.game_info);
     let games = scan_games(&config);
+    #[cfg(not(feature = "sample"))]
+    let locations_mods = locations.mods.clone();
     let state = State {
         info,
         displays: read_displays().unwrap_or_default(),
@@ -259,6 +291,28 @@ pub fn run(locations: Locations, page: Page) -> Result<(), slint::PlatformError>
         update_shown: None,
         failure_closed: None,
         failure: None,
+        #[cfg(not(feature = "sample"))]
+        mods: mod_jobs::load_lists(&locations_mods),
+        #[cfg(feature = "sample")]
+        mods: sample::mods(),
+        #[cfg(not(feature = "sample"))]
+        installed: hdr_mods::installed(&locations_mods),
+        #[cfg(feature = "sample")]
+        installed: sample::installed(),
+        // A sample window shows the toggle as on an NVIDIA graphics card.
+        rtx_available: cfg!(feature = "sample") || huedra_win::nvapi::available(),
+        mod_pending: None,
+        mod_plan: None,
+        mod_remove: None,
+        mod_remove_hand: None,
+        mod_busy: None,
+        mod_cancel: Arc::new(AtomicBool::new(false)),
+        mod_removing: false,
+        found: HashMap::new(),
+        #[cfg(not(feature = "sample"))]
+        guessed: HashMap::new(),
+        #[cfg(feature = "sample")]
+        guessed: sample::programs(),
     };
     STATE.set(Some(state));
 
@@ -293,6 +347,8 @@ pub fn run(locations: Locations, page: Page) -> Result<(), slint::PlatformError>
     start_status_polling(&ui);
     start_lookups(&ui);
     start_icons(&ui);
+    start_mod_lists(&ui);
+    start_found_scan(&ui);
 
     let weak = ui.as_weak();
     ui.window().on_close_requested(move || {
@@ -873,6 +929,8 @@ struct Cues {
     own: bool,
     /// The suggested setting where it differs from the current one.
     suggestion: Option<GameHdr>,
+    /// HDR mod: "installed", "available" (on a list) or empty.
+    hdr_mod: &'static str,
 }
 
 fn cues(state: &State, game: &Game) -> Cues {
@@ -903,9 +961,146 @@ fn cues(state: &State, game: &Game) -> Cues {
         hdr,
         own: setting != GameHdr::default(),
         suggestion: info
-            .and_then(|i| i.hdr.suggestion())
+            .and_then(|_| wiki_suggestion(state, game))
             .filter(|s| *s != setting),
+        hdr_mod: if installed_mod(state, &game.id).is_some() || state.found.contains_key(&game.id) {
+            "installed"
+        } else if mod_for(state, game).is_some()
+            && info.and_then(GameInfo::anticheat_name).is_none()
+        {
+            // Not offered for games with anti-cheat (see `mod_view`).
+            "available"
+        } else {
+            ""
+        },
     }
+}
+
+/// PCGamingWiki's suggested setting for a game. None for a game with an
+/// HDR mod: the wiki describes the game without it, and the mod adds HDR.
+fn wiki_suggestion(state: &State, game: &Game) -> Option<GameHdr> {
+    if installed_mod(state, &game.id).is_some() || state.found.contains_key(&game.id) {
+        return None;
+    }
+    state.info.get(&game.id).and_then(|i| i.hdr.suggestion())
+}
+
+/// The record of the mod Huedra installed for a game, if any.
+fn installed_mod<'a>(state: &'a State, id: &GameId) -> Option<&'a Manifest> {
+    state.installed.iter().find(|m| &m.game == id)
+}
+
+/// The listed HDR mod for a game, while looking for mods is on.
+fn mod_for<'a>(state: &'a State, game: &Game) -> Option<&'a Mod> {
+    if !state.config.general.hdr_mods {
+        return None;
+    }
+    hdr_mods::find(&state.mods, &game.name)
+}
+
+/// The program of a game a mod goes next to: one Huedra saw run, or else
+/// the one found in the game's folder.
+fn mod_program(state: &State, game: &Game) -> Option<PathBuf> {
+    // Read from the file: the tray process adds a game's program the
+    // first time the game runs, which may be while this window is open.
+    let saved = Config::load(&state.locations.config).ok();
+    let mut programs = saved
+        .as_ref()
+        .unwrap_or(&state.config)
+        .game(&game.id)
+        .map(|s| s.programs.clone())
+        .unwrap_or_default();
+    programs.extend(game.exe.clone());
+    mod_jobs::program_of(&programs).or_else(|| state.guessed.get(&game.id).cloned())
+}
+
+/// The details pane's HDR mod section: state, title, detail, note, link.
+fn mod_view(state: &State, game: &Game) -> (&'static str, String, String, String, String) {
+    let link = |m: &Mod| m.page.clone().unwrap_or_default();
+    if state.mod_busy.as_ref() == Some(&game.id) {
+        let title = mod_for(state, game).map_or_else(
+            || "HDR mod".to_owned(),
+            |m| format!("{} for {}", m.source.label(), m.name),
+        );
+        return (
+            "working",
+            title,
+            String::new(),
+            String::new(),
+            String::new(),
+        );
+    }
+    if let Some(record) = installed_mod(state, &game.id) {
+        let detail = if record.author.is_empty() {
+            "Installed".to_owned()
+        } else {
+            format!("Installed · by {}", record.author)
+        };
+        let page = mod_for(state, game).map(link).unwrap_or_default();
+        return (
+            "installed",
+            format!("{} for {}", record.source.label(), record.name),
+            detail,
+            String::new(),
+            page,
+        );
+    }
+    if let Some(found) = state.found.get(&game.id) {
+        return (
+            "found",
+            format!("{} is installed", found.source.label()),
+            format!(
+                "Installed outside Huedra, in {}",
+                found.folder.display()
+            ),
+            "Huedra didn't install it. Remove takes out the mod and its ReShade and keeps a copy of every file.".to_owned(),
+            mod_for(state, game).map(link).unwrap_or_default(),
+        );
+    }
+    let Some(entry) = mod_for(state, game) else {
+        let note = if !state.config.general.hdr_mods {
+            "Looking for HDR mods is off in Settings."
+        } else if state.mods.is_empty() {
+            "The RenoDX and Luma lists haven't been downloaded yet."
+        } else {
+            "RenoDX and Luma have no mod for this game."
+        };
+        return (
+            "none",
+            String::new(),
+            String::new(),
+            note.to_owned(),
+            String::new(),
+        );
+    };
+    let title = format!("{} for {}", entry.source.label(), entry.name);
+    let detail = format!("By {} · {}", entry.author, entry.status.label());
+    let anticheat = state.info.get(&game.id).and_then(GameInfo::anticheat_name);
+    let (kind, note) = if !entry.installable() {
+        ("page", entry.note.clone())
+    } else if let Some(name) = anticheat {
+        (
+            "blocked",
+            format!(
+                "PCGamingWiki lists {name}. Changed game files can get accounts banned, so Huedra won't install a mod here."
+            ),
+        )
+    } else if mod_program(state, game).is_none() {
+        ("program", entry.note.clone())
+    } else {
+        // Says where it goes, so a wrong guess shows before installing.
+        let place = mod_program(state, game)
+            .map(|p| format!("Goes next to {}.", p.display()))
+            .unwrap_or_default();
+        let note = [entry.note.as_str(), place.as_str()]
+            .iter()
+            .filter(|t| !t.is_empty())
+            .copied()
+            .collect::<Vec<_>>()
+            .join(" ");
+        ("available", note)
+    };
+    (kind, title, detail, note, link(entry))
 }
 
 /// Whether a game passes the chosen filter: a store, or one of the cues.
@@ -915,6 +1110,7 @@ fn passes(filter: &str, game: &Game, cues: &Cues) -> bool {
         "hdr" => matches!(cues.hdr, "hdr" | "limited"),
         "own" => cues.own,
         "suggest" => cues.suggestion.is_some(),
+        "mods" => !cues.hdr_mod.is_empty(),
         store => game.store.key() == store,
     }
 }
@@ -953,12 +1149,13 @@ fn show_games(ui: &SettingsWindow, state: &State) {
                 name: g.name.as_str().into(),
                 icon: state.icons.get(&g.id).cloned().unwrap_or_default(),
                 initial: initial(&g.name).into(),
-                store: if running {
-                    format!("Running · {store}")
-                } else {
-                    store.to_owned()
+                store: match (running, c.hdr_mod) {
+                    (true, _) => format!("Running · {store}"),
+                    (false, "installed") => format!("{store} · HDR mod installed"),
+                    _ => store.to_owned(),
                 }
                 .into(),
+                hdr_mod: c.hdr_mod.into(),
                 hdr: c.hdr.into(),
                 setting: if c.own {
                     setting_of(state, &g.id).label()
@@ -997,6 +1194,14 @@ fn show_games(ui: &SettingsWindow, state: &State) {
             key: "suggest".into(),
             label: "Suggestions".into(),
             count: suggest,
+        });
+    }
+    let with_mods = cue_count(&|c| !c.hdr_mod.is_empty());
+    if state.config.general.hdr_mods && with_mods > 0 {
+        cue_chips.push(StoreChip {
+            key: "mods".into(),
+            label: "HDR mods".into(),
+            count: with_mods,
         });
     }
     if !ui.get_cue_chips().iter().eq(cue_chips.iter().cloned()) {
@@ -1041,6 +1246,7 @@ fn show_games(ui: &SettingsWindow, state: &State) {
     }
     ui.set_filter(state.filter.as_str().into());
     ui.set_game_total(count(state.games.len()));
+    ui.set_mods_installed(count(state.installed.len()));
     show_detail(ui, state);
 }
 
@@ -1094,7 +1300,7 @@ fn detail_of(state: &State, game: &Game) -> GameDetail {
     let settings = state.config.game(&game.id);
     let setting = settings.map(|s| s.hdr).unwrap_or_default();
     let info: Option<&GameInfo> = state.info.get(&game.id);
-    let suggestion = info.and_then(|i| i.hdr.suggestion());
+    let suggestion = wiki_suggestion(state, game);
     let index = |hdr: GameHdr| count(HDR_SETTINGS.iter().position(|h| *h == hdr).unwrap_or(0));
     let delay = settings
         .and_then(|s| s.start_delay)
@@ -1102,6 +1308,7 @@ fn detail_of(state: &State, game: &Game) -> GameDetail {
     let hold = settings
         .and_then(|s| s.hold)
         .unwrap_or(state.config.general.hold);
+    let (mod_state, mod_title, mod_detail, mod_note, mod_link) = mod_view(state, game);
     GameDetail {
         id: game.id.as_str().into(),
         name: game.name.as_str().into(),
@@ -1152,12 +1359,16 @@ fn detail_of(state: &State, game: &Game) -> GameDetail {
             &state.profiles.hdr,
             settings.and_then(|s| s.hdr_profile.as_deref()),
         ),
-        auto_hdr: match settings.map(|s| s.auto_hdr).unwrap_or_default() {
-            AutoHdr::Windows => 0,
-            AutoHdr::On => 1,
-            AutoHdr::Off => 2,
-        },
-        auto_hdr_known: settings.is_some_and(|s| !s.programs.is_empty() || s.exe.is_some()),
+        auto_hdr: state.config.auto_hdr_on(&game.id),
+        rtx_hdr: state.config.rtx_hdr_on(&game.id),
+        rtx_available: state.rtx_available,
+        program_known: settings.is_some_and(|s| !s.programs.is_empty() || s.exe.is_some()),
+        mod_state: mod_state.into(),
+        mod_title: mod_title.into(),
+        mod_detail: mod_detail.into(),
+        mod_note: mod_note.into(),
+        mod_link: mod_link.into(),
+        online: info.is_some_and(|i| i.online),
         // A saved mode the display no longer lists shows as the default
         // until another is chosen; the saved one stays in the file.
         display_mode: settings
@@ -1387,17 +1598,14 @@ fn wire_games(ui: &SettingsWindow) {
         });
     });
     let r = refresh.clone();
-    ui.on_set_game_auto_hdr(move |id, index| {
-        let choice = usize::try_from(index)
-            .ok()
-            .and_then(|i| AutoHdr::ALL.get(i).copied())
-            .unwrap_or_default();
-        r(&|s| {
-            edit(s, |c| {
-                c.game_mut(&GameId::from_raw(id.as_str())).auto_hdr = choice
-            });
-        });
+    ui.on_set_game_auto_hdr(move |id, on| {
+        r(&|s| edit(s, |c| c.set_auto_hdr(&GameId::from_raw(id.as_str()), on)));
     });
+    let r = refresh.clone();
+    ui.on_set_game_rtx_hdr(move |id, on| {
+        r(&|s| edit(s, |c| c.set_rtx_hdr(&GameId::from_raw(id.as_str()), on)));
+    });
+    wire_mods(ui);
     let r = refresh.clone();
     ui.on_set_game_profile(move |id, hdr, index| {
         r(&|s| {
@@ -1542,6 +1750,529 @@ fn start_lookups(ui: &SettingsWindow) {
 }
 
 // ---- Displays ---------------------------------------------------------
+
+// ---- HDR mods ---------------------------------------------------------
+
+/// Downloads the RenoDX and Luma lists when they are older than a day.
+fn start_mod_lists(ui: &SettingsWindow) {
+    if cfg!(feature = "sample") {
+        return;
+    }
+    let Some(folder) =
+        with_state(|s| s.config.general.hdr_mods.then(|| s.locations.mods.clone())).flatten()
+    else {
+        return;
+    };
+    let weak = ui.as_weak();
+    mod_jobs::refresh_lists(folder, move |found| {
+        let _ = weak.upgrade_in_event_loop(move |ui| {
+            with_state(|s| {
+                s.mods = found;
+                show_games(&ui, s);
+            });
+        });
+    });
+}
+
+/// Looks for HDR mods put into games' folders by hand, on a background
+/// thread, and records them so Auto HDR and RTX HDR stay off for those
+/// games too. Games with a mod Huedra installed are left out.
+fn start_found_scan(ui: &SettingsWindow) {
+    if cfg!(feature = "sample") {
+        return;
+    }
+    let Some(work) = with_state(|s| {
+        s.games
+            .iter()
+            .filter(|g| installed_mod(s, &g.id).is_none())
+            .map(|g| {
+                let mut folders: Vec<PathBuf> = s
+                    .config
+                    .game(&g.id)
+                    .map(|c| c.programs.clone())
+                    .unwrap_or_default()
+                    .into_iter()
+                    .chain(g.exe.clone())
+                    .filter_map(|p| PathBuf::from(p).parent().map(PathBuf::from))
+                    .collect();
+                // A game with a listed mod whose program Huedra has not seen
+                // run gets its program guessed from its folder, so the mod
+                // can be installed before the first start.
+                let guess =
+                    (folders.is_empty() && !g.install_dir.is_empty() && mod_for(s, g).is_some())
+                        .then(|| (PathBuf::from(&g.install_dir), g.name.clone()));
+                if !g.install_dir.is_empty() {
+                    folders.push(PathBuf::from(&g.install_dir));
+                }
+                (g.id.clone(), folders, guess)
+            })
+            .collect::<Vec<_>>()
+    }) else {
+        return;
+    };
+    let weak = ui.as_weak();
+    let _ = thread::Builder::new()
+        .name("huedra-found-mods".into())
+        .spawn(move || {
+            let mut found: HashMap<GameId, hdr_mods::Found> = HashMap::new();
+            let mut guessed: HashMap<GameId, PathBuf> = HashMap::new();
+            for (id, folders, guess) in work {
+                if let Some(f) = hdr_mods::find_in(&folders) {
+                    found.insert(id, f);
+                } else if let Some((dir, name)) = guess
+                    && let Some(program) = huedra_core::icons::find_program(&dir, &[], &name)
+                {
+                    guessed.insert(id, program);
+                }
+            }
+            let _ = weak.upgrade_in_event_loop(move |ui| {
+                with_state(|s| {
+                    s.guessed = guessed;
+                    let wanted = |id: &GameId| found.get(id).map(|f| f.source.label().to_owned());
+                    let ids: Vec<GameId> = s.games.iter().map(|g| g.id.clone()).collect();
+                    let changed = ids.iter().any(|id| {
+                        s.config.game(id).and_then(|c| c.found_mod.clone()) != wanted(id)
+                    });
+                    if changed {
+                        edit(s, |c| {
+                            for id in &ids {
+                                let value = wanted(id);
+                                if c.game(id).and_then(|g| g.found_mod.clone()) != value {
+                                    c.game_mut(id).found_mod = value;
+                                }
+                            }
+                        });
+                    }
+                    s.found = found;
+                    refresh_games(&ui, s);
+                });
+            });
+        });
+}
+
+fn lines_model(lines: Vec<String>) -> ModelRc<SharedString> {
+    ModelRc::new(VecModel::from(
+        lines
+            .into_iter()
+            .map(SharedString::from)
+            .collect::<Vec<_>>(),
+    ))
+}
+
+/// The dialog's last step: what happened, and Close.
+fn mod_result(ui: &SettingsWindow, title: &str, text: &str, lines: Vec<String>) {
+    ui.set_mod_title(title.into());
+    ui.set_mod_text(text.into());
+    ui.set_mod_changes(lines_model(lines));
+    ui.set_mod_dialog(5);
+}
+
+/// Shows the Games page again with a fresh details pane, for values that
+/// changed outside its controls.
+fn refresh_games(ui: &SettingsWindow, state: &State) {
+    ui.set_details(ModelRc::default());
+    show_games(ui, state);
+}
+
+/// Works out the install for a game and asks to confirm it, listing what
+/// will change, or says why it cannot be done.
+fn offer_install(ui: &SettingsWindow, state: &mut State, id: &GameId) {
+    let Some(game) = state.games.iter().find(|g| &g.id == id).cloned() else {
+        return;
+    };
+    let Some(entry) = mod_for(state, &game).cloned() else {
+        return;
+    };
+    let Some(program) = mod_program(state, &game) else {
+        mod_result(
+            ui,
+            "Huedra doesn't know the game's program yet",
+            "Start the game once so Huedra learns which program to put the mod next to, then try again.",
+            Vec::new(),
+        );
+        return;
+    };
+    match mod_jobs::plan(id, &entry, &program) {
+        Ok(plan) => {
+            let unchecked = if state.config.general.game_info {
+                ""
+            } else {
+                "Game information is off, so Huedra can't check PCGamingWiki for anti-cheat. Make sure this game has none. "
+            };
+            ui.set_mod_title(format!("Install {} for {}?", entry.source.label(), game.name).into());
+            ui.set_mod_text(
+                format!(
+                    "{unchecked}{} by {} ({}). Huedra will:",
+                    entry.source.label(),
+                    entry.author,
+                    entry.status.label().to_lowercase()
+                )
+                .into(),
+            );
+            ui.set_mod_changes(lines_model(plan.changes()));
+            ui.set_mod_online(state.info.get(id).is_some_and(|i| i.online));
+            state.mod_plan = Some(plan);
+            ui.set_mod_dialog(2);
+        }
+        Err(why) => mod_result(ui, "This mod can't be installed", &why, Vec::new()),
+    }
+}
+
+fn wire_mods(ui: &SettingsWindow) {
+    let weak = ui.as_weak();
+    ui.on_install_mod(move |id| {
+        let Some(ui) = weak.upgrade() else {
+            return;
+        };
+        let id = GameId::from_raw(id.as_str());
+        with_state(|s| {
+            if s.mod_busy.is_some() {
+                return;
+            }
+            if s.config.general.mods_disclaimer_accepted {
+                offer_install(&ui, s, &id);
+            } else {
+                s.mod_pending = Some(id);
+                ui.set_mod_dialog(1);
+            }
+        });
+    });
+    let weak = ui.as_weak();
+    ui.on_mod_accept_notice(move || {
+        let Some(ui) = weak.upgrade() else {
+            return;
+        };
+        with_state(|s| {
+            edit(s, |c| c.general.mods_disclaimer_accepted = true);
+            ui.set_mod_dialog(0);
+            if let Some(id) = s.mod_pending.take() {
+                offer_install(&ui, s, &id);
+            }
+        });
+    });
+    let weak = ui.as_weak();
+    ui.on_remove_mod(move |id| {
+        let Some(ui) = weak.upgrade() else {
+            return;
+        };
+        let id = GameId::from_raw(id.as_str());
+        with_state(|s| {
+            if s.mod_busy.is_some() {
+                return;
+            }
+            let Some(record) = installed_mod(s, &id).cloned() else {
+                offer_hand_removal(&ui, s, &id);
+                return;
+            };
+            let mut lines: Vec<String> = record
+                .files
+                .iter()
+                .take(8)
+                .map(|f| {
+                    if f.replaced {
+                        format!("Put back the game's own {}", f.path)
+                    } else {
+                        format!("Delete {}", f.path)
+                    }
+                })
+                .collect();
+            if record.files.len() > 8 {
+                lines.push(format!("And {} more files", record.files.len() - 8));
+            }
+            lines.push(
+                "Set Windows Auto HDR and NVIDIA RTX HDR back to this game's settings".to_owned(),
+            );
+            ui.set_mod_title(
+                format!("Remove {} from {}?", record.source.label(), record.name).into(),
+            );
+            ui.set_mod_text(format!("In {}, Huedra will:", record.folder).into());
+            ui.set_mod_changes(lines_model(lines));
+            ui.set_mod_online(false);
+            s.mod_remove = Some(record);
+            ui.set_mod_dialog(4);
+        });
+    });
+    let weak = ui.as_weak();
+    ui.on_mod_cancel(move || {
+        let Some(ui) = weak.upgrade() else {
+            return;
+        };
+        with_state(|s| {
+            if ui.get_mod_dialog() == 3 {
+                if !s.mod_removing {
+                    s.mod_cancel.store(true, Ordering::Relaxed);
+                    ui.set_mod_step("Canceling...".into());
+                }
+                return;
+            }
+            s.mod_pending = None;
+            s.mod_plan = None;
+            s.mod_remove = None;
+            s.mod_remove_hand = None;
+            ui.set_mod_dialog(0);
+        });
+    });
+    let weak = ui.as_weak();
+    ui.on_mod_confirm(move || {
+        let Some(ui) = weak.upgrade() else {
+            return;
+        };
+        with_state(|s| match ui.get_mod_dialog() {
+            2 => start_install(&ui, s),
+            4 if s.mod_remove_hand.is_some() => start_hand_removal(&ui, s),
+            4 => start_remove(&ui, s),
+            _ => {}
+        });
+    });
+}
+
+fn start_install(ui: &SettingsWindow, state: &mut State) {
+    let Some(plan) = state.mod_plan.take() else {
+        return;
+    };
+    let game = plan.game.clone();
+    state.mod_busy = Some(game.clone());
+    state.mod_removing = false;
+    state.mod_cancel = Arc::new(AtomicBool::new(false));
+    ui.set_mod_title(
+        format!(
+            "Installing {} for {}",
+            plan.entry.source.label(),
+            plan.entry.name
+        )
+        .into(),
+    );
+    ui.set_mod_text(SharedString::default());
+    ui.set_mod_step("Starting".into());
+    ui.set_mod_progress(0.0);
+    ui.set_mod_dialog(3);
+    refresh_games(ui, state);
+    let weak = ui.as_weak();
+    let progress = move |step: &str, fraction: f32| {
+        let step = SharedString::from(step);
+        let _ = weak.upgrade_in_event_loop(move |ui| {
+            if ui.get_mod_step() != "Canceling..." {
+                ui.set_mod_step(step);
+            }
+            ui.set_mod_progress(fraction);
+        });
+    };
+    let weak = ui.as_weak();
+    let done = move |result: Result<Manifest, String>| {
+        let _ = weak.upgrade_in_event_loop(move |ui| {
+            with_state(|s| {
+                s.mod_busy = None;
+                match result {
+                    Ok(record) => {
+                        let name = format!("{} for {}", record.source.label(), record.name);
+                        let source = record.source.label().to_owned();
+                        s.installed.retain(|m| m.game != record.game);
+                        s.installed.push(record);
+                        edit(s, |c| c.game_mut(&game).hdr_mod = Some(source));
+                        mod_result(
+                            &ui,
+                            "HDR mod installed",
+                            &format!(
+                                "{name} is in the game's folder. Start the game and press Home to open its menu. Windows Auto HDR and NVIDIA RTX HDR are off for this game from its next start."
+                            ),
+                            Vec::new(),
+                        );
+                    }
+                    Err(why) => mod_result(&ui, "The HDR mod wasn't installed", &why, Vec::new()),
+                }
+                refresh_games(&ui, s);
+            });
+        });
+    };
+    mod_jobs::install(
+        plan,
+        state.locations.mods.clone(),
+        state.mod_cancel.clone(),
+        progress,
+        done,
+    );
+}
+
+fn start_remove(ui: &SettingsWindow, state: &mut State) {
+    let Some(record) = state.mod_remove.take() else {
+        return;
+    };
+    let game = record.game.clone();
+    state.mod_busy = Some(game.clone());
+    state.mod_removing = true;
+    ui.set_mod_title(format!("Removing {} from {}", record.source.label(), record.name).into());
+    ui.set_mod_text(SharedString::default());
+    ui.set_mod_step("Taking out the mod's files and putting back the game's own".into());
+    ui.set_mod_progress(0.5);
+    ui.set_mod_dialog(3);
+    refresh_games(ui, state);
+    let weak = ui.as_weak();
+    let done = move |result: Result<Vec<String>, String>| {
+        let _ = weak.upgrade_in_event_loop(move |ui| {
+            with_state(|s| {
+                s.mod_busy = None;
+                s.mod_removing = false;
+                match result {
+                    Ok(kept) => {
+                        s.installed.retain(|m| m.game != game);
+                        edit(s, |c| c.game_mut(&game).hdr_mod = None);
+                        if kept.is_empty() {
+                            mod_result(
+                                &ui,
+                                "HDR mod removed",
+                                "The game's folder is as it was before. Windows Auto HDR and NVIDIA RTX HDR follow this game's settings again.",
+                                Vec::new(),
+                            );
+                        } else {
+                            mod_result(
+                                &ui,
+                                "HDR mod removed, with some files left",
+                                "These files changed after the install (a game update or another mod), so Huedra left them. The originals they replaced are kept in Huedra's mods folder.",
+                                kept,
+                            );
+                        }
+                    }
+                    Err(why) => mod_result(&ui, "The HDR mod wasn't removed", &why, Vec::new()),
+                }
+                refresh_games(&ui, s);
+            });
+        });
+    };
+    mod_jobs::uninstall(record, state.locations.mods.clone(), done);
+}
+
+/// Works out what removing a mod installed by hand takes out and asks to
+/// confirm it, listing every file and folder.
+fn offer_hand_removal(ui: &SettingsWindow, state: &State, id: &GameId) {
+    let Some(found) = state.found.get(id).cloned() else {
+        return;
+    };
+    let name = state
+        .games
+        .iter()
+        .find(|g| &g.id == id)
+        .map(|g| g.name.clone())
+        .unwrap_or_default();
+    let id = id.clone();
+    let weak = ui.as_weak();
+    mod_jobs::plan_by_hand(found.folder.clone(), move |result| {
+        let _ = weak.upgrade_in_event_loop(move |ui| {
+            let nothing = with_state(|s| {
+                if s.mod_busy.is_some() || ui.get_mod_dialog() != 0 {
+                    return false;
+                }
+                let label = found.source.label();
+                match result {
+                    Ok(removal) if !removal.items.is_empty() => {
+                        let mut lines: Vec<String> = removal
+                            .items
+                            .iter()
+                            .take(8)
+                            .map(|item| format!("Take out {item}"))
+                            .collect();
+                        if removal.items.len() > 8 {
+                            lines.push(format!("And {} more", removal.items.len() - 8));
+                        }
+                        if removal.reshade_kept {
+                            lines.push(format!(
+                                "Leave ReShade ({}) and its settings: other add-ons in the folder use it",
+                                removal.reshade.clone().unwrap_or_default()
+                            ));
+                        } else if removal.reshade.is_none() {
+                            lines.push(
+                                "Only the mod's own files go: no ReShade was found next to it"
+                                    .to_owned(),
+                            );
+                        }
+                        lines.push(
+                            "Keep a copy of everything it takes out in Huedra's folder".to_owned(),
+                        );
+                        lines.push(
+                            "Let Windows Auto HDR and NVIDIA RTX HDR follow this game's settings again"
+                                .to_owned(),
+                        );
+                        ui.set_mod_title(format!("Remove {label} from {name}?").into());
+                        ui.set_mod_text(
+                            format!(
+                                "{label} was installed outside Huedra. In {}, Huedra will:",
+                                removal.folder.display()
+                            )
+                            .into(),
+                        );
+                        ui.set_mod_changes(lines_model(lines));
+                        ui.set_mod_online(false);
+                        s.mod_remove_hand = Some((id.clone(), name.clone(), found.source, removal));
+                        ui.set_mod_dialog(4);
+                        false
+                    }
+                    Ok(_) => {
+                        mod_result(
+                            &ui,
+                            "Nothing to remove",
+                            &format!("The {label} files are no longer in {}.", found.folder.display()),
+                            Vec::new(),
+                        );
+                        true
+                    }
+                    Err(why) => {
+                        mod_result(&ui, "The HDR mod can't be removed", &why, Vec::new());
+                        false
+                    }
+                }
+            });
+            if nothing == Some(true) {
+                start_found_scan(&ui);
+            }
+        });
+    });
+}
+
+/// Removes a mod installed by hand once confirmed, keeping a copy of its
+/// files, then looks for mods again.
+fn start_hand_removal(ui: &SettingsWindow, state: &mut State) {
+    let Some((game, name, source, removal)) = state.mod_remove_hand.take() else {
+        return;
+    };
+    state.mod_busy = Some(game.clone());
+    state.mod_removing = true;
+    ui.set_mod_title(format!("Removing {} from {name}", source.label()).into());
+    ui.set_mod_text(SharedString::default());
+    ui.set_mod_step("Copying the mod's files to Huedra's folder, then taking them out".into());
+    ui.set_mod_progress(0.5);
+    ui.set_mod_dialog(3);
+    refresh_games(ui, state);
+    let now = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+    let keep = hdr_mods::removed_folder(&state.locations.mods, &game, now);
+    let shown = keep.display().to_string();
+    let weak = ui.as_weak();
+    let done = move |result: Result<(), String>| {
+        let _ = weak.upgrade_in_event_loop(move |ui| {
+            with_state(|s| {
+                s.mod_busy = None;
+                s.mod_removing = false;
+                match result {
+                    Ok(()) => {
+                        s.found.remove(&game);
+                        mod_result(
+                            &ui,
+                            "HDR mod removed",
+                            &format!(
+                                "A copy of its files is in {shown}, in case you want them back. Huedra can't tell whether a mod installed by hand replaced any of the game's own files; if the game misbehaves, have Steam or the game's launcher verify its files."
+                            ),
+                            Vec::new(),
+                        );
+                    }
+                    Err(why) => mod_result(&ui, "The HDR mod wasn't removed", &why, Vec::new()),
+                }
+                refresh_games(&ui, s);
+            });
+            start_found_scan(&ui);
+        });
+    };
+    mod_jobs::uninstall_by_hand(removal, keep, done);
+}
 
 fn show_displays(ui: &SettingsWindow, state: &State) {
     let rows: Vec<DisplayRow> = state
@@ -1817,6 +2548,10 @@ fn show_settings(ui: &SettingsWindow, state: &State) {
         CloseAction::Quit => 1,
     });
     ui.set_game_info(g.game_info);
+    ui.set_games_auto_hdr(g.auto_hdr);
+    ui.set_games_rtx_hdr(g.rtx_hdr);
+    ui.set_rtx_available(state.rtx_available);
+    ui.set_hdr_mods(g.hdr_mods);
     ui.set_hold(secs(g.hold));
     ui.set_delay(secs(g.start_delay));
     ui.set_hotkeys(g.hotkeys);
@@ -1913,6 +2648,33 @@ fn wire_settings(ui: &SettingsWindow) {
             }
         }
     });
+    // Defaults for games; games that follow them change too, so the
+    // details pane is drawn again.
+    for (setter, which) in [(0, "auto"), (1, "rtx"), (2, "mods")] {
+        let c = change.clone();
+        let weak = ui.as_weak();
+        let apply = move |on: bool| {
+            c(&|c| match which {
+                "auto" => c.general.auto_hdr = on,
+                "rtx" => c.general.rtx_hdr = on,
+                _ => c.general.hdr_mods = on,
+            });
+            if let Some(ui) = weak.upgrade() {
+                with_state(|s| {
+                    show_settings(&ui, s);
+                    refresh_games(&ui, s);
+                });
+                if which == "mods" && on {
+                    start_mod_lists(&ui);
+                }
+            }
+        };
+        match setter {
+            0 => ui.on_set_games_auto_hdr(apply),
+            1 => ui.on_set_games_rtx_hdr(apply),
+            _ => ui.on_set_hdr_mods(apply),
+        }
+    }
     let c = change.clone();
     ui.on_set_hold(move |v| {
         c(&|c| c.general.hold = seconds(v, huedra_core::config::MAX_HOLD));
