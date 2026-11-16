@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use huedra_core::gameinfo::{self, Cache, GameInfo, WikiHdr};
+use huedra_core::gameinfo::{self, Cache, GameInfo};
 use huedra_core::library::GameId;
 use huedra_win::http;
 
@@ -98,14 +98,7 @@ fn lookup(item: &Lookup, now: u64, pacer: &mut Pacer) -> Option<GameInfo> {
             page = gameinfo::search_result(&String::from_utf8_lossy(&response.body));
         }
     }
-    let not_found = GameInfo {
-        id: item.id.clone(),
-        page: None,
-        hdr: WikiHdr::Unknown,
-        hdr_notes: String::new(),
-        ray_tracing: String::new(),
-        fetched: now,
-    };
+    let not_found = GameInfo::not_found(item.id.clone(), now);
     let Some(page) = page else {
         return Some(not_found);
     };

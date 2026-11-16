@@ -6,7 +6,7 @@ The Slint window, run as its own process (`huedra settings`).
 - Pages: Status, Games, Video players, Displays, and Settings pinned at the foot of the navigation (General before 2026-11-07).
 - Resizable: default 1100 x 780 (smaller on a small screen), minimum 520 x 560. Layouts: wide (1000 px and up), medium (680 to 999), compact (below 680, icon rail).
 - Size, position and maximized state remembered. Per-monitor DPI awareness v2; follows the Windows text size.
-- Palette from the BT.2020 primaries; spectrum only while HDR is on, gray in SDR.
+- Look: Windows 11 (Fluent) neutrals with Windows' fixed blue accent, as set out in 15; the BT.2020 spectrum only in the logo and the Status card while HDR is on, gray in SDR (the BT.2020 palette before 2026-11-16).
 - Motion: HDR fade 400 ms, page change 150 ms, controls 120 ms, hover 80 ms; none when Windows "Animation effects" is off.
 - Rendering: FemtoVG (OpenGL) with the software renderer as fallback. Slint royalty-free license: attribution line on the About page.
 
@@ -240,3 +240,19 @@ Verified on this PC: all six captures read cleanly after the fix (the Displays p
 Not verified: the shortcut boxes and the game page's lower rows in view at 200 % (they need scrolling, which the hidden-desktop capture cannot do).
 
 Also with the real Windows light theme (`AppsUseLightTheme` 1 for the test, then 0 again): the sample window followed Windows and the battery row, the shortcut boxes, the brightness box and the game page's Auto HDR and Resolution and refresh rate rows read cleanly.
+
+## Result (2026-11-16) — Windows-native look, game details as setting rows, HDR mods
+Code: `crates/huedra-ui/ui/{theme,controls,pages,app}.slint`, `crates/huedra-ui/src/{app,mods,sample}.rs`; design rules in 15.
+- Theme tokens are Windows' own (15): neutral layers, accent `#005FB8` light / `#60CDFF` dark, success, caution and critical colors with backgrounds. Pink stays for HDR labels only.
+- A game's details are setting rows (`PaneRow`: icon, title, description, control) under section headers: **HDR** (When this game runs, the PCGamingWiki suggestion bar, Wait before turning HDR on, Keep HDR on after it closes, Windows Auto HDR, NVIDIA RTX HDR), **HDR mod**, **Display** (color profiles, resolution), **Turn HDR on before the game starts** (Steam, launch option, desktop shortcut) and **About**. Toggles show "On"/"Off" beside them (`show-state`).
+- **InfoBar** has the kinds info, update, success, warning and error, as Windows' message bars.
+- HDR mods (16): grid badge, list line, **HDR mods** filter, the HDR mod section, and a dialog with five steps (risk notice with a check box, confirm with the list of changes, progress with Cancel, confirm removal, result). The dialog has a fixed height per step with a scrolling body, since Slint measured wrapped text too short.
+- Settings: the section **Auto HDR, RTX HDR and HDR mods** with three switches; its summary reads "Auto HDR: off · RTX HDR: off · HDR mods installed: N".
+- Text that wraps no longer spills past its row: `PaneRow` and `InfoBar` take `min-height: max(<minimum>, layout.min-height)`. A fixed `min-height` on the Rectangle overrode the height the layout measured for wrapped text.
+- The sample build (`--features sample`) has five RenoDX list rows, an installed mod for Hollow Knight, found programs and Easy Anti-Cheat for Elden Ring, so screenshots show every mod state.
+
+Verified on this PC: the details pane at window widths 1000, 860, 640 and 540 px (every row grew with its text), the anti-cheat bar at 1040 and 860 px, the Status failure bar; the README tour and Games screenshot retaken from the sample build on a hidden desktop. Scrolling there needs `SendMessage` WM_MOUSEMOVE + WM_MOUSEWHEEL, once per window (Slint's ScrollView exposes no UI Automation scroll pattern).
+Not verified at first: the light theme, 150 %/200 % scaling and keyboard-only use of the new rows and dialog. Checked later the same day with the sample build on a hidden desktop:
+- Light at 100 % (1300 × 760 window), dark at 150 % and 200 % (`HUEDRA_SAMPLE_THEME`, `SLINT_SCALE_FACTOR`, about 1040 × 680 logical pixels): Hades's HDR mod row with Install and "Goes next to…", Elden Ring's anti-cheat bar, the risk notice and Settings › Auto HDR, RTX HDR and HDR mods all wrap and fit.
+- Keyboard: the mod dialog first left the focus behind it (Tab reached the drop-downs under the smoke) and ignored Escape. It now keeps the keyboard: focus starts on the check box (the notice), the main button (confirm) or Cancel/Close (progress, result); Tab and Shift+Tab go round only its controls and skip a disabled Continue; Escape is Cancel. Code: `mod-tab` and `mod-keys` in `app.slint`, `ActionButton.focused` in `controls.slint`. The controls sit in `if`s, so each takes the focus itself when `mod-focus-tick` changes. Calling `focus()` on the main button straight from the dialog's key handler (with the button outside an `if`) lost the focus in Slint 1.18; the cause wasn't found.
+- Verified with keys posted to the window (Space, Tab, Shift+Tab, Escape) and a temporary focus readout: the notice (start, Tab and Shift+Tab both ways, Continue skipped while disabled, Space on Continue), the result (Close takes the focus, Tab stays, Escape closes); opened straight at Remove (Hollow Knight) and straight at the result (notice accepted), Escape closed both. Not verified: the confirm and progress steps (the sample can't reach them); the focus outlines, which on the hidden desktop sometimes showed only after a later event; a physical keyboard on a visible window.

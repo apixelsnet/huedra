@@ -4,7 +4,7 @@
 
 import { Palette } from "std-widgets.slint";
 import { Theme } from "theme.slint";
-import { FocusRing, ActionButton } from "controls.slint";
+import { FocusRing, ActionButton, InfoBar } from "controls.slint";
 import {
     StatusPage, GamesPage, VideoPage, DisplaysPage, SettingsPage, SetupPage,
     GameRow, GameDetail, DisplayRow, HistoryRow, NowRow, StoreChip, VideoAppRow, SiteRow, UpdateNote
@@ -179,7 +179,60 @@ export component SettingsWindow inherits Window {
     // "As set in Windows", then the main display's modes.
     in property <[string]> display-modes;
     in property <[string]> hdr-profiles;
-    callback set-game-auto-hdr(string, int);
+    callback set-game-auto-hdr(string, bool);
+    callback set-game-rtx-hdr(string, bool);
+    callback install-mod(string);
+    callback remove-mod(string);
+    // The HDR mod dialog: 1 the notice (accepted once), 2 what an install
+    // will change, 3 installing or removing, 4 what removing will change,
+    // 5 the result.
+    in-out property <int> mod-dialog;
+    in property <string> mod-title;
+    in property <string> mod-text;
+    in property <[string]> mod-changes;
+    in property <string> mod-step;
+    in property <float> mod-progress;
+    in property <bool> mod-online;
+    property <bool> mod-agreed;
+    changed mod-dialog => {
+        if root.mod-dialog == 1 {
+            root.mod-agreed = false;
+        }
+    }
+    // The keyboard stays in the mod dialog: Tab and Shift+Tab go round its
+    // controls (0 the checkbox, 1 the main button, 2 Cancel or Close) and
+    // Escape is Cancel. The controls sit in `if`s the dialog can't reach, so
+    // each one takes the focus when `mod-focus-tick` changes and `mod-focus`
+    // names it, and reports it in `mod-at`.
+    property <int> mod-at;
+    property <int> mod-focus;
+    property <int> mod-focus-tick;
+    property <bool> mod-has-check: root.mod-dialog == 1;
+    property <bool> mod-has-main: root.mod-dialog == 2 || root.mod-dialog == 4 || (root.mod-dialog == 1 && root.mod-agreed);
+    function mod-tab(back: bool) {
+        if back {
+            root.mod-focus = root.mod-at == 0 ? 2
+                : root.mod-at == 1 ? (root.mod-has-check ? 0 : 2)
+                : root.mod-has-main ? 1 : root.mod-has-check ? 0 : 2;
+        } else {
+            root.mod-focus = root.mod-at == 0 ? (root.mod-has-main ? 1 : 2)
+                : root.mod-at == 1 ? 2
+                : root.mod-has-check ? 0 : root.mod-has-main ? 1 : 2;
+        }
+        root.mod-focus-tick += 1;
+    }
+    callback mod-accept-notice();
+    callback mod-confirm();
+    callback mod-cancel();
+    // Settings › Auto HDR, RTX HDR and HDR mods.
+    in property <bool> games-auto-hdr;
+    in property <bool> games-rtx-hdr;
+    in property <bool> rtx-available;
+    in property <bool> hdr-mods;
+    in property <int> mods-installed;
+    callback set-games-auto-hdr(bool);
+    callback set-games-rtx-hdr(bool);
+    callback set-hdr-mods(bool);
     callback set-game-display-mode(string, int);
     callback set-game-profile(string, bool, int);
 
@@ -524,8 +577,17 @@ export component SettingsWindow inherits Window {
                 set-profile(id, hdr, i) => {
                     root.set-game-profile(id, hdr, i);
                 }
-                set-auto-hdr(id, i) => {
-                    root.set-game-auto-hdr(id, i);
+                set-auto-hdr(id, on) => {
+                    root.set-game-auto-hdr(id, on);
+                }
+                set-rtx-hdr(id, on) => {
+                    root.set-game-rtx-hdr(id, on);
+                }
+                install-mod(id) => {
+                    root.install-mod(id);
+                }
+                remove-mod(id) => {
+                    root.remove-mod(id);
                 }
                 display-modes: root.display-modes;
                 set-display-mode(id, i) => {
@@ -662,6 +724,20 @@ export component SettingsWindow inherits Window {
                 }
                 set-game-info(on) => {
                     root.set-game-info(on);
+                }
+                games-auto-hdr: root.games-auto-hdr;
+                games-rtx-hdr: root.games-rtx-hdr;
+                rtx-available: root.rtx-available;
+                hdr-mods: root.hdr-mods;
+                mods-installed: root.mods-installed;
+                set-games-auto-hdr(on) => {
+                    root.set-games-auto-hdr(on);
+                }
+                set-games-rtx-hdr(on) => {
+                    root.set-games-rtx-hdr(on);
+                }
+                set-hdr-mods(on) => {
+                    root.set-hdr-mods(on);
                 }
                 set-hold(v) => {
                     root.set-hold(v);
@@ -915,6 +991,301 @@ export component SettingsWindow inherits Window {
             }
             init => {
                 install-button.focus();
+            }
+        }
+    }
+    // The HDR mod dialog, as a Windows ContentDialog: the title, what will
+    // happen in plain words, and a footer band with the main action first.
+    if root.mod-dialog > 0 && !root.show-disclaimer && !root.show-setup: Rectangle {
+        background: Theme.dark ? #0000008C : #0000004D;
+        TouchArea {
+            // Takes the clicks meant for the window behind.
+        }
+        Rectangle {
+            width: min(parent.width - 48px, 540px);
+            // Heights fit each step's text at this width; the body scrolls
+            // when the window is lower than that.
+            height: min(parent.height - 48px, root.mod-dialog == 1 ? 470px : root.mod-dialog == 3 ? 220px : root.mod-dialog == 5 ? 320px : 540px);
+            border-radius: Theme.radius-card;
+            background: Theme.dark ? #2B2B2B : #FFFFFF;
+            border-width: 1px;
+            border-color: Theme.border;
+            drop-shadow-blur: 24px;
+            drop-shadow-color: #00000060;
+            clip: true;
+            accessible-role: groupbox;
+            accessible-label: root.mod-dialog == 1 ? "Before you install HDR mods" : root.mod-title;
+            mod-keys := FocusScope {
+                focus-on-click: false;
+                focus-on-tab-navigation: false;
+                key-pressed(event) => {
+                    if event.text == Key.Escape {
+                        root.mod-cancel();
+                        return accept;
+                    }
+                    if event.text == Key.Backtab || (event.text == Key.Tab && event.modifiers.shift) {
+                        root.mod-tab(true);
+                        return accept;
+                    }
+                    if event.text == Key.Tab {
+                        root.mod-tab(false);
+                        return accept;
+                    }
+                    reject
+                }
+                mod-card := VerticalLayout {
+                    Flickable {
+                        vertical-stretch: 1;
+                        content-width: self.width;
+                        content-height: max(self.height, mod-body.preferred-height);
+                    mod-body := VerticalLayout {
+                        width: parent.width;
+                        height: parent.height;
+                        alignment: start;
+                        padding: 24px;
+                        spacing: 12px;
+                        vertical-stretch: 1;
+                        Text {
+                            text: root.mod-dialog == 1 ? "Before you install HDR mods" : root.mod-title;
+                            font-size: Theme.heading-size;
+                            font-weight: 600;
+                            color: Theme.text;
+                            wrap: word-wrap;
+                        }
+                        if root.mod-dialog == 1: VerticalLayout {
+                            spacing: 8px;
+                            Text {
+                                text: "HDR mods are made by other people, not by Huedra or the game's makers. Huedra downloads them from the RenoDX and Luma projects and copies them into the game's folder.";
+                                color: Theme.text;
+                                wrap: word-wrap;
+                            }
+                            for line in [
+                                "Online play: games may ban accounts for changed files. Huedra won't install into games PCGamingWiki lists with anti-cheat, but that list can be incomplete. Play modded games offline.",
+                                "Your choice, your risk: Huedra and its authors are not responsible for bans, crashes or lost saves.",
+                                "Reversible: Huedra records every file it adds or replaces, and Remove puts the game folder back as it was, at any time.",
+                                "While a mod is installed, Windows Auto HDR and NVIDIA RTX HDR stay off for that game so the picture isn't converted twice.",
+                            ]: HorizontalLayout {
+                                spacing: 8px;
+                                Text {
+                                    text: "\u{2022}";
+                                    width: 10px;
+                                    color: Theme.text-muted;
+                                    accessible-role: none;
+                                }
+                                Text {
+                                    horizontal-stretch: 1;
+                                    text: line;
+                                    color: Theme.text;
+                                    wrap: word-wrap;
+                                }
+                            }
+                            agree := Rectangle {
+                                min-height: 28px;
+                                accessible-role: checkbox;
+                                accessible-label: "I understand and accept these risks";
+                                accessible-checkable: true;
+                                accessible-checked: root.mod-agreed;
+                                accessible-action-default => {
+                                    root.mod-agreed = !root.mod-agreed;
+                                }
+                                HorizontalLayout {
+                                    spacing: 10px;
+                                    padding-top: 6px;
+                                    VerticalLayout {
+                                        alignment: center;
+                                        Rectangle {
+                                            width: 20px;
+                                            height: 20px;
+                                            border-radius: Theme.radius-control;
+                                            background: root.mod-agreed ? Theme.accent : transparent;
+                                            border-width: root.mod-agreed ? 0px : 1px;
+                                            border-color: Theme.text-muted;
+                                            if root.mod-agreed: Text {
+                                                text: "\u{E73E}";
+                                                font-family: Theme.icons;
+                                                font-size: 12px;
+                                                color: Theme.on-accent;
+                                                horizontal-alignment: center;
+                                                vertical-alignment: center;
+                                                accessible-role: none;
+                                            }
+                                            if agree-keys.has-focus: Rectangle {
+                                                x: -3px;
+                                                y: -3px;
+                                                width: parent.width + 6px;
+                                                height: parent.height + 6px;
+                                                border-radius: Theme.radius-control + 2px;
+                                                border-width: 2px;
+                                                border-color: Theme.focus;
+                                            }
+                                        }
+                                    }
+                                    Text {
+                                        horizontal-stretch: 1;
+                                        text: "I understand and accept these risks";
+                                        color: Theme.text;
+                                        vertical-alignment: center;
+                                        wrap: word-wrap;
+                                        accessible-role: none;
+                                    }
+                                }
+                                TouchArea {
+                                    clicked => {
+                                        root.mod-agreed = !root.mod-agreed;
+                                    }
+                                }
+                                agree-keys := FocusScope {
+                                    x: 0;
+                                    width: 0px;
+                                    property <int> tick: root.mod-focus-tick;
+                                    init => {
+                                        self.focus();
+                                    }
+                                    changed tick => {
+                                        if root.mod-focus == 0 {
+                                            self.focus();
+                                        }
+                                    }
+                                    changed has-focus => {
+                                        if self.has-focus {
+                                            root.mod-at = 0;
+                                        }
+                                    }
+                                    key-pressed(event) => {
+                                        if event.text == Key.Space {
+                                            root.mod-agreed = !root.mod-agreed;
+                                            return accept;
+                                        }
+                                        reject
+                                    }
+                                }
+                            }
+                        }
+                        if root.mod-dialog != 1 && root.mod-text != "": Text {
+                            text: root.mod-text;
+                            color: Theme.text;
+                            wrap: word-wrap;
+                        }
+                        if root.mod-dialog == 2 && root.mod-online: InfoBar {
+                            kind: "warning";
+                            title: "This game has online play";
+                            text: "Mods can get an account banned in online modes. Play offline while it is installed.";
+                        }
+                        if root.mod-dialog != 1 && root.mod-dialog != 3 && root.mod-changes.length > 0: VerticalLayout {
+                            spacing: 4px;
+                            for line in root.mod-changes: HorizontalLayout {
+                                spacing: 8px;
+                                Text {
+                                    text: "\u{2022}";
+                                    width: 10px;
+                                    color: Theme.text-muted;
+                                    accessible-role: none;
+                                }
+                                Text {
+                                    horizontal-stretch: 1;
+                                    text: line;
+                                    color: Theme.text;
+                                    wrap: word-wrap;
+                                }
+                            }
+                        }
+                        if root.mod-dialog == 3: VerticalLayout {
+                            spacing: 8px;
+                            Text {
+                                text: root.mod-step;
+                                color: Theme.text-muted;
+                                wrap: word-wrap;
+                            }
+                            Rectangle {
+                                height: 4px;
+                                border-radius: 2px;
+                                background: Theme.divider;
+                                Rectangle {
+                                    x: 0;
+                                    width: parent.width * clamp(root.mod-progress, 0, 1);
+                                    height: parent.height;
+                                    border-radius: 2px;
+                                    background: Theme.accent;
+                                }
+                            }
+                        }
+                    }
+                    }
+                    // The footer band: the main action first, equal widths.
+                    Rectangle {
+                        background: Theme.dark ? #202020 : #F3F3F3;
+                        HorizontalLayout {
+                            padding: 24px;
+                            padding-top: 18px;
+                            padding-bottom: 18px;
+                            spacing: 8px;
+                            if root.mod-dialog == 1 || root.mod-dialog == 2 || root.mod-dialog == 4: ActionButton {
+                                horizontal-stretch: 1;
+                                primary: true;
+                                text: root.mod-dialog == 1 ? "Continue" : root.mod-dialog == 2 ? "Install" : "Remove";
+                                enabled: root.mod-dialog != 1 || root.mod-agreed;
+                                property <int> tick: root.mod-focus-tick;
+                                property <int> step: root.mod-dialog;
+                                init => {
+                                    if root.mod-dialog == 2 || root.mod-dialog == 4 {
+                                        self.focus();
+                                    }
+                                }
+                                changed step => {
+                                    if self.step == 2 || self.step == 4 {
+                                        self.focus();
+                                    }
+                                }
+                                changed tick => {
+                                    if root.mod-focus == 1 {
+                                        self.focus();
+                                    }
+                                }
+                                changed focused => {
+                                    if self.focused {
+                                        root.mod-at = 1;
+                                    }
+                                }
+                                clicked => {
+                                    if root.mod-dialog == 1 {
+                                        root.mod-accept-notice();
+                                    } else {
+                                        root.mod-confirm();
+                                    }
+                                }
+                            }
+                            ActionButton {
+                                horizontal-stretch: 1;
+                                text: root.mod-dialog == 5 ? "Close" : "Cancel";
+                                property <int> tick: root.mod-focus-tick;
+                                property <int> step: root.mod-dialog;
+                                init => {
+                                    if root.mod-dialog == 3 || root.mod-dialog == 5 {
+                                        self.focus();
+                                    }
+                                }
+                                changed step => {
+                                    if self.step == 3 || self.step == 5 {
+                                        self.focus();
+                                    }
+                                }
+                                changed tick => {
+                                    if root.mod-focus == 2 {
+                                        self.focus();
+                                    }
+                                }
+                                changed focused => {
+                                    if self.focused {
+                                        root.mod-at = 2;
+                                    }
+                                }
+                                clicked => {
+                                    root.mod-cancel();
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }

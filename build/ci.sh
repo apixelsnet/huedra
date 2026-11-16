@@ -58,7 +58,7 @@ cargo xwin build --release --target "$target" $locked
 exe="${CARGO_TARGET_DIR:-target}/$target/release/huedra.exe"
 ls -l "$exe"
 
-step "size (at most 12 MB)"
+step "size (at most 15 MB)"
 size=$(stat -c %s "$exe")
-echo "$size of 12000000 bytes"
-[ "$size" -le 12000000 ] || { echo "huedra.exe is larger than 12 MB" >&2; exit 1; }
+echo "$size of 15000000 bytes"
+[ "$size" -le 15000000 ] || { echo "huedra.exe is larger than 15 MB" >&2; exit 1; }

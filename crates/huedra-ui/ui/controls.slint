@@ -21,6 +21,8 @@ export component Toggle {
     // Read by screen readers instead of `text` when set.
     in property <string> spoken-text;
     in-out property <bool> checked;
+    // "On" or "Off" to the left of the switch, as in Windows Settings.
+    in property <bool> show-state;
     callback toggled();
 
     function flip() {
@@ -46,7 +48,18 @@ export component Toggle {
     }
 
     layout := HorizontalLayout {
-        spacing: 12px;
+        // No spacing: the state text carries its own gap, so switches
+        // without it stay where they were.
+        spacing: 0px;
+        // Always present (an `if` would add code to every switch in the
+        // program); empty and zero-wide when not shown.
+        Text {
+            text: !root.show-state ? "" : root.checked ? "On" : "Off";
+            color: root.enabled ? Theme.text : Theme.text-muted;
+            vertical-alignment: center;
+            width: root.show-state ? 36px : 0px;
+            accessible-role: none;
+        }
         VerticalLayout {
             alignment: center;
             Rectangle {
@@ -77,11 +90,14 @@ export component Toggle {
                 }
             }
         }
-        if root.text != "": Text {
-            text: root.text;
-            color: root.enabled ? Theme.text : Theme.text-muted;
-            vertical-alignment: center;
-            accessible-role: none;
+        if root.text != "": HorizontalLayout {
+            padding-left: 12px;
+            Text {
+                text: root.text;
+                color: root.enabled ? Theme.text : Theme.text-muted;
+                vertical-alignment: center;
+                accessible-role: none;
+            }
         }
     }
     touch := TouchArea {
@@ -109,6 +125,8 @@ export component ActionButton inherits Rectangle {
     in property <string> text;
     in property <bool> primary;
     in property <bool> enabled: true;
+    // For dialogs that keep the keyboard inside them.
+    out property <bool> focused: focus.has-focus;
     callback clicked();
     height: Theme.button-height;
     min-width: label.preferred-width + 24px;
@@ -872,25 +890,28 @@ export component FilterChip inherits Rectangle {
     }
 }
 
-// One banner for notices, placed under the page title: `info` (violet),
-// `update` (ultramarine) or `error` (pink with an outline; Huedra has no
-// yellow). The icon's shape tells the kinds apart as well as the color.
-// Action buttons go in as children; Close shows when `closable`.
+// A status bar in the page, as Windows' InfoBar: `info` or `update`
+// (accent), `success`, `warning` or `error`. The icon's shape tells the
+// kinds apart as well as the color. Action buttons go in as children;
+// Close shows when `closable`.
 export component InfoBar inherits Rectangle {
     in property <string> kind: "info";
     in property <string> title;
     in property <string> text;
     in property <bool> closable;
     callback closed();
-    min-height: 52px;
-    border-radius: Theme.radius-card - 2px;
+    // At least the layout's own minimum, so text that wraps to more lines
+    // makes the bar taller instead of spilling past it (as in PaneRow).
+    min-height: max(48px, bar-layout.min-height);
+    border-radius: Theme.radius-control;
     border-width: 1px;
-    background: root.kind == "error" ? #FF2D6F14 : root.kind == "update" ? #3341E61F : #9B3DFF1A;
-    border-color: root.kind == "error" ? Theme.hdr-label : root.kind == "update" ? #3341E666 : #9B3DFF55;
+    background: root.kind == "error" ? Theme.critical-bg : root.kind == "warning" ? Theme.caution-bg
+        : root.kind == "success" ? Theme.success-bg : Theme.info-bg;
+    border-color: Theme.border;
     accessible-role: groupbox;
     accessible-label: root.title;
     accessible-description: root.text;
-    HorizontalLayout {
+    bar-layout := HorizontalLayout {
         padding-left: 14px;
         padding-right: 10px;
         padding-top: 8px;
@@ -899,10 +920,12 @@ export component InfoBar inherits Rectangle {
         VerticalLayout {
             alignment: center;
             Text {
-                text: root.kind == "error" ? "\u{EA39}" : root.kind == "update" ? "\u{E896}" : "\u{E946}";
+                text: root.kind == "error" ? "\u{EA39}" : root.kind == "warning" ? "\u{E7BA}"
+                    : root.kind == "success" ? "\u{E930}" : root.kind == "update" ? "\u{E896}" : "\u{E946}";
                 font-family: Theme.icons;
                 font-size: 16px;
-                color: root.kind == "error" ? Theme.hdr-label : root.kind == "update" ? Theme.accent : Theme.violet-text;
+                color: root.kind == "error" ? Theme.critical : root.kind == "warning" ? Theme.caution
+                    : root.kind == "success" ? Theme.success : Theme.accent;
                 accessible-role: none;
             }
         }

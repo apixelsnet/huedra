@@ -43,3 +43,10 @@ Verified on this PC: online with an empty cache, all 23 games had icons after 7.
 Not verified: Epic, GOG, EA, Ubisoft and Rockstar games (none installed here; they use Discord by name, then their program).
 
 Status: done.
+
+## Result (2026-11-16) — anti-cheat and online play
+Code: `crates/huedra-core/src/gameinfo.rs` (`anticheat`, `online`, `SCHEMA`, `anticheat_name`).
+- Two more infobox fields are kept: `anticheat` (the named system, empty when the wiki lists none) and `online play`. They decide whether an HDR mod may be installed and whether its dialog warns about online play (16).
+- Cache entries carry `schema`; entries from before version 2 count as stale and are looked up again, so existing caches gain the fields without waiting 30 days.
+
+Verified on this PC: Zenless Zone Zero read as HoYoKProtect and its mod was blocked. Unit tests `reads_anticheat_and_online_play` and the staleness test cover the parsing and an older schema.

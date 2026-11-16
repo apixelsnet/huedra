@@ -229,3 +229,7 @@ Not verified: installing through winget (local manifests need an administrator s
 - Verified on this PC from the downloads: the zip, `release.toml` and `release-notes.md` signatures verify (trusted comment "huedra 1.2.1"); the exe's size and SHA-256 match `release.toml`, and the zip's exe is the channel's; `--version` prints Huedra 1.2.1; the notes carry every 1.2.1 entry; Defender finds nothing in the exe or the zip.
 - The winget and Scoop manifests in `extras/packaging/` now name 1.2.1 and the zip's SHA-256 (6108e87752fb2c6dd4974f122ad456c69890d4ca3370feff334169402b54fc4f).
 
+
+## Result (2026-11-16) — size limit 15 MB
+- Raised by the owner from 12 MB to 15 MB (15,000,000 bytes) in `build/ci.sh`: the redesigned Games details pane, its dialogs and the new Settings group brought the exe to 12,361,216 bytes. Slint expands each conditional element into its own code (about 4 KB each); making two always present in the setting rows saved 128 KB.
+- `huedra uninstall` now also removes the HDR mods Huedra installed (16) and puts back the Auto HDR and RTX HDR values recorded in `graphics.toml` (04). `PRIVACY.md` names the third use of the internet (the mod lists and mod downloads). Verified with a test build (12,412,416 bytes, Defender clean); the owner's start-up entry was exported first and imported again afterward.

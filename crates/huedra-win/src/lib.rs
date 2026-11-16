@@ -37,6 +37,8 @@ pub mod mode;
 #[cfg(windows)]
 pub mod monitor;
 #[cfg(windows)]
+pub mod nvapi;
+#[cfg(windows)]
 pub mod pipe;
 #[cfg(windows)]
 pub mod power;

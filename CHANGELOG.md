@@ -2,6 +2,24 @@
 
 Changes that matter to people using Huedra (not the project's own build and workflow changes). Versions follow `MAJOR.MINOR.PATCH`; the updater installs only versions newer than the running one.
 
+## Unreleased
+
+### Added
+- **HDR mods**: games with a [RenoDX](https://github.com/clshortfuse/renodx) or [Luma](https://github.com/Filoppi/Luma-Framework) HDR mod are marked **Mod available** in the cover grid and listed by the new **HDR mods** filter. A game's **HDR mod** section installs the mod with **Install**: Huedra downloads it (and ReShade, for RenoDX) and puts it next to the game's program, which it finds in the game's folder, so the game usually doesn't have to run first. A dialog lists every change before anything is copied. **Remove** deletes the files Huedra added and puts back the ones it replaced. Mods listed only on a page get a link to it. `huedra uninstall` removes every mod Huedra installed.
+- Before the first mod install, a notice explains the risks. Huedra won't install a mod in a game that PCGamingWiki lists with anti-cheat, and warns about games with online play.
+- RenoDX and Luma mods installed by hand are recognized, and Auto HDR and RTX HDR stay off for those games too.
+- **NVIDIA RTX HDR per game**: a switch in a game's details, and a default for every game under **Settings › Auto HDR, RTX HDR and HDR mods**. Huedra sets it in the game's NVIDIA driver profile, or in a profile of its own named "*game* (Huedra)". Unavailable without an NVIDIA graphics card.
+- **Settings › Auto HDR, RTX HDR and HDR mods**: defaults for Windows Auto HDR and NVIDIA RTX HDR, and **Look for HDR mods** (on by default).
+
+### Changed
+- **Windows Auto HDR is a switch** instead of a list, and it is **off unless you turn it on**, for every game. Games set to **As set in Windows** follow the new default, so Huedra turns Auto HDR off for their programs. It records what each program had before, and `huedra uninstall` puts it back.
+- Auto HDR and RTX HDR are off and locked for games with an HDR mod.
+- A game with an HDR mod gets no PCGamingWiki suggestion, since PCGamingWiki describes the game without the mod.
+- The window follows Windows 11's own look more closely: neutral colors with Windows' blue for the main action and switches, setting rows in a game's details grouped under **HDR**, **HDR mod**, **Display**, **Turn HDR on before the game starts** and **About**, and Windows' message bars.
+
+### Fixed
+- Long text in a game's details and in message bars no longer runs past its border when the window is narrow.
+
 ## 1.2.1 — 2026-11-14
 
 ### Added

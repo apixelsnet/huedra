@@ -1,0 +1,30 @@
+# 16 — HDR mods
+
+Installs and removes RenoDX and Luma HDR mods for games with poor or no HDR, and recognizes ones installed by hand.
+
+## Scope
+- RenoDX (ReShade add-ons) and Luma only. Mods are downloaded from their lists' links, never bundled.
+- Every install fully reversible; Huedra removes only files it added and that are unchanged.
+- No install where PCGamingWiki lists anti-cheat; a warning for online play; a one-time notice about the risks.
+- Auto HDR and RTX HDR stay off for a game with a mod (see 04).
+- Works on any graphics card.
+
+## Done when
+A listed mod installs and removes on this PC leaving the game folder byte for byte as before.
+
+## Result (2026-11-16) — first version
+Code: `crates/huedra-core/src/mods.rs` (lists, matching, trusted hosts, PE reading, manifest, place and remove, finding mods installed by hand; tests on Linux), `crates/huedra-ui/src/mods.rs` (list refresh, plan, download, unpack, install, uninstall), the mod parts of `crates/huedra-ui/src/app.rs` (`mod_view`, `mod_program`, `start_mod_lists`, `start_found_scan`, `offer_install`, `start_install`, `start_remove`), the HDR mod section in `pages.slint` and the mod dialog in `app.slint`, `http::download` and `process::run_hidden` in `crates/huedra-win`, `remove_mods` in `crates/huedra/src/launch.rs`.
+- **Lists.** RenoDX's wiki `Mods.md` (section "List") and Luma's wiki `Home.md` (section "Completed Mods") from `raw.githubusercontent.com`, at most 4 MB each, cached as `mods\renodx.md` and `mods\luma.md` (local folder) and fetched again after a day, only while `[general] hdr_mods` is on (default). Rows give name, author, status (working or in progress), note, direct downloads for 64-bit and 32-bit games and a page (Nexus Mods or the wiki). Names are matched after normalizing case and punctuation.
+- **Program.** The mod goes next to the game's program: one the tray saw run (`programs`, read from the file so a program learned while the window is open counts), else the one found in the install folder with `icons::find_program`, so most games need no first run. The details say "Goes next to <path>." before anything is copied.
+- **Plan.** Huedra reads the program's PE header (32 or 64-bit) and imports, delay-loaded ones included, to choose ReShade's file name: `dxgi.dll` (DirectX 10–12), `d3d9.dll`, or `opengl32.dll`. Vulkan, Microsoft Store folders (`WindowsApps`), a 32/64-bit mismatch and hosts other than `github.com`, `*.github.io` and `reshade.me` are refused with a sentence saying why. Mods without a direct download link to their page.
+- **Install.** The dialog lists every change; the first time it is preceded by the risk notice (`[general] mods_disclaimer_accepted`). Downloads stream to a work folder (1 GB cap; Luma zips reach 136 MB) and can be canceled. RenoDX: the newest `ReShade_Setup_<version>_Addon.exe`, its link read from reshade.me's home page (the short link redirects through http, which WinHTTP refuses), unpacked with Windows' own `tar.exe`, `ReShade64.dll` or `ReShade32.dll` placed under the proxy name, plus the `.addon64`/`.addon32`. Luma: the zip unpacked with `tar.exe`. A running game blocks install and removal ("Close the game first…").
+- **Record.** `mods\<game>.toml` is written before the first file is copied: source, author, URL, folder, each file with its SHA-256 and whether it replaced one, folders made, and which of `ReShade.ini`, `ReShade.log`, `ReShadePreset.ini` were absent. Replaced files are copied to `mods\<game>\backup`. The game's `hdr_mod` in `config.toml` names the project ("RenoDX" or "Luma").
+- **Remove.** Deletes each added file whose hash still matches (files changed since are kept and named), restores backups, deletes ReShade's runtime files that weren't there before and the folders Huedra made, then the record. `huedra uninstall` removes every recorded mod.
+- **Found mods.** When the window opens, a background scan looks for RenoDX add-ons and Luma under each game's program folders and install folder (4 levels, 4000 entries; skips engine content folders such as `Content`, `Paks`, `Movies`, `reshade-shaders` and `*_Data`). A hit sets the game's `found_mod`; its details say where, and Huedra never touches those files.
+- **Anti-cheat.** From PCGamingWiki's `anticheat` and `online play` fields (13). A named anti-cheat blocks the install; online play adds a warning. With game information off, the install dialog says anti-cheat couldn't be checked.
+- **Keyboard.** The dialog keeps the focus: it starts on the check box, the main button or Cancel/Close, Tab and Shift+Tab go round the dialog's controls only, and Escape is Cancel (08).
+- **Cues.** Grid badge **Mod available** / **HDR mod**, list line "· HDR mod installed", filter **HDR mods**, Settings summary "HDR mods installed: N". A game with a mod gets no PCGamingWiki suggestion.
+
+Verified on this PC: with stand-in game folders, RenoDX and Luma install and remove left the folders byte for byte as before, including ReShade's runtime files written in between; Cancel during a download left nothing; Zenless Zone Zero (HoYoKProtect) was blocked; the risk notice, grid and list cues and the filter. With Hades II (Steam): the owner's hand-installed RenoDX was found and moved out by hand, then Huedra installed RenoDX with ReShade 6.8.0 into `Ship\`, and the owner's Remove left the folder clean. Hand-installed mods found: Hollow Knight: Silksong (Luma), Resident Evil 4 (RenoDX). Program found without a first run: Clair Obscur: Expedition 33 (`Sandfall\Binaries\Win64\SandFall-Win64-Shipping.exe`).
+Also verified with the sample build on a hidden desktop: the light theme, 150 % and 200 % scaling of the HDR mod row, the anti-cheat bar, the risk notice and the Settings section; the notice, Remove and result steps by keyboard only (posted keys; see 08).
+Not verified: a Luma mod in a real game; the dialog's confirm and progress steps by keyboard, and any step with a physical keyboard; OpenGL and Direct3D 9 games; a game with two equal programs (Hades II has `Ship\` and `Release\`; folder order picks one, and the details show which).

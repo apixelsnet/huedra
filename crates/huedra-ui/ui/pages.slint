@@ -26,6 +26,8 @@ export struct GameRow {
     running: bool,
     // 0 to 5: the tint of its tile in the cover grid.
     tint: int,
+    // HDR mod: "installed", "available" or empty.
+    hdr-mod: string,
     // Portrait art for the grid (Steam's library image), or none.
     cover: image,
 }
@@ -71,10 +73,28 @@ export struct GameDetail {
     // 0 is "Windows default".
     sdr-profile: int,
     hdr-profile: int,
-    // Windows Auto HDR: 0 as set in Windows, 1 on, 2 off.
-    auto-hdr: int,
-    // Whether Huedra knows a program of the game to set it on.
-    auto-hdr-known: bool,
+    // Windows Auto HDR and NVIDIA RTX HDR for its programs.
+    auto-hdr: bool,
+    rtx-hdr: bool,
+    // An NVIDIA driver answers; RTX HDR does not exist on other graphics.
+    rtx-available: bool,
+    // Whether Huedra knows a program of the game to set them on.
+    program-known: bool,
+    // The HDR mod: none, available, page (no direct download), installed,
+    // blocked (anti-cheat), program (its program is not known yet), found
+    // (put in the game folder by hand, not by Huedra), or
+    // working (an install or removal is under way).
+    mod-state: string,
+    // "RenoDX for Hollow Knight: Silksong".
+    mod-title: string,
+    // "By ShortFuse · Working".
+    mod-detail: string,
+    // The list's note, or why it cannot be installed.
+    mod-note: string,
+    // The mod's page, if the list links one.
+    mod-link: string,
+    // The game has online play (PCGamingWiki).
+    online: bool,
     // Index into the display mode list; 0 keeps the mode set in Windows.
     display-mode: int,
 }
@@ -242,7 +262,7 @@ component Badge inherits Rectangle {
     height: 22px;
     width: layout.preferred-width;
     border-radius: 11px;
-    background: kind == "hdr" ? #FF2D6F26 : kind == "external" || kind == "suggestion" ? #9B3DFF26
+    background: kind == "success" ? Theme.success-bg : kind == "hdr" ? #FF2D6F26 : kind == "external" || kind == "suggestion" ? #9B3DFF26
         : kind == "failed" ? #FF2D6F14 : kind == "out" ? transparent : #A9A4B633;
     border-width: kind == "failed" || kind == "out" ? 1px : 0px;
     border-color: kind == "out" ? Theme.border : Theme.hdr-label;
@@ -265,7 +285,7 @@ component Badge inherits Rectangle {
             text: root.text;
             font-size: Theme.caption-size;
             font-weight: kind == "out" ? 400 : 600;
-            color: kind == "hdr" || kind == "failed" ? Theme.hdr-label
+            color: kind == "success" ? Theme.success : kind == "hdr" || kind == "failed" ? Theme.hdr-label
                 : kind == "external" || kind == "suggestion" ? Theme.violet-text : Theme.text-muted;
             vertical-alignment: center;
             accessible-role: none;
@@ -885,7 +905,76 @@ export component StatusPage inherits Rectangle {
 
 // ---- Games ------------------------------------------------------------
 
-component GameDetailPanel inherits Card {
+// One setting in the details pane, as a Windows settings card: an icon, a
+// title and a description on the left, the control on the right.
+component PaneRow inherits Rectangle {
+    in property <string> glyph;
+    in property <string> title;
+    in property <string> description;
+    // At least the layout's own minimum: with a fixed one the row kept 60 px
+    // and text that wraps to more lines spilled past its border.
+    min-height: max(60px, row-layout.min-height);
+    border-radius: Theme.radius-control;
+    background: Theme.surface;
+    border-width: 1px;
+    border-color: Theme.border;
+    // The icon sits outside the layout, centered on the row.
+    Text {
+        x: 14px;
+        width: 20px;
+        height: parent.height;
+        text: root.glyph;
+        font-family: Theme.icons;
+        font-size: 18px;
+        color: Theme.text;
+        vertical-alignment: center;
+        accessible-role: none;
+    }
+    row-layout := HorizontalLayout {
+        padding-left: 48px;
+        padding-right: 14px;
+        padding-top: 9px;
+        padding-bottom: 9px;
+        spacing: 14px;
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            spacing: 2px;
+            Text {
+                text: root.title;
+                font-size: Theme.body-size;
+                color: Theme.text;
+                wrap: word-wrap;
+            }
+            Caption {
+                text: root.description;
+            }
+        }
+        Centered {
+            horizontal-stretch: 0;
+            HorizontalLayout {
+                alignment: end;
+                spacing: 8px;
+                @children
+            }
+        }
+    }
+}
+
+// A group's heading in the details pane (body strong).
+component PaneHeader inherits VerticalLayout {
+    in property <string> text;
+    padding-top: 14px;
+    padding-bottom: 4px;
+    Text {
+        text: root.text;
+        font-size: Theme.body-size;
+        font-weight: 600;
+        color: Theme.text;
+    }
+}
+
+component GameDetailPanel inherits Rectangle {
     in property <GameDetail> detail;
     in property <bool> show-back;
     // The installed color profiles, "Windows default" first.
@@ -893,7 +982,8 @@ component GameDetailPanel inherits Card {
     in property <[string]> hdr-profiles;
     // A color profile was chosen: the game, HDR (or SDR), the list index.
     callback set-profile(string, bool, int);
-    callback set-auto-hdr(string, int);
+    callback set-auto-hdr(string, bool);
+    callback set-rtx-hdr(string, bool);
     in property <[string]> display-modes;
     callback set-display-mode(string, int);
     callback back();
@@ -906,8 +996,11 @@ component GameDetailPanel inherits Card {
     callback remove-game(string);
     callback create-shortcut(string);
     callback set-steam-start(string, bool);
+    callback install-mod(string);
+    callback remove-mod(string);
+    property <bool> modded: root.detail.mod-state == "installed" || root.detail.mod-state == "found";
 
-    ScrollView {
+    pane := ScrollView {
         // At least the preferred height, so rows keep their wrapped text
         // when the page is taller than the window (the default is the
         // minimum height, which squeezes them). Setting one size drops the
@@ -915,11 +1008,17 @@ component GameDetailPanel inherits Card {
         content-width: self.visible-width;
         content-height: max(self.visible-height, body.preferred-height);
         body := VerticalLayout {
-            padding: 18px;
-            spacing: 12px;
+            // An explicit width, as on the other pages, so text that wraps
+            // is measured at it and its row grows to fit.
+            width: pane.visible-width;
+            padding-left: 4px;
+            padding-right: 12px;
+            padding-bottom: 16px;
+            spacing: 4px;
             alignment: start;
             if root.show-back: HorizontalLayout {
                 alignment: start;
+                padding-bottom: 8px;
                 ActionButton {
                     text: "Back to games";
                     clicked => {
@@ -929,6 +1028,7 @@ component GameDetailPanel inherits Card {
             }
             HorizontalLayout {
                 spacing: 12px;
+                padding-bottom: 2px;
                 Centered {
                     GameIcon {
                         size: 40px;
@@ -960,13 +1060,14 @@ component GameDetailPanel inherits Card {
             Caption {
                 text: root.detail.store + " · " + root.detail.path;
             }
-            VerticalLayout {
-                spacing: 4px;
-                Text {
-                    text: "When this game runs";
-                    font-size: Theme.body-size;
-                    color: Theme.text;
-                }
+
+            PaneHeader {
+                text: "HDR";
+            }
+            PaneRow {
+                glyph: "\u{E7FC}";
+                title: "When this game runs";
+                description: "What Huedra does with HDR while it runs.";
                 Dropdown {
                     accessible-label: "When this game runs";
                     model: ["Turn HDR on", "Leave HDR alone", "Let the game switch HDR"];
@@ -976,71 +1077,155 @@ component GameDetailPanel inherits Card {
                     }
                 }
             }
-            HorizontalLayout {
-                spacing: 16px;
-                VerticalLayout {
-                    spacing: 4px;
-                    Text {
-                        text: "Wait before turning HDR on (seconds)";
-                        font-size: Theme.body-size;
-                        color: Theme.text;
-                        wrap: word-wrap;
-                    }
-                    NumberBox {
-                        accessible-label: "Wait before turning HDR on (seconds)";
-                        minimum: 0;
-                        maximum: 120;
-                        value: root.detail.delay;
-                        edited(v) => {
-                            root.set-delay(root.detail.id, v);
-                        }
-                    }
-                }
-                VerticalLayout {
-                    spacing: 4px;
-                    Text {
-                        text: "Keep HDR on after the game closes (seconds)";
-                        font-size: Theme.body-size;
-                        color: Theme.text;
-                        wrap: word-wrap;
-                    }
-                    NumberBox {
-                        accessible-label: "Keep HDR on after the game closes (seconds)";
-                        minimum: 0;
-                        maximum: 600;
-                        value: root.detail.hold;
-                        edited(v) => {
-                            root.set-hold(root.detail.id, v);
-                        }
+            if root.detail.suggestion != "" && root.detail.suggestion-index != root.detail.setting-index: InfoBar {
+                kind: "info";
+                title: "PCGamingWiki suggests: " + root.detail.suggestion;
+                ActionButton {
+                    text: "Use it";
+                    clicked => {
+                        root.apply-suggestion(root.detail.id);
                     }
                 }
             }
-            if root.detail.custom-timing: HorizontalLayout {
-                alignment: start;
-                ActionButton {
-                    text: "Reset to default times";
+            PaneRow {
+                glyph: "\u{E916}";
+                title: "Wait before turning HDR on";
+                description: "Seconds after the game's window appears.";
+                NumberBox {
+                    accessible-label: "Wait before turning HDR on (seconds)";
+                    minimum: 0;
+                    maximum: 120;
+                    value: root.detail.delay;
+                    edited(v) => {
+                        root.set-delay(root.detail.id, v);
+                    }
+                }
+            }
+            PaneRow {
+                glyph: "\u{E823}";
+                title: "Keep HDR on after it closes";
+                description: root.detail.custom-timing ? "Seconds. This game has its own times." : "Seconds.";
+                if root.detail.custom-timing: LinkButton {
+                    text: "Reset";
                     clicked => {
                         root.reset-timing(root.detail.id);
                     }
                 }
-            }
-            if root.sdr-profiles.length > 1: Rectangle {
-                height: 1px;
-                background: Theme.border;
-            }
-            if root.sdr-profiles.length > 1: SectionTitle {
-                text: "Color profiles";
-            }
-            if root.sdr-profiles.length > 1: Caption {
-                text: "While this game runs, the display it's on uses these color profiles (ICC). The earlier ones come back when it closes.";
-            }
-            if root.sdr-profiles.length > 1: VerticalLayout {
-                spacing: 4px;
-                Text {
-                    text: "Color profile in SDR";
-                    font-size: Theme.body-size;
-                    color: Theme.text;
+                NumberBox {
+                    accessible-label: "Keep HDR on after the game closes (seconds)";
+                    minimum: 0;
+                    maximum: 600;
+                    value: root.detail.hold;
+                    edited(v) => {
+                        root.set-hold(root.detail.id, v);
+                    }
                 }
+            }
+            PaneRow {
+                glyph: "\u{E706}";
+                title: "Windows Auto HDR";
+                description: root.modded ? "Off while the HDR mod is installed."
+                    : !root.detail.program-known ? "Turns SDR games into HDR. Applies once Huedra has seen the game run."
+                    : "Turns SDR games into HDR. Applies from the game's next start.";
+                Toggle {
+                    show-state: true;
+                    accessible-label: "Windows Auto HDR";
+                    enabled: !root.modded;
+                    checked: root.detail.auto-hdr;
+                    toggled => {
+                        root.set-auto-hdr(root.detail.id, self.checked);
+                    }
+                }
+            }
+            PaneRow {
+                glyph: "\u{E7F4}";
+                title: "NVIDIA RTX HDR";
+                description: !root.detail.rtx-available ? "Needs an NVIDIA graphics card and driver."
+                    : root.modded ? "Off while the HDR mod is installed."
+                    : "The driver turns SDR games into HDR. Applies from the game's next start.";
+                Toggle {
+                    show-state: true;
+                    accessible-label: "NVIDIA RTX HDR";
+                    enabled: root.detail.rtx-available && !root.modded;
+                    checked: root.detail.rtx-hdr && root.detail.rtx-available;
+                    toggled => {
+                        root.set-rtx-hdr(root.detail.id, self.checked);
+                    }
+                }
+            }
+
+            PaneHeader {
+                text: "HDR mod";
+            }
+            if root.detail.online && (root.detail.mod-state == "available" || root.detail.mod-state == "program"): InfoBar {
+                kind: "warning";
+                title: "This game has online play";
+                text: "Mods can get an account banned in online modes. Play offline while it is installed.";
+            }
+            if root.detail.mod-state == "blocked": InfoBar {
+                kind: "error";
+                title: "Can't install: this game uses anti-cheat";
+                text: root.detail.mod-note;
+            }
+            if root.detail.mod-state == "none": PaneRow {
+                glyph: "\u{E946}";
+                title: "No HDR mod found";
+                description: root.detail.mod-note;
+            }
+            if root.detail.mod-state != "none": PaneRow {
+                glyph: "\u{E8A5}";
+                title: root.detail.mod-title;
+                description: root.detail.mod-state == "installed" ? root.detail.mod-detail + ". Auto HDR and RTX HDR stay off for this game."
+                    : root.detail.mod-state == "working" ? "Working..."
+                    : root.detail.mod-state == "page" ? root.detail.mod-detail + ". Get it from its page; Huedra installs only mods with a direct download."
+                    : root.detail.mod-detail;
+                if root.detail.mod-state == "available": ActionButton {
+                    text: "Install";
+                    primary: true;
+                    clicked => {
+                        root.install-mod(root.detail.id);
+                    }
+                }
+                if root.detail.mod-state == "program": ActionButton {
+                    text: "Install";
+                    enabled: false;
+                }
+                if root.detail.mod-state == "installed": ActionButton {
+                    text: "Remove";
+                    clicked => {
+                        root.remove-mod(root.detail.id);
+                    }
+                }
+                if root.detail.mod-state == "page" && root.detail.mod-link != "": LinkButton {
+                    text: "Open page";
+                    clicked => {
+                        root.open-wiki(root.detail.mod-link);
+                    }
+                }
+            }
+            if root.detail.mod-state == "program": Caption {
+                text: "Start the game once so Huedra learns which program to put the mod next to.";
+            }
+            if root.detail.mod-note != "" && root.detail.mod-state != "blocked" && root.detail.mod-state != "none": Caption {
+                text: root.detail.mod-note;
+            }
+            if root.detail.mod-link != "" && root.detail.mod-state != "page" && root.detail.mod-state != "none": HorizontalLayout {
+                alignment: start;
+                LinkButton {
+                    text: "Open the mod's page";
+                    clicked => {
+                        root.open-wiki(root.detail.mod-link);
+                    }
+                }
+            }
+
+            if root.sdr-profiles.length > 1 || root.display-modes.length > 1: PaneHeader {
+                text: "Display";
+            }
+            if root.sdr-profiles.length > 1: PaneRow {
+                glyph: "\u{E790}";
+                title: "Color profile in SDR";
+                description: "Used on the game's display while it runs.";
                 Dropdown {
                     accessible-label: "Color profile in SDR";
                     model: root.sdr-profiles;
@@ -1050,13 +1235,12 @@ component GameDetailPanel inherits Card {
                     }
                 }
             }
-            if root.sdr-profiles.length > 1: VerticalLayout {
-                spacing: 4px;
-                Text {
-                    text: "Color profile in HDR";
-                    font-size: Theme.body-size;
-                    color: Theme.text;
-                }
+            if root.sdr-profiles.length > 1: PaneRow {
+                glyph: "\u{E790}";
+                title: "Color profile in HDR";
+                description: root.hdr-profiles.length <= 1
+                    ? "No HDR profile is installed. The Windows HDR Calibration app makes one."
+                    : "Used on the game's display while it runs.";
                 Dropdown {
                     accessible-label: "Color profile in HDR";
                     model: root.hdr-profiles;
@@ -1065,40 +1249,11 @@ component GameDetailPanel inherits Card {
                         root.set-profile(root.detail.id, true, self.current-index);
                     }
                 }
-                if root.hdr-profiles.length <= 1: Caption {
-                    text: "No HDR color profile is installed. The Windows HDR Calibration app makes one.";
-                }
             }
-            VerticalLayout {
-                spacing: 4px;
-                Text {
-                    text: "Auto HDR";
-                    font-size: Theme.body-size;
-                    color: Theme.text;
-                }
-                Dropdown {
-                    accessible-label: "Auto HDR";
-                    model: ["As set in Windows", "On", "Off"];
-                    current-index: root.detail.auto-hdr;
-                    selected(value) => {
-                        root.set-auto-hdr(root.detail.id, self.current-index);
-                    }
-                }
-                Caption {
-                    text: root.detail.auto-hdr == 0
-                        ? "Windows can turn SDR games into HDR. Choose On or Off to decide for this game."
-                        : root.detail.auto-hdr-known
-                        ? "Applies from the next time the game starts."
-                        : "Applies to the game's program once Huedra has seen it run, from the start after that.";
-                }
-            }
-            if root.display-modes.length > 1: VerticalLayout {
-                spacing: 4px;
-                Text {
-                    text: "Resolution and refresh rate";
-                    font-size: Theme.body-size;
-                    color: Theme.text;
-                }
+            if root.display-modes.length > 1: PaneRow {
+                glyph: "\u{E7F4}";
+                title: "Resolution and refresh rate";
+                description: "Set after HDR turns on, on the display the game is on.";
                 Dropdown {
                     accessible-label: "Resolution and refresh rate";
                     model: root.display-modes;
@@ -1107,103 +1262,58 @@ component GameDetailPanel inherits Card {
                         root.set-display-mode(root.detail.id, self.current-index);
                     }
                 }
-                Caption {
-                    text: "While the game runs, the display it's on uses this mode, after HDR has turned on. When HDR leaves too little bandwidth for the refresh rate, the fastest one the display offers then is used.";
-                }
             }
-            if root.detail.launch-option != "" || root.detail.shortcut: Rectangle {
-                height: 1px;
-                background: Theme.border;
-            }
-            if root.detail.launch-option != "" || root.detail.shortcut: SectionTitle {
+
+            if root.detail.launch-option != "" || root.detail.shortcut: PaneHeader {
                 text: "Turn HDR on before the game starts";
             }
-            if root.detail.launch-option != "" || root.detail.shortcut: Caption {
-                text: "For games that need HDR on before they open, such as ones that otherwise gray out their HDR option. HDR stays on until the game closes.";
-            }
-            if root.detail.launch-option != "": HorizontalLayout {
-                spacing: 16px;
-                VerticalLayout {
-                    horizontal-stretch: 1;
-                    spacing: 2px;
-                    Text {
-                        text: "Turn HDR on when I press Play in Steam";
-                        font-size: Theme.body-size;
-                        color: Theme.text;
-                        wrap: word-wrap;
-                    }
-                    Caption {
-                        text: "HDR turns on about a second after you press Play, before the game opens. Huedra only reads what Steam reports and never touches the game, so it suits games with anti-cheat.";
-                    }
-                }
-                Centered {
-                    horizontal-stretch: 0;
-                    Toggle {
-                        accessible-label: "Turn HDR on when I press Play in Steam";
-                        checked: root.detail.steam-start;
-                        toggled => {
-                            root.set-steam-start(root.detail.id, self.checked);
-                        }
+            if root.detail.launch-option != "": PaneRow {
+                glyph: "\u{E768}";
+                title: "When I press Play in Steam";
+                description: "HDR turns on before the game opens. Huedra only reads what Steam reports, so it suits games with anti-cheat.";
+                Toggle {
+                    show-state: true;
+                    accessible-label: "Turn HDR on when I press Play in Steam";
+                    checked: root.detail.steam-start;
+                    toggled => {
+                        root.set-steam-start(root.detail.id, self.checked);
                     }
                 }
             }
             if root.detail.launch-option != "": VerticalLayout {
                 spacing: 6px;
-                Text {
+                padding-top: 4px;
+                Caption {
                     text: "Another way: paste this into Steam › the game's Properties › General › Launch options. Some anti-cheat games won't start this way.";
-                    font-size: Theme.body-size;
-                    color: Theme.text;
-                    wrap: word-wrap;
                 }
                 CopyField {
                     text: root.detail.launch-option;
                     label: "Steam launch option";
                 }
             }
-            if root.detail.shortcut: HorizontalLayout {
-                alignment: start;
+            if root.detail.shortcut: PaneRow {
+                glyph: "\u{E8E5}";
+                title: "Desktop shortcut";
+                description: root.detail.launch-note != "" ? root.detail.launch-note : "Starts the game with HDR already on.";
                 ActionButton {
-                    text: "Create a desktop shortcut";
+                    text: "Create";
                     clicked => {
                         root.create-shortcut(root.detail.id);
                     }
                 }
             }
-            if root.detail.launch-note != "": Caption {
-                text: root.detail.launch-note;
+
+            PaneHeader {
+                text: "About";
             }
-            Rectangle {
-                height: 1px;
-                background: Theme.border;
-            }
-            SectionTitle {
-                text: "From PCGamingWiki";
-            }
-            Text {
-                text: root.detail.info;
-                font-size: Theme.body-size;
-                color: Theme.text;
-                wrap: word-wrap;
-            }
-            if root.detail.notes != "": Caption {
-                text: "\"" + root.detail.notes + "\"";
-            }
-            if root.detail.ray-tracing != "": Caption {
-                text: "Ray tracing: " + root.detail.ray-tracing;
-            }
-            if root.detail.suggestion != "" && root.detail.suggestion-index != root.detail.setting-index: HorizontalLayout {
-                alignment: start;
-                ActionButton {
-                    text: "Use the suggested setting: " + root.detail.suggestion;
-                    clicked => {
-                        root.apply-suggestion(root.detail.id);
-                    }
-                }
-            }
-            if root.detail.wiki-url != "": HorizontalLayout {
-                alignment: start;
-                ActionButton {
-                    text: "Open the PCGamingWiki page";
+            PaneRow {
+                glyph: "\u{E946}";
+                title: root.detail.info;
+                description: root.detail.notes == "" && root.detail.ray-tracing == "" ? "No notes on HDR or ray tracing."
+                    : (root.detail.notes != "" ? "\"" + root.detail.notes + "\"" : "")
+                    + (root.detail.ray-tracing != "" ? (root.detail.notes != "" ? " · " : "") + "Ray tracing: " + root.detail.ray-tracing : "");
+                if root.detail.wiki-url != "": LinkButton {
+                    text: "PCGamingWiki";
                     clicked => {
                         root.open-wiki(root.detail.wiki-url);
                     }
@@ -1214,6 +1324,7 @@ component GameDetailPanel inherits Card {
             }
             if root.detail.manual: HorizontalLayout {
                 alignment: start;
+                padding-top: 8px;
                 ActionButton {
                     text: "Remove this game";
                     clicked => {
@@ -1311,7 +1422,10 @@ export component GamesPage inherits Rectangle {
     callback set-steam-start(string, bool);
     in property <[string]> sdr-profiles;
     in property <[string]> hdr-profiles;
-    callback set-auto-hdr(string, int);
+    callback set-auto-hdr(string, bool);
+    callback set-rtx-hdr(string, bool);
+    callback install-mod(string);
+    callback remove-mod(string);
     in property <[string]> display-modes;
     callback set-display-mode(string, int);
     callback set-profile(string, bool, int);
@@ -1754,6 +1868,12 @@ export component GamesPage inherits Rectangle {
                                 y: 6px;
                                 support: game.hdr;
                             }
+                            if game.hdr-mod != "": Badge {
+                                x: 6px;
+                                y: parent.height - self.height - 6px;
+                                kind: game.hdr-mod == "installed" ? "success" : "sdr";
+                                text: game.hdr-mod == "installed" ? "HDR mod" : "Mod available";
+                            }
                             if game.suggestion != "": Rectangle {
                                 x: parent.width - 16px;
                                 y: 9px;
@@ -1807,8 +1927,17 @@ export component GamesPage inherits Rectangle {
                 set-profile(id, hdr, i) => {
                     root.set-profile(id, hdr, i);
                 }
-                set-auto-hdr(id, i) => {
-                    root.set-auto-hdr(id, i);
+                set-auto-hdr(id, on) => {
+                    root.set-auto-hdr(id, on);
+                }
+                set-rtx-hdr(id, on) => {
+                    root.set-rtx-hdr(id, on);
+                }
+                install-mod(id) => {
+                    root.install-mod(id);
+                }
+                remove-mod(id) => {
+                    root.remove-mod(id);
                 }
                 display-modes: root.display-modes;
                 set-display-mode(id, i) => {
@@ -2605,6 +2734,16 @@ export component SettingsPage inherits Rectangle {
     callback set-updates(int);
     callback set-close-action(int);
     callback set-game-info(bool);
+    // Defaults for games: Windows Auto HDR, NVIDIA RTX HDR (with an NVIDIA
+    // driver only), and looking up HDR mods; how many mods are installed.
+    in property <bool> games-auto-hdr;
+    in property <bool> games-rtx-hdr;
+    in property <bool> rtx-available;
+    in property <bool> hdr-mods;
+    in property <int> mods-installed;
+    callback set-games-auto-hdr(bool);
+    callback set-games-rtx-hdr(bool);
+    callback set-hdr-mods(bool);
     callback set-hold(int);
     callback set-delay(int);
     callback set-hotkeys(bool);
@@ -2780,6 +2919,53 @@ export component SettingsPage inherits Rectangle {
                         value: root.keys-pause;
                         accepted(text) => {
                             root.set-shortcut(2, text);
+                        }
+                    }
+                }
+            }
+            Expander {
+                glyph: "\u{E7FC}";
+                title: "Auto HDR, RTX HDR and HDR mods";
+                summary: "Auto HDR: " + (root.games-auto-hdr ? "on" : "off")
+                    + (root.rtx-available ? " · RTX HDR: " + (root.games-rtx-hdr ? "on" : "off") : "")
+                    + " · HDR mods installed: " + root.mods-installed;
+                SubRow {
+                    first: true;
+                    title: "Windows Auto HDR for games";
+                    description: "Turns SDR games into HDR. Off unless you turn it on; each game can differ in its details. Turned off for games with an HDR mod.";
+                    Toggle {
+                        show-state: true;
+                        accessible-label: "Windows Auto HDR for games";
+                        checked: root.games-auto-hdr;
+                        toggled => {
+                            root.set-games-auto-hdr(self.checked);
+                        }
+                    }
+                }
+                SubRow {
+                    title: "NVIDIA RTX HDR for games";
+                    description: root.rtx-available
+                        ? "The NVIDIA driver turns SDR games into HDR. Off unless you turn it on; each game can differ in its details. Turned off for games with an HDR mod."
+                        : "Needs an NVIDIA graphics card and driver. Nothing changes on this PC.";
+                    Toggle {
+                        show-state: true;
+                        accessible-label: "NVIDIA RTX HDR for games";
+                        enabled: root.rtx-available;
+                        checked: root.games-rtx-hdr && root.rtx-available;
+                        toggled => {
+                            root.set-games-rtx-hdr(self.checked);
+                        }
+                    }
+                }
+                SubRow {
+                    title: "Look for HDR mods";
+                    description: "Reads the RenoDX and Luma lists on GitHub once a day to show which games have an HDR mod. Nothing about your games is sent. Mods are installed only when you choose to.";
+                    Toggle {
+                        show-state: true;
+                        accessible-label: "Look for HDR mods";
+                        checked: root.hdr-mods;
+                        toggled => {
+                            root.set-hdr-mods(self.checked);
                         }
                     }
                 }

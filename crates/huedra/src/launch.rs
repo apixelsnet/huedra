@@ -97,21 +97,9 @@ pub fn uninstall() -> anyhow::Result<()> {
         Err(error) => anyhow::bail!("could not close the running Huedra: {error}"),
     }
     registry::remove_all().context("could not remove Huedra's registry entries")?;
-    // Auto HDR that Huedra set for games' programs goes back to Windows'
-    // own setting; the rest of each program's graphics settings stays.
-    if let Ok(locations) = Locations::resolve()
-        && let Ok(config) = huedra_core::config::Config::load(&locations.config)
-    {
-        for program in config.games.iter().flat_map(|g| g.programs.iter()) {
-            let current = registry::gpu_preferences(program);
-            let wanted = huedra_core::autohdr::edit(
-                current.as_deref(),
-                huedra_core::autohdr::AutoHdr::Windows,
-            );
-            if wanted != current {
-                let _ = registry::set_gpu_preferences(program, wanted.as_deref());
-            }
-        }
+    if let Ok(locations) = Locations::resolve() {
+        remove_mods(&locations);
+        restore_graphics(&locations);
     }
     println!(
         "Huedra's registry entries were removed (the start-up entry and the \"Start with HDR\" menu entry)."
@@ -128,4 +116,83 @@ pub fn uninstall() -> anyhow::Result<()> {
         );
     }
     Ok(())
+}
+
+/// Removes every HDR mod Huedra installed, putting each game folder back as
+/// it was.
+fn remove_mods(locations: &Locations) {
+    for manifest in huedra_core::mods::installed(&locations.mods) {
+        let name = &manifest.name;
+        match huedra_core::mods::remove(&locations.mods, &manifest, &huedra_win::hash::sha256_hex) {
+            Ok(kept) if kept.is_empty() => {
+                println!("The HDR mod for {name} was removed.");
+            }
+            Ok(kept) => println!(
+                "The HDR mod for {name} was removed, except files that changed since: {}.",
+                kept.join(", ")
+            ),
+            Err(error) => println!(
+                "Could not remove the HDR mod for {name} ({error}). Close the game and run this again."
+            ),
+        }
+    }
+}
+
+/// Puts back the Auto HDR and RTX HDR values games' programs had before
+/// Huedra first changed them; programs set by older versions, which kept
+/// no record, go back to Windows' own setting. The rest of each program's
+/// settings stays.
+fn restore_graphics(locations: &Locations) {
+    let record = huedra_core::graphics::Record::load(&locations.graphics);
+    let recorded = |program: &str| {
+        record
+            .programs()
+            .iter()
+            .any(|b| b.auto_hdr_seen && b.path.eq_ignore_ascii_case(program))
+    };
+    for before in record.programs().iter().filter(|b| b.auto_hdr_seen) {
+        let current = registry::gpu_preferences(&before.path);
+        let wanted = huedra_core::autohdr::set(current.as_deref(), before.auto_hdr.as_deref());
+        if wanted != current {
+            let _ = registry::set_gpu_preferences(&before.path, wanted.as_deref());
+        }
+    }
+    if let Ok(config) = huedra_core::config::Config::load(&locations.config) {
+        for program in config.games.iter().flat_map(|g| g.programs.iter()) {
+            if recorded(program) {
+                continue;
+            }
+            let current = registry::gpu_preferences(program);
+            let wanted = huedra_core::autohdr::edit(
+                current.as_deref(),
+                huedra_core::autohdr::AutoHdr::Windows,
+            );
+            if wanted != current {
+                let _ = registry::set_gpu_preferences(program, wanted.as_deref());
+            }
+        }
+    }
+    // Only with an NVIDIA driver; other graphics have no RTX HDR.
+    let rtx: Vec<_> = record
+        .programs()
+        .iter()
+        .filter(|b| b.rtx_hdr_seen)
+        .collect();
+    if !rtx.is_empty()
+        && let Some(mut session) = huedra_win::nvapi::Session::open()
+    {
+        for before in rtx {
+            let file = huedra_core::paths::display_name(&before.path);
+            // A profile Huedra made for the program goes; otherwise the value
+            // it had comes back (or none).
+            let removed = session
+                .remove_own_profile(file, " (Huedra)")
+                .unwrap_or(false);
+            if !removed {
+                let _ = session.set_rtx_hdr(file, file, before.rtx_hdr);
+            }
+        }
+        let _ = session.save();
+    }
+    let _ = std::fs::remove_file(&locations.graphics);
 }
