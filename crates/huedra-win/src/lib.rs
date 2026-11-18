@@ -23,6 +23,8 @@ mod handle;
 #[cfg(windows)]
 pub mod hash;
 #[cfg(windows)]
+pub mod hdr_layer;
+#[cfg(windows)]
 pub mod hotkey;
 #[cfg(windows)]
 pub mod http;

@@ -319,6 +319,9 @@ Browsers need the Huedra browser extension (see [HDR video](#7-hdr-video)). YouT
 **Is it safe with anti-cheat software?**
 Huedra reads only the name and path of the program in front and waits for programs to close. It never reads or writes another program's memory and never injects code. No game publisher has reviewed it, so this cannot be guaranteed. HDR mods are different: they change game files, so Huedra won't install one in a game PCGamingWiki lists with anti-cheat (see [HDR mods](#hdr-mods)).
 
+**The Status card's banner flickers, lags behind or looks wrong.**
+On Windows 11 22H2 and later the banner's waves are drawn in HDR by a layer of their own while HDR is on. To draw them like the rest of the window instead, start the settings window with the environment variable `HUEDRA_HDR_LAYER` set to `0`, and please report what you saw.
+
 **Where is the log?**
 `%LOCALAPPDATA%\Huedra\huedra.log`, or `data\huedra.log` beside a portable copy. **Settings › About** shows the folder.
 

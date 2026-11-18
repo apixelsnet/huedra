@@ -70,7 +70,7 @@ export component Toggle {
                 border-color: root.enabled ? Theme.text-muted : Theme.border;
                 background: !root.enabled ? (root.checked ? Theme.border : transparent)
                     : root.checked ? (touch.has-hover ? Theme.accent.brighter(0.1) : Theme.accent)
-                    : touch.has-hover ? Theme.hover : transparent;
+                    : touch.has-hover ? Theme.subtle : transparent;
                 animate background { duration: Theme.control; }
                 Rectangle {
                     width: touch.pressed ? 17px : touch.has-hover ? 14px : 12px;
@@ -133,10 +133,10 @@ export component ActionButton inherits Rectangle {
     horizontal-stretch: 0;
     border-radius: Theme.radius-control;
     border-width: root.primary ? 0px : 1px;
-    border-color: Theme.border;
-    background: !root.enabled ? (root.primary ? Theme.border : Theme.surface)
+    border-color: Theme.control-stroke;
+    background: !root.enabled ? (root.primary ? Theme.border : Theme.control-fill-disabled)
         : root.primary ? (touch.pressed ? Theme.accent.darker(0.15) : touch.has-hover ? Theme.accent.brighter(0.1) : Theme.accent)
-        : touch.pressed ? Theme.border : touch.has-hover ? Theme.hover : Theme.surface-raised;
+        : touch.pressed ? Theme.control-fill-pressed : touch.has-hover ? Theme.control-fill-hover : Theme.control-fill;
     animate background { duration: Theme.hover-time; }
     forward-focus: focus;
     accessible-role: button;
@@ -200,8 +200,8 @@ export component SearchBox inherits Rectangle {
     min-width: 160px;
     border-radius: Theme.radius-control;
     border-width: 1px;
-    border-color: Theme.border;
-    background: input.has-focus ? Theme.surface : touch.has-hover ? Theme.hover : Theme.surface-raised;
+    border-color: Theme.control-stroke;
+    background: input.has-focus ? Theme.input-active : touch.has-hover ? Theme.control-fill-hover : Theme.control-fill;
     clip: true;
     forward-focus: input;
     touch := TouchArea {
@@ -284,8 +284,8 @@ export component TextBox inherits Rectangle {
     min-width: 160px;
     border-radius: Theme.radius-control;
     border-width: 1px;
-    border-color: Theme.border;
-    background: input.has-focus ? Theme.surface : touch.has-hover ? Theme.hover : Theme.surface-raised;
+    border-color: Theme.control-stroke;
+    background: input.has-focus ? Theme.input-active : touch.has-hover ? Theme.control-fill-hover : Theme.control-fill;
     clip: true;
     forward-focus: input;
     touch := TouchArea {
@@ -329,7 +329,7 @@ component FieldButton inherits Rectangle {
     callback clicked();
     width: 28px;
     border-radius: Theme.radius-control;
-    background: touch.pressed ? Theme.border : touch.has-hover ? Theme.hover : transparent;
+    background: touch.pressed ? Theme.subtle-pressed : touch.has-hover ? Theme.subtle : transparent;
     accessible-role: none;
     Text {
         text: root.glyph;
@@ -384,8 +384,8 @@ export component NumberBox inherits Rectangle {
     preferred-width: 128px;
     border-radius: Theme.radius-control;
     border-width: 1px;
-    border-color: Theme.border;
-    background: input.has-focus ? Theme.surface : touch.has-hover ? Theme.hover : Theme.surface-raised;
+    border-color: Theme.control-stroke;
+    background: input.has-focus ? Theme.input-active : touch.has-hover ? Theme.control-fill-hover : Theme.control-fill;
     clip: true;
     forward-focus: input;
     accessible-role: spinbox;
@@ -501,8 +501,8 @@ export component Dropdown inherits Rectangle {
     min-width: 176px;
     border-radius: Theme.radius-control;
     border-width: 1px;
-    border-color: Theme.border;
-    background: touch.pressed ? Theme.border : touch.has-hover ? Theme.hover : Theme.surface-raised;
+    border-color: Theme.control-stroke;
+    background: touch.pressed ? Theme.control-fill-pressed : touch.has-hover ? Theme.control-fill-hover : Theme.control-fill;
     animate background { duration: Theme.hover-time; }
     forward-focus: keys;
     accessible-role: combobox;
@@ -606,7 +606,7 @@ export component Dropdown inherits Rectangle {
                     for item[i] in root.model: Rectangle {
                         height: Theme.button-height;
                         border-radius: Theme.radius-control;
-                        background: i == list-keys.highlight || option.has-hover ? Theme.hover : transparent;
+                        background: i == list-keys.highlight || option.has-hover ? Theme.subtle : transparent;
                         accessible-role: list-item;
                         accessible-label: item;
                         accessible-item-selected: i == root.current-index;
@@ -657,8 +657,8 @@ export component CopyField inherits HorizontalLayout {
         min-width: 160px;
         border-radius: Theme.radius-control;
         border-width: 1px;
-        border-color: Theme.border;
-        background: Theme.surface-raised;
+        border-color: Theme.control-stroke;
+        background: Theme.control-fill;
         clip: true;
         field := TextInput {
             x: 10px;
@@ -696,7 +696,7 @@ export component IconButton inherits Rectangle {
     height: Theme.button-height;
     border-radius: Theme.radius-control;
     background: root.selected ? Theme.accent
-        : touch.pressed ? Theme.border : touch.has-hover ? Theme.hover : transparent;
+        : touch.pressed ? Theme.subtle-pressed : touch.has-hover ? Theme.subtle : transparent;
     animate background { duration: Theme.hover-time; }
     forward-focus: focus;
     accessible-role: button;
@@ -803,8 +803,8 @@ export component KeyCap inherits Rectangle {
     width: label.preferred-width + 12px;
     border-radius: Theme.radius-control;
     border-width: 1px;
-    border-color: Theme.border;
-    background: Theme.surface-raised;
+    border-color: Theme.control-stroke;
+    background: Theme.control-fill;
     accessible-role: none;
     label := Text {
         text: root.text;
@@ -827,7 +827,7 @@ export component FilterChip inherits Rectangle {
     height: 28px;
     width: layout.preferred-width;
     border-radius: 14px;
-    background: root.selected ? Theme.accent : touch.has-hover ? Theme.hover : Theme.surface-raised;
+    background: root.selected ? Theme.accent : touch.has-hover ? Theme.control-fill-hover : Theme.control-fill;
     animate background { duration: Theme.hover-time; }
     forward-focus: focus;
     accessible-role: button;
@@ -907,7 +907,7 @@ export component InfoBar inherits Rectangle {
     border-width: 1px;
     background: root.kind == "error" ? Theme.critical-bg : root.kind == "warning" ? Theme.caution-bg
         : root.kind == "success" ? Theme.success-bg : Theme.info-bg;
-    border-color: Theme.border;
+    border-color: Theme.card-stroke;
     accessible-role: groupbox;
     accessible-label: root.title;
     accessible-description: root.text;
@@ -986,10 +986,10 @@ export component Expander inherits Rectangle {
     in property <bool> action-enabled: true;
     callback toggled(bool);
     callback action();
-    background: Theme.surface;
+    background: Theme.card;
     border-radius: Theme.radius-card;
     border-width: 1px;
-    border-color: Theme.border;
+    border-color: Theme.card-stroke;
     clip: true;
     VerticalLayout {
         Rectangle {
