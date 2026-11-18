@@ -8,6 +8,8 @@ import { Palette } from "std-widgets.slint";
 
 export global Theme {
     in property <bool> motion: true;
+    // The settings window has the focus: looping animations run only then.
+    in property <bool> window-active;
     out property <bool> dark: Palette.color-scheme == ColorScheme.dark;
 
     // Spectrum (HDR only).
@@ -18,6 +20,15 @@ export global Theme {
     out property <color> green: #14D98A;
     // Drawn in Rust (huedra_core::icon) so every renderer shows it without seams.
     in property <image> spectrum-image;
+    // The Status card's banner of waves, gray (SDR) and in color (HDR, when
+    // the HDR layer is not drawing them): made in Rust at the banner's own
+    // pixel size, dithered (huedra_core::icon), and drawn here unscaled.
+    in property <image> waves-gray;
+    in property <image> waves-color;
+    // The HDR layer is drawing the banner's waves in real HDR, so the card
+    // leaves out its own colored copy: under the layer's fade it showed as
+    // grain.
+    in property <bool> hdr-banner;
     // The program icon as vector images, drawn sharp at any display scale:
     // the color gamut while HDR is on, a gray outline of it in SDR.
     out property <image> logo-hdr: @image-url("assets/logo-hdr.svg");
@@ -27,7 +38,28 @@ export global Theme {
     out property <image> chart-hdr: @image-url("assets/chart-hdr.svg");
     out property <image> chart-sdr: @image-url("assets/chart-sdr.svg");
 
-    // Neutrals, as Windows 11's layers.
+    // See-through fills, as WinUI's: what sits on the window (cards, setting
+    // rows) and what sits on a card (buttons, text boxes, tiles) lets the
+    // Mica tint through, as in Windows' own Settings. Over the solid
+    // background (no Mica, or an inactive window) they add up to the solid
+    // neutrals below: a card is `surface`, a tile on a card `surface-raised`.
+    // Pages, cards and setting rows.
+    out property <color> card: dark ? #FFFFFF0D : #FFFFFFB3;
+    out property <color> card-stroke: dark ? #0000001A : #0000000F;
+    // Buttons, drop-downs, text boxes and key labels.
+    out property <color> control-fill: dark ? #FFFFFF0F : #FFFFFFB3;
+    out property <color> control-fill-hover: dark ? #FFFFFF15 : #F9F9F980;
+    out property <color> control-fill-pressed: dark ? #FFFFFF08 : #F9F9F94D;
+    out property <color> control-fill-disabled: dark ? #FFFFFF0B : #F9F9F94D;
+    out property <color> control-stroke: dark ? #FFFFFF12 : #0000000F;
+    // A text box while it has the keyboard.
+    out property <color> input-active: dark ? #1E1E1EB3 : #FFFFFF;
+    // Navigation, list rows, icon buttons and tiles: hover, selection, insets.
+    out property <color> subtle: dark ? #FFFFFF0F : #00000009;
+    out property <color> subtle-pressed: dark ? #FFFFFF0A : #00000006;
+
+    // Solid neutrals, as Windows 11's layers: the window without Mica,
+    // dialogs, drop-down lists and the quick panel.
     out property <color> background: dark ? #202020 : #F3F3F3;
     out property <color> surface: dark ? #2B2B2B : #FBFBFB;
     out property <color> surface-raised: dark ? #383838 : #EDEDED;

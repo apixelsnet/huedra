@@ -2,6 +2,11 @@
 
 Changes that matter to people using Huedra (not the project's own build and workflow changes). Versions follow `MAJOR.MINOR.PATCH`; the updater installs only versions newer than the running one.
 
+## 1.3.1 — 2026-11-18
+
+### Changed
+- On Windows 11 22H2 and later the desktop's tint now shows through the cards, setting rows, buttons and text boxes as well, with Windows' own see-through colors, so the window looks like Windows' Settings. The Status card has a banner of glowing waves across its top: gray in SDR, in color while HDR is on, and on a display in HDR mode drawn in real HDR, brighter and more colorful than the rest of the window. The card keeps the same shape in SDR and HDR, and its color chart reacts when you point at it or click it.
+
 ## 1.3.0 — 2026-11-16
 
 ### Added

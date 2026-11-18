@@ -11,6 +11,9 @@ ignore = [
     # spin_on) and no release of Slint has dropped it yet. Revisit on Slint
     # updates.
     { id = "RUSTSEC-2026-0441", reason = "pin-utils via Slint; unmaintained notice only" },
+    # Unmaintained, not vulnerable; only i-slint-core uses it. Revisit on
+    # Slint updates.
+    { id = "RUSTSEC-2026-0543", reason = "chrono via Slint; unmaintained notice only" },
 ]
 
 [licenses]

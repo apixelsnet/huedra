@@ -25,7 +25,7 @@ component NavItem inherits Rectangle {
     callback activate();
     height: Theme.nav-row;
     border-radius: Theme.radius-control;
-    background: selected ? Theme.surface-raised : touch.has-hover ? Theme.hover : transparent;
+    background: selected || touch.has-hover ? Theme.subtle : transparent;
     animate background { duration: Theme.hover-time; }
     accessible-role: tab;
     accessible-label: label;
@@ -89,6 +89,28 @@ export component SettingsWindow inherits Window {
     default-font-size: Theme.body-size;
 
     in-out property <int> page: 0;
+    // The Status card and the page's view, in window coordinates, for the
+    // HDR layer behind the card; shown while Status is the page.
+    out property <bool> hero-shown: root.page == 0;
+    out property <length> hero-x: status.hero-x;
+    out property <length> hero-y: status.hero-y;
+    out property <length> hero-width: status.hero-width;
+    out property <length> hero-banner: status.hero-banner;
+    out property <length> view-x: status.view-x;
+    out property <length> view-y: status.view-y;
+    out property <length> view-width: status.view-width;
+    out property <length> view-height: status.view-height;
+    // The card or the page's view moved (scrolling, resizing, a page
+    // change): the HDR layer follows before the frame is drawn.
+    callback hero-moved();
+    changed hero-shown => { root.hero-moved(); }
+    changed hero-x => { root.hero-moved(); }
+    changed hero-y => { root.hero-moved(); }
+    changed hero-width => { root.hero-moved(); }
+    changed view-x => { root.hero-moved(); }
+    changed view-y => { root.hero-moved(); }
+    changed view-width => { root.hero-moved(); }
+    changed view-height => { root.hero-moved(); }
     // Set when the width changes rather than bound to it: the layouts below
     // depend on them and in turn constrain the width.
     property <bool> wide: true;

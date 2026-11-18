@@ -34,7 +34,19 @@ Neutral layers as in Windows, one fixed accent, and the Windows status colors. T
 
 The spectrum colors (BT.2020) stay for the logo and the Status card while HDR is on, gray in SDR.
 
-**Mica.** On Windows 11 22H2 and later the window asks for the Mica backdrop and leaves the navigation pane and the page area transparent, so Windows tints both with the wallpaper (see 08, since 1.2.0). Everything that holds content (setting rows, tables, the details pane's rows, dialogs) keeps a solid fill from the tokens above, so text never sits directly on Mica. New pages follow the same split: background transparent, content on cards.
+**Mica.** On Windows 11 22H2 and later the window asks for the Mica backdrop and leaves the navigation pane and the page area transparent, so Windows tints both with the wallpaper (see 08, since 1.2.0). What sits on the window uses WinUI's see-through fills (`theme.slint`), so the tint shows through cards and controls too, as in Windows' own Settings:
+
+| Token | Light | Dark | WinUI name | Use |
+|---|---|---|---|---|
+| `card` / `card-stroke` | `rgba(255,255,255,.7)` / `rgba(0,0,0,.06)` | `rgba(255,255,255,.05)` / `rgba(0,0,0,.1)` | CardBackgroundFillColorDefault / CardStrokeColorDefault | Cards, setting rows, the details pane's rows, expanders, the Status card |
+| `control-fill` / `-hover` / `-pressed` / `-disabled` | `rgba(255,255,255,.7)` / `rgba(249,249,249,.5)` / `rgba(249,249,249,.3)` / `rgba(249,249,249,.3)` | `rgba(255,255,255,.06)` / `.08` / `.03` / `.04` | ControlFillColor… | Buttons, drop-downs, text boxes, key labels, filter chips |
+| `control-stroke` | `rgba(0,0,0,.06)` | `rgba(255,255,255,.07)` | ControlStrokeColorDefault | Their borders |
+| `input-active` | `#FFFFFF` | `rgba(30,30,30,.7)` | ControlFillColorInputActive | A text box with the keyboard |
+| `subtle` / `subtle-pressed` | `rgba(0,0,0,.035)` / `.024` | `rgba(255,255,255,.06)` / `.04` | SubtleFillColorSecondary / Tertiary | Navigation and list rows (hover and selected), icon buttons, tiles and insets on a card, the mode selector's track |
+
+Over the solid base (no Mica, or an inactive window, which Windows draws plain) these add up to the solid tokens of the first table: a card comes out at `#2B2B2B` / `#FBFBFB`, a tile on a card at about `#383838`. Text keeps its contrast, as in Settings. Things that float over the window keep solid fills: dialogs, the first-run setup, drop-down lists, and the quick panel with its buttons (a long label there fades into its button's solid color). New pages follow the same split: background transparent, content on see-through cards.
+
+**Status card.** A banner of glowing waves across its top (96 px), fading into the card with no line between, then the color chart and the status, as tall as they need (at least 128 px); the same shape in SDR and HDR. The waves are gray in SDR and in the spectrum's colors in HDR; on a display in HDR mode they may be drawn in real HDR by a layer over the banner (see 08), so nothing is drawn under the banner but its waves. Faint gradients are drawn in Rust, dithered and unscaled: drawn by the renderer at low opacity they show bands. Hover lifts the chart, a click sends a ripple, nothing more; no motion with Windows animation effects off.
 
 ## Type
 Segoe UI Variable, sizes in effective pixels:

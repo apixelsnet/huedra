@@ -153,10 +153,10 @@ export struct StoreChip {
 // ---- Shared parts -----------------------------------------------------
 
 component Card inherits Rectangle {
-    background: Theme.surface;
+    background: Theme.card;
     border-radius: Theme.radius-card;
     border-width: 1px;
-    border-color: Theme.border;
+    border-color: Theme.card-stroke;
 }
 
 component PageTitle inherits Text {
@@ -200,7 +200,7 @@ component GameIcon inherits Rectangle {
     height: root.size;
     border-radius: root.size / 5;
     clip: true;
-    background: root.icon.width > 0 ? transparent : Theme.surface-raised;
+    background: root.icon.width > 0 ? transparent : Theme.subtle;
     accessible-role: none;
     if root.icon.width > 0: Image {
         width: parent.width;
@@ -307,7 +307,7 @@ component HdrBadge inherits Badge {
 component Tile inherits Rectangle {
     min-height: 56px;
     border-radius: Theme.radius-control + 2px;
-    background: Theme.surface-raised;
+    background: Theme.subtle;
     HorizontalLayout {
         padding-left: 12px;
         padding-right: 12px;
@@ -347,7 +347,7 @@ export component ModeSelector inherits Rectangle {
     callback chosen(int);
     height: Theme.button-height + 4px;
     border-radius: Theme.radius-control + 2px;
-    background: Theme.surface-raised;
+    background: Theme.subtle;
     forward-focus: focus;
     accessible-role: tab-list;
     accessible-label: "Mode";
@@ -357,7 +357,7 @@ export component ModeSelector inherits Rectangle {
         for label[i] in ["Automatic", "Always HDR", "Always SDR"]: Rectangle {
             property <bool> selected: root.mode == i;
             border-radius: Theme.radius-control;
-            background: selected ? Theme.accent : touch.has-hover ? Theme.hover : transparent;
+            background: selected ? Theme.accent : touch.has-hover ? Theme.subtle : transparent;
             animate background { duration: Theme.control; }
             accessible-role: tab;
             accessible-label: label;
@@ -404,31 +404,100 @@ export component ModeSelector inherits Rectangle {
     }
 }
 
-// The status card with its color chart: the BT.2020 triangle around the
-// sRGB triangle. Gray in SDR; while HDR is on the spectrum fades into the
-// chart and the card over Theme.fade (400 ms), and back to gray in SDR.
+// The status card: a banner of waves across its top, then the color chart
+// (the BT.2020 triangle around the sRGB triangle) and the status. Its shape
+// is the same in SDR and HDR.
+// - The banner's waves are gray in SDR and in color in HDR, cross-fading
+//   with the HDR change (700 ms) while the chart grows from the sRGB triangle
+//   out to BT.2020. On a display in HDR mode the HDR layer
+//   (`huedra_win::hdr_layer`) draws them over the banner in real HDR.
+// - The waves are images from Rust (`icon::sdr_waves`, `icon::hdr_waves`),
+//   dithered and made at the banner's own pixel size, so they show no bands.
+// - Pointing at the card lifts the chart and, in SDR, shows a hint of the
+//   BT.2020 triangle; a click sends a ripple out from the pointer.
+// Purely visual: the card changes nothing. No motion at all with Windows
+// animation effects off.
 component HeroCard inherits Rectangle {
     in property <bool> hdr-on;
     in property <string> headline;
     in property <string> detail;
     in property <string> caption;
-    min-height: 140px;
+
+    // 0 in SDR, 1 in HDR, in between while it changes.
+    property <float> reveal: root.hdr-on ? 1 : 0;
+    animate reveal { duration: Theme.motion ? 700ms : 0ms; easing: ease-in-out; }
+    // Pointing: the chart lifts, and in SDR the BT.2020 triangle shows faintly.
+    property <float> lift: touch.has-hover && Theme.motion ? 1 : 0;
+    animate lift { duration: 220ms; easing: ease-out; }
+    // A click: a ripple from the pointer, gone after 600 ms.
+    property <bool> rippling;
+    property <length> ripple-x;
+    property <length> ripple-y;
+
+    // Where the card and its banner are in the window, for the HDR layer.
+    out property <length> window-x: self.absolute-position.x;
+    out property <length> window-y: self.absolute-position.y;
+    out property <length> banner-height: 96px;
+
+    // As tall as what it holds, so it never stands mostly empty.
+    height: max(128px, content.min-height) + root.banner-height;
     border-radius: Theme.radius-card;
-    background: Theme.surface;
+    background: Theme.card;
     border-width: 1px;
-    border-color: root.hdr-on ? Theme.violet : Theme.border;
-    animate border-color { duration: Theme.fade; easing: ease-in-out; }
+    border-color: touch.has-hover ? Theme.control-stroke : Theme.card-stroke;
+    animate border-color { duration: Theme.hover-time; }
     clip: true;
+    // The banner: gray waves in SDR, in color in HDR, fading into the
+    // card below. At the top left: an element with a size but no place
+    // would be centered on the card.
     Image {
-        source: Theme.spectrum-image;
-        image-fit: fill;
-        width: parent.width;
-        height: parent.height;
-        opacity: root.hdr-on ? (Theme.dark ? 0.3 : 0.22) : 0;
-        animate opacity { duration: Theme.fade; easing: ease-in-out; }
+        x: 0;
+        y: 0;
+        source: Theme.waves-gray;
+        width: Theme.waves-gray.width * 1phx;
+        height: Theme.waves-gray.height * 1phx;
+        opacity: 1 - root.reveal;
         accessible-role: none;
     }
-    HorizontalLayout {
+    Image {
+        x: 0;
+        y: 0;
+        source: Theme.waves-color;
+        width: Theme.waves-color.width * 1phx;
+        height: Theme.waves-color.height * 1phx;
+        opacity: Theme.hdr-banner ? 0 : root.reveal;
+        accessible-role: none;
+    }
+    ripple := Rectangle {
+        property <length> size: 0px;
+        property <length> reach: root.width * 1.4;
+        x: root.ripple-x - self.width / 2;
+        y: root.ripple-y - self.height / 2;
+        width: self.size;
+        height: self.size;
+        border-radius: self.size / 2;
+        background: Theme.dark ? #FFFFFF : #000000;
+        opacity: root.rippling ? 0.1 * (1 - self.size / self.reach) : 0;
+        accessible-role: none;
+        states [
+            going when root.rippling: {
+                size: self.reach;
+                in {
+                    animate size { duration: 600ms; easing: ease-out; }
+                }
+            }
+        ]
+    }
+    Timer {
+        interval: 600ms;
+        running: root.rippling;
+        triggered => {
+            root.rippling = false;
+        }
+    }
+    content := HorizontalLayout {
+        y: root.banner-height;
+        height: root.height - root.banner-height;
         padding: 22px;
         spacing: 22px;
         VerticalLayout {
@@ -436,20 +505,28 @@ component HeroCard inherits Rectangle {
             Rectangle {
                 width: 84px;
                 height: 84px;
+                // sRGB: grows a little as it fades, handing over to BT.2020.
                 Image {
+                    property <float> scale: (1 + 0.15 * root.reveal) * (1 + 0.06 * root.lift);
                     source: Theme.chart-sdr;
-                    width: parent.width;
-                    height: parent.height;
-                    opacity: root.hdr-on ? 0 : 1;
-                    animate opacity { duration: Theme.fade; easing: ease-in-out; }
+                    width: parent.width * self.scale;
+                    height: parent.height * self.scale;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    opacity: 1 - root.reveal;
                     accessible-role: none;
                 }
+                // BT.2020: grows out from the sRGB triangle's size.
                 Image {
+                    // Pointed at in SDR it grows halfway: a peek at HDR.
+                    property <float> grow: root.reveal + (1 - root.reveal) * 0.5 * root.lift;
+                    property <float> scale: (0.7 + 0.3 * self.grow) * (1 + 0.06 * root.lift);
                     source: Theme.chart-hdr;
-                    width: parent.width;
-                    height: parent.height;
-                    opacity: root.hdr-on ? 1 : 0;
-                    animate opacity { duration: Theme.fade; easing: ease-in-out; }
+                    width: parent.width * self.scale;
+                    height: parent.height * self.scale;
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    opacity: root.reveal + (1 - root.reveal) * 0.22 * root.lift;
                     accessible-role: none;
                 }
             }
@@ -462,7 +539,7 @@ component HeroCard inherits Rectangle {
                 text: root.headline;
                 font-size: Theme.title-size;
                 font-weight: 600;
-                color: root.hdr-on ? Theme.pink : Theme.text;
+                color: root.hdr-on ? Theme.hdr-label : Theme.text;
                 animate color { duration: Theme.fade; }
             }
             Text {
@@ -476,6 +553,15 @@ component HeroCard inherits Rectangle {
                 font-size: Theme.caption-size;
                 color: Theme.text-muted;
                 wrap: word-wrap;
+            }
+        }
+    }
+    touch := TouchArea {
+        clicked => {
+            if Theme.motion && !root.rippling {
+                root.ripple-x = self.mouse-x;
+                root.ripple-y = self.mouse-y;
+                root.rippling = true;
             }
         }
     }
@@ -656,6 +742,17 @@ export component StatusPage inherits Rectangle {
         root.two-columns = min(root.width, Theme.page-width) >= 760px;
     }
 
+    // Where the Status card and the page's view are in the window, for
+    // the HDR layer behind the card.
+    out property <length> hero-x: hero.window-x;
+    out property <length> hero-y: hero.window-y;
+    out property <length> hero-width: hero.width;
+    out property <length> hero-banner: hero.banner-height;
+    out property <length> view-x: page.absolute-position.x;
+    out property <length> view-y: page.absolute-position.y;
+    out property <length> view-width: page.visible-width;
+    out property <length> view-height: page.visible-height;
+
     page := ScrollView {
         // At least the preferred height, so rows keep their wrapped text
         // when the page is taller than the window (the default is the
@@ -722,7 +819,7 @@ export component StatusPage inherits Rectangle {
                     root.close-new-look();
                 }
             }
-            HeroCard {
+            hero := HeroCard {
                 hdr-on: root.hdr-on;
                 headline: root.headline;
                 detail: root.detail;
@@ -915,9 +1012,9 @@ component PaneRow inherits Rectangle {
     // and text that wraps to more lines spilled past its border.
     min-height: max(60px, row-layout.min-height);
     border-radius: Theme.radius-control;
-    background: Theme.surface;
+    background: Theme.card;
     border-width: 1px;
-    border-color: Theme.border;
+    border-color: Theme.card-stroke;
     // The icon sits outside the layout, centered on the row.
     Text {
         x: 14px;
@@ -1501,7 +1598,7 @@ export component GamesPage inherits Rectangle {
                 width: 70px;
                 height: Theme.button-height;
                 border-radius: Theme.radius-control + 2px;
-                background: Theme.surface-raised;
+                background: Theme.subtle;
                 accessible-role: tab-list;
                 accessible-label: "View";
                 HorizontalLayout {
@@ -1704,7 +1801,7 @@ export component GamesPage inherits Rectangle {
                         for game[i] in root.games: Rectangle {
                             property <bool> selected: root.has-selection && root.selected-id == game.id;
                             height: root.row-height;
-                            background: selected ? Theme.surface-raised : row-touch.has-hover ? Theme.hover : transparent;
+                            background: selected || row-touch.has-hover ? Theme.subtle : transparent;
                             animate background { duration: Theme.hover-time; }
                             accessible-role: list-item;
                             accessible-label: game.name;
@@ -2207,7 +2304,7 @@ component ModeCard inherits Card {
     in property <bool> selected;
     in property <bool> recommended;
     callback chosen();
-    border-color: root.selected ? Theme.accent : Theme.border;
+    border-color: root.selected ? Theme.accent : Theme.card-stroke;
     border-width: root.selected ? 2px : 1px;
     min-height: 64px;
     forward-focus: keys;
@@ -2580,7 +2677,7 @@ export component DisplaysPage inherits Rectangle {
                             height: 36px;
                             border-radius: Theme.radius-control;
                             clip: true;
-                            background: Theme.surface-raised;
+                            background: Theme.subtle;
                             if d.hdr-on: Image {
                                 source: Theme.spectrum-image;
                                 image-fit: fill;

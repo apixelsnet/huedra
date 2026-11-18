@@ -30,7 +30,9 @@ use huedra_core::mods::{self as hdr_mods, Manifest, Mod};
 use huedra_core::paths::{NormPath, display_name};
 use huedra_core::shortcut::Binding;
 use huedra_core::video::{self, StreamingSite, VideoApp};
+use huedra_win::hdr_layer::{HdrLayer, PixelRect, Placement};
 use huedra_win::{instance, pipe, registry, shell};
+use slint::winit_030::{EventResult, WinitWindowAccessor as _, winit};
 use slint::{
     CloseRequestResponse, ComponentHandle, Image, Model, ModelRc, PhysicalPosition, PhysicalSize,
     Rgba8Pixel, SharedPixelBuffer, SharedString, VecModel,
@@ -186,8 +188,9 @@ pub fn run(locations: Locations, page: Page) -> Result<(), slint::PlatformError>
         .backend_name("winit".into())
         .renderer_name("software".into());
     // Mica: Windows tints the window's backdrop (the navigation pane and
-    // behind the pages) with the wallpaper, as in its own apps; the cards
-    // stay solid. Windows 11 22H2 (build 22621) and later; earlier builds
+    // behind the pages) with the wallpaper, as in its own apps, and the
+    // see-through cards and controls (`Theme.card`, `Theme.control-fill`)
+    // let it through. Windows 11 22H2 (build 22621) and later; earlier builds
     // would show the transparent backdrop black. Sample builds leave it out
     // unless asked (`HUEDRA_SAMPLE_MICA`): captures of a hidden window
     // cannot show it.
@@ -210,6 +213,17 @@ pub fn run(locations: Locations, page: Page) -> Result<(), slint::PlatformError>
     ui.set_mica(mica);
     let theme = ui.global::<Theme>();
     theme.set_motion(shell::animations_enabled());
+    // Looping animations run only while the window has the focus: none in
+    // the background or minimized.
+    let window_weak = ui.as_weak();
+    ui.window().on_winit_window_event(move |_, event| {
+        if let winit::event::WindowEvent::Focused(focused) = event
+            && let Some(ui) = window_weak.upgrade()
+        {
+            ui.global::<Theme>().set_window_active(*focused);
+        }
+        EventResult::Propagate
+    });
     theme.set_spectrum_image(rgba_image(
         &icon::spectrum_strip(SPECTRUM_W, SPECTRUM_H),
         SPECTRUM_W,
@@ -371,6 +385,7 @@ pub fn run(locations: Locations, page: Page) -> Result<(), slint::PlatformError>
     limit_size_once_shown(0);
     log_start_time();
     offer_update(&ui, false);
+    let _card_art = start_card_art(&ui);
     ui.run()?;
     drop(ui);
     // The window is gone: a new one may open from here on, the reopened one
@@ -405,6 +420,207 @@ fn close_with_tray(ui: &SettingsWindow) {
     save_geometry(ui);
     let _ = ui.hide();
     let _ = slint::quit_event_loop();
+}
+
+/// How bright the HDR layer's waves are: this share of the display's
+/// peak, or of `HDR_FALLBACK_NITS` when Windows does not say.
+const HDR_PEAK_SHARE: f32 = 0.95;
+const HDR_FALLBACK_NITS: f32 = 400.0;
+/// The SDR banner's gray waves, readable on each theme.
+const WAVES_GRAY_DARK: [u8; 3] = [0xC8, 0xC8, 0xD2];
+const WAVES_GRAY_LIGHT: [u8; 3] = [0x5F, 0x5F, 0x6A];
+
+/// Keeps the Status card's banner art in step with the card: the SDR waves
+/// (gray, and in color for HDR) are made at the banner's own pixel size and
+/// again when it changes (width, scale, theme). On Windows with Mica the HDR
+/// layer (`huedra_win::hdr_layer`, off with `HUEDRA_HDR_LAYER=0`) draws the waves over the banner in real HDR while
+/// HDR is on and Status is the page, near the peak of the brightest display
+/// in HDR. If it cannot be made the SDR waves stay and the log says why.
+///
+/// The layer follows the card the moment the window reports it moved
+/// (`hero-moved`, before the frame is drawn), so it scrolls with the page at
+/// any refresh rate; the timer makes the images, which takes longer, and
+/// catches HDR turning on or off.
+fn start_card_art(ui: &SettingsWindow) -> slint::Timer {
+    let art = std::rc::Rc::new(CardArt {
+        layer: RefCell::new(None),
+        failed: Cell::new(
+            !ui.get_mica() || std::env::var_os("HUEDRA_HDR_LAYER").is_some_and(|v| v == "0"),
+        ),
+        sdr_size: Cell::new((0, 0, false)),
+        hdr_size: Cell::new((0, 0, 0)),
+        placed: Cell::new(None),
+    });
+    let weak = ui.as_weak();
+    let moved = std::rc::Rc::clone(&art);
+    ui.on_hero_moved(move || {
+        if let Some(ui) = weak.upgrade() {
+            moved.update(&ui, false);
+        }
+    });
+    let weak = ui.as_weak();
+    let timer = slint::Timer::default();
+    timer.start(
+        slint::TimerMode::Repeated,
+        Duration::from_millis(50),
+        move || {
+            if let Some(ui) = weak.upgrade() {
+                art.update(&ui, true);
+            }
+        },
+    );
+    timer
+}
+
+/// The Status card's banner art and the HDR layer over it.
+struct CardArt {
+    layer: RefCell<Option<HdrLayer>>,
+    /// The layer is off, or could not be made.
+    failed: Cell<bool>,
+    /// The SDR waves' size and theme (dark) as last made.
+    sdr_size: Cell<(u32, u32, bool)>,
+    /// The HDR waves' size and brightness (nits) as last made.
+    hdr_size: Cell<(u32, u32, u32)>,
+    /// Where the layer was last put.
+    placed: Cell<Option<Option<Placement>>>,
+}
+
+impl CardArt {
+    /// Brings the art in step with the card; `make` also remakes images
+    /// whose size, theme or brightness changed (the timer's turn).
+    fn update(&self, ui: &SettingsWindow, make: bool) {
+        let scale = ui.window().scale_factor();
+        let banner = PixelRect {
+            x: (ui.get_hero_x() * scale).round(),
+            y: (ui.get_hero_y() * scale).round(),
+            width: (ui.get_hero_width() * scale).round(),
+            height: (ui.get_hero_banner() * scale).round(),
+        };
+        #[expect(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "rounded, positive window sizes and nits"
+        )]
+        let (width, height, nits) = (
+            banner.width as u32,
+            banner.height as u32,
+            (hdr_peak() * HDR_PEAK_SHARE) as u32,
+        );
+        if width == 0 || height == 0 {
+            return;
+        }
+        let dark = ui.global::<Theme>().get_dark();
+        if make && self.sdr_size.get() != (width, height, dark) {
+            self.sdr_size.set((width, height, dark));
+            let gray = if dark {
+                WAVES_GRAY_DARK
+            } else {
+                WAVES_GRAY_LIGHT
+            };
+            let theme = ui.global::<Theme>();
+            theme.set_waves_gray(rgba_image(
+                &icon::sdr_waves(width, height, 0, Some(gray)),
+                width,
+                height,
+            ));
+            theme.set_waves_color(rgba_image(
+                &icon::sdr_waves(width, height, 0, None),
+                width,
+                height,
+            ));
+        }
+        if self.failed.get() {
+            return;
+        }
+        let Ok(mut slot) = self.layer.try_borrow_mut() else {
+            return;
+        };
+        if slot.is_none() {
+            if !make {
+                return;
+            }
+            let Some(hwnd) = window_handle(ui) else {
+                return;
+            };
+            match HdrLayer::new(hwnd) {
+                Ok(made) => *slot = Some(made),
+                Err(error) => {
+                    self.failed.set(true);
+                    log_line(&format!("HDR layer not available: {error}"));
+                    return;
+                }
+            }
+        }
+        let Some(layer) = slot.as_mut() else {
+            return;
+        };
+        let view = PixelRect {
+            x: ui.get_view_x() * scale,
+            y: ui.get_view_y() * scale,
+            width: ui.get_view_width() * scale,
+            height: ui.get_view_height() * scale,
+        };
+        let wanted = (ui.get_hero_shown() && ui.get_hdr_on()).then_some(Placement {
+            rect: banner,
+            top_radius: 8.0 * scale,
+            bottom_radius: 0.0,
+            view,
+        });
+        if make && wanted.is_some() && self.hdr_size.get() != (width, height, nits) {
+            #[expect(clippy::cast_precision_loss, reason = "nits are small")]
+            let waves = icon::hdr_waves(width, height, 0, nits as f32);
+            match layer.set_image(width, height, &waves) {
+                Ok(()) => self.hdr_size.set((width, height, nits)),
+                Err(error) => log_line(&format!("HDR layer: {error}")),
+            }
+        }
+        // Not shown before its image is made.
+        let ready = self.hdr_size.get().0 > 0;
+        let wanted = wanted.filter(|_| ready);
+        if self.placed.get() != Some(wanted) {
+            match layer.place(wanted) {
+                Ok(()) => {
+                    self.placed.set(Some(wanted));
+                    ui.global::<Theme>().set_hdr_banner(wanted.is_some());
+                }
+                Err(error) => log_line(&format!("HDR layer: {error}")),
+            }
+        }
+    }
+}
+
+/// The peak brightness of the brightest display in HDR, as Windows gives
+/// it, or `HDR_FALLBACK_NITS`.
+fn hdr_peak() -> f32 {
+    with_state(|s| {
+        s.displays
+            .iter()
+            .filter(|d| d.state == HdrState::On)
+            .filter_map(|d| d.peak)
+            .map(|n| n.get())
+            .fold(0.0_f32, f32::max)
+    })
+    .filter(|&peak| peak > 0.0)
+    .unwrap_or(HDR_FALLBACK_NITS)
+}
+
+/// The settings window's raw handle, once Windows has made it.
+fn window_handle(ui: &SettingsWindow) -> Option<isize> {
+    use winit::raw_window_handle::{HasWindowHandle as _, RawWindowHandle};
+    ui.window()
+        .with_winit_window(|window| match window.window_handle().ok()?.as_raw() {
+            RawWindowHandle::Win32(handle) => Some(handle.hwnd.get()),
+            _ => None,
+        })?
+}
+
+/// Adds a line to Huedra's log, with the time.
+fn log_line(text: &str) {
+    let Some(path) = with_state(|s| s.locations.log.clone()) else {
+        return;
+    };
+    let log = huedra_core::logfile::LogFile::new(path, huedra_core::logfile::MAX_BYTES);
+    let _ = log.append(&format!("{} {text}", huedra_win::clock::now()));
 }
 
 /// Logs how long the window took to open, measured from the process's
