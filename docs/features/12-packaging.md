@@ -240,3 +240,9 @@ Not verified: installing through winget (local manifests need an administrator s
 - The winget and Scoop manifests in `extras/packaging/` now name 1.3.0 and the zip's SHA-256 (b55402e3ace2a70e7f0a4745b5f14aacef4465ef240330b9f7b2b6ea59b1b403).
 - A failed run can leave its tag behind: the version job tags before the build. Delete an unused tag before running Release again for the same version.
 - README images: the tour's Settings frame retaken from the sample build with version 1.3.0; the tour GIF (now 820 × 561, 337 frames) and the Games screenshot (1300 × 791) lose the 8-pixel black band on the left, right and bottom that `PrintWindow` captures from Windows' invisible resize frame.
+
+## Result (2026-11-18) — 1.3.1
+- PR #54 (see-through Mica cards, the Status card's wave banner with its HDR layer, smooth scrolling of it, the README images, the 1.3.1 changelog) merged as b4b4f44 with a plain squash merge. Release > Run workflow (version 1.3.1) on b4b4f44, run 44274988628: every job green; "Huedra 1.3.1" marked Latest, not a pre-release, with `huedra-1.3.1-windows-x64.zip` (6,444,703 bytes), its signature and the extension 0.3.1 zip; the update channel's `huedra.exe` is 12,466,176 bytes (limit 15,000,000).
+- Verified on this PC from the downloads: the zip, `release.toml` and `release-notes.md` signatures verify (trusted comment "huedra 1.3.1"); the exe's size and SHA-256 match `release.toml`, and the zip's exe is the channel's; `--version` prints Huedra 1.3.1; the notes carry the 1.3.1 entry; Defender finds nothing in the exe.
+- The winget and Scoop manifests in `extras/packaging/` now name 1.3.1 and the zip's SHA-256 (51c87d8443592db4d6f8ca6f6480d3bb0ee3ac2901a1d9a58c1ed1311bd7b40a).
+- README tour: the Settings frame retaken from the sample build with version 1.3.1.
