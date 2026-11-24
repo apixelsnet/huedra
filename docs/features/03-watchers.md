@@ -41,3 +41,11 @@ Verified by the owner on this PC (build cf4b7b9, Automatic mode, keep HDR on 3 s
 Not verified: whether the game itself offered its HDR option; Alt+Tab while the game runs; the Steam launch option (see 06).
 
 Status: done for games; video titles in progress (phase 4).
+
+## Result (2026-11-24) — detection latency in the log
+Code: `on_foreground` in `crates/huedra-win/src/foreground.rs`, `Event::Foreground { pid, lag_ms }` in `event_loop.rs`, `apply` in `crates/huedra/src/app.rs`.
+- The WinEvent callback now passes how long ago Windows noted the change (`GetTickCount` minus the event's time). A switch caused by a game coming to the front logs "Switch requested N ms after the event (M ms after Windows noted it)."
+
+- A program seen for the first time is recorded, and its Auto HDR and RTX HDR values written, after the switch is requested (`start_game`, then `note_program`): the end-to-end test showed the NVIDIA driver writes delaying the first switch of a new program by 170 ms.
+
+Verified on this PC (2026-11-24, portable test tray, a stand-in game window): "Switch requested 3 ms after the event (0 ms after Windows noted it)" on both displays.

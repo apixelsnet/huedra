@@ -97,6 +97,9 @@ export struct GameDetail {
     online: bool,
     // Index into the display mode list; 0 keeps the mode set in Windows.
     display-mode: int,
+    // What to set the game's peak brightness to; empty when no display
+    // reports its peak.
+    peak-hint: string,
 }
 
 export struct DisplayRow {
@@ -112,6 +115,8 @@ export struct DisplayRow {
     status: string,
     // SDR content brightness in nits while HDR is on; 0 otherwise.
     brightness: int,
+    // An HDR display without an HDR color profile: suggest calibrating it.
+    calibrate: bool,
 }
 
 export struct VideoAppRow {
@@ -1094,8 +1099,9 @@ component GameDetailPanel inherits Rectangle {
     callback create-shortcut(string);
     callback set-steam-start(string, bool);
     callback install-mod(string);
+    callback update-mod(string);
     callback remove-mod(string);
-    property <bool> modded: root.detail.mod-state == "installed" || root.detail.mod-state == "found";
+    property <bool> modded: root.detail.mod-state == "installed" || root.detail.mod-state == "update" || root.detail.mod-state == "found";
 
     pane := ScrollView {
         // At least the preferred height, so rows keep their wrapped text
@@ -1272,7 +1278,7 @@ component GameDetailPanel inherits Rectangle {
             if root.detail.mod-state != "none": PaneRow {
                 glyph: "\u{E8A5}";
                 title: root.detail.mod-title;
-                description: root.detail.mod-state == "installed" ? root.detail.mod-detail + ". Auto HDR and RTX HDR stay off for this game."
+                description: root.detail.mod-state == "installed" || root.detail.mod-state == "update" ? root.detail.mod-detail + ". Auto HDR and RTX HDR stay off for this game."
                     : root.detail.mod-state == "working" ? "Working..."
                     : root.detail.mod-state == "page" ? root.detail.mod-detail + ". Get it from its page; Huedra installs only mods with a direct download."
                     : root.detail.mod-detail;
@@ -1287,7 +1293,14 @@ component GameDetailPanel inherits Rectangle {
                     text: "Install";
                     enabled: false;
                 }
-                if root.detail.mod-state == "installed" || root.detail.mod-state == "found": ActionButton {
+                if root.detail.mod-state == "update": ActionButton {
+                    text: "Update";
+                    primary: true;
+                    clicked => {
+                        root.update-mod(root.detail.id);
+                    }
+                }
+                if root.detail.mod-state == "installed" || root.detail.mod-state == "update" || root.detail.mod-state == "found": ActionButton {
                     text: "Remove";
                     clicked => {
                         root.remove-mod(root.detail.id);
@@ -1316,8 +1329,13 @@ component GameDetailPanel inherits Rectangle {
                 }
             }
 
-            if root.sdr-profiles.length > 1 || root.display-modes.length > 1: PaneHeader {
+            if root.detail.peak-hint != "" || root.sdr-profiles.length > 1 || root.display-modes.length > 1: PaneHeader {
                 text: "Display";
+            }
+            if root.detail.peak-hint != "": PaneRow {
+                glyph: "\u{E706}";
+                title: "Peak brightness in the game";
+                description: root.detail.peak-hint;
             }
             if root.sdr-profiles.length > 1: PaneRow {
                 glyph: "\u{E790}";
@@ -1522,6 +1540,7 @@ export component GamesPage inherits Rectangle {
     callback set-auto-hdr(string, bool);
     callback set-rtx-hdr(string, bool);
     callback install-mod(string);
+    callback update-mod(string);
     callback remove-mod(string);
     in property <[string]> display-modes;
     callback set-display-mode(string, int);
@@ -2032,6 +2051,9 @@ export component GamesPage inherits Rectangle {
                 }
                 install-mod(id) => {
                     root.install-mod(id);
+                }
+                update-mod(id) => {
+                    root.update-mod(id);
                 }
                 remove-mod(id) => {
                     root.remove-mod(id);
@@ -2645,6 +2667,7 @@ export component DisplaysPage inherits Rectangle {
     in property <bool> main-only;
     callback set-controlled(string, bool);
     callback set-brightness(string, int);
+    callback open-calibration();
     callback set-retries(int);
     callback set-content-only(bool);
     callback set-main-only(bool);
@@ -2707,6 +2730,23 @@ export component DisplaysPage inherits Rectangle {
                         }
                         Caption {
                             text: d.detail;
+                        }
+                        if d.calibrate: VerticalLayout {
+                            alignment: start;
+                            spacing: 2px;
+                            padding-top: 4px;
+                            Caption {
+                                text: "No HDR color profile. Calibrate the display so games know how bright it really gets.";
+                            }
+                            HorizontalLayout {
+                                alignment: start;
+                                LinkButton {
+                                    text: "Get the Windows HDR Calibration app";
+                                    clicked => {
+                                        root.open-calibration();
+                                    }
+                                }
+                            }
                         }
                         // Label above the box, so neither is squeezed when
                         // the window is narrow or the display scale large.
@@ -2812,6 +2852,9 @@ export component SettingsPage inherits Rectangle {
     in property <bool> battery-sdr;
     in property <string> version;
     in property <string> data-folder;
+    in property <string> backup-note;
+    callback back-up-settings();
+    callback restore-settings();
     in property <string> update-note;
     in property <bool> can-check-updates;
     in property <bool> checking-updates;
@@ -3104,6 +3147,23 @@ export component SettingsPage inherits Rectangle {
                         checked: root.game-info;
                         toggled => {
                             root.set-game-info(self.checked);
+                        }
+                    }
+                }
+                SubRow {
+                    title: "Back up and restore settings";
+                    description: root.backup-note != "" ? root.backup-note
+                        : "Saves your settings, with every game's own settings, to a file. Restore replaces the current settings with a saved file's.";
+                    ActionButton {
+                        text: "Back up";
+                        clicked => {
+                            root.back-up-settings();
+                        }
+                    }
+                    ActionButton {
+                        text: "Restore";
+                        clicked => {
+                            root.restore-settings();
                         }
                     }
                 }

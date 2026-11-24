@@ -35,11 +35,11 @@ Windows HDR makes HDR games and video look as intended, but it makes the desktop
 
 | | |
 | --- | --- |
-| **HDR mods** *(new)* | Shows which of your games have a RenoDX or Luma HDR mod and installs it into the game's folder, usually without starting the game first. Mods without a direct download link to their page instead. Every file is recorded, and **Remove** puts the game back exactly as it was. Mods you installed yourself are recognized too. |
+| **HDR mods** *(new)* | Shows which of your games have a RenoDX or Luma HDR mod and installs it into the game's folder, usually without starting the game first. Mods without a direct download link to their page instead. Every file is recorded, and **Remove** puts the game back exactly as it was. Newer versions are found once a day and installed with **Update**. Mods you installed yourself are recognized too. |
 | **Auto HDR and RTX HDR** *(new)* | Windows Auto HDR and NVIDIA RTX HDR are off unless you turn them on, for every game in Settings or one game at a time in its details. Both stay off for games with an HDR mod, so they don't work against it. RTX HDR needs an NVIDIA graphics card; everything else works with any graphics card. |
-| **Games, found automatically** | Reads the libraries of Steam, Epic Games, GOG, Xbox, Ubisoft Connect, EA app, Rockstar Games, Battle.net, Riot Games, HoYoPlay, Amazon Games, itch.io and Heroic Games Launcher, plus the games the Xbox Game Bar recognized. HDR turns on while a game runs, with an optional delay per game and a time to keep HDR on after it closes. |
+| **Games, found automatically** | Reads the libraries of Steam, Epic Games, GOG, Xbox, Ubisoft Connect, EA app, Rockstar Games, Battle.net, Riot Games, HoYoPlay, Amazon Games, itch.io and Heroic Games Launcher, plus the games the Xbox Game Bar recognized and emulators such as RetroArch, Dolphin, PCSX2 and RPCS3. HDR turns on while a game runs, with an optional delay per game and a time to keep HDR on after it closes. |
 | **HDR video** | VLC, mpv, MPC-HC, MPC-BE and PotPlayer, by the title of the file playing. YouTube and streaming sites through the Huedra browser extension. RTX Video HDR aware. |
-| **The right display** | Only the display showing the game or video switches, and HDR follows the window to another display. Always HDR mode and the shortcut switch only the main display, unless you choose every display. |
+| **The right display** | Only the display showing the game or video switches, and HDR follows the window to another display. Always HDR mode and the shortcut switch only the main display, unless you choose every display. Each game's details give the peak brightness to set in the game, and a display without an HDR color profile links to the Windows HDR Calibration app. |
 | **Quick panel** | A click on the tray icon shows whether HDR is on and why, the mode, and a switch per display, with Pause and Never use HDR for the game running, without opening the window. |
 | **Start with HDR** | For games that misbehave when HDR changes while they start: a Steam launch option, a desktop shortcut, or a File Explorer menu entry turns HDR on first. |
 | **Light on the system** | One small executable, no installer, no background polling: Huedra waits for Windows to report a change. About 2 MB of memory. |
@@ -56,6 +56,7 @@ Some games have no HDR, or HDR that looks wrong. Community projects fix many of 
 
 - **Find.** Huedra reads the RenoDX and Luma mod lists once a day and marks the games that have a mod: the cover grid shows **Mod available**, and the **HDR mods** filter lists them all.
 - **Install.** For mods with a direct download, **Install** shows what will change, then downloads the mod from the link in its project's list (and ReShade from reshade.me, for RenoDX) and puts it next to the game's program. Huedra usually finds the program in the game's folder, so the game doesn't have to run first, and it shows where the mod goes before anything is copied. Mods offered only on a page such as Nexus Mods get a link to that page.
+- **Update.** Once a day Huedra checks whether a mod it installed has a newer version, asking the download's server without downloading the mod. **Update** then swaps the old version for the new one in a single step.
 - **Remove.** Huedra records every file it adds or replaces and keeps a backup of anything it replaces. **Remove** deletes only the files it added and restores the backups, and uninstalling Huedra removes its mods too.
 - **Recognize.** A RenoDX or Luma mod you installed yourself is recognized, and Auto HDR and RTX HDR stay off for that game as well. **Remove** takes it out too: the dialog lists each file first (the add-on, Luma's folder, and ReShade with its settings unless other add-ons use it), and Huedra keeps a copy of everything it takes out.
 - **Stay safe online.** Huedra won't install a mod in a game that PCGamingWiki lists with anti-cheat, warns about games with online play, and asks you to confirm before the first install. Changed game files can get an account banned in online games; the mods are made by their own authors, and you install them at your own risk.
@@ -79,6 +80,12 @@ Huedra reads only the name and path of the program in front and waits for progra
 
 **Why does Windows SmartScreen show a warning?**
 Huedra does not yet have a Windows code-signing certificate. Choose **More info** and **Run anyway**. Every release is signed with the project's own key, and updates are installed only when that signature is valid.
+
+**A game looks washed out or too dark in HDR. What can I do?**
+Set the game's own peak brightness to the number in its details on the **Games** page (**Peak brightness in the game**). If the **Displays** page suggests the Windows HDR Calibration app, calibrate the display first. Games with poor HDR of their own may have an HDR mod.
+
+**Can I move my settings to another PC?**
+Yes: **Settings › Advanced › Back up and restore settings**. **Back up** saves them to a file; **Restore** on the other PC loads it.
 
 **Why does the screen go black briefly?**
 That is Windows changing the display mode, as it does when HDR is switched in Windows Settings.

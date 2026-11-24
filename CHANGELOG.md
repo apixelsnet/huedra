@@ -2,6 +2,21 @@
 
 Changes that matter to people using Huedra (not the project's own build and workflow changes). Versions follow `MAJOR.MINOR.PATCH`; the updater installs only versions newer than the running one.
 
+## Unreleased
+
+### Added
+- **Peak brightness in the game**: a game's details on the **Games** page, under **Display**, give the number to enter in the game's own peak brightness setting: the most your display shows, as Windows reports it in HDR (the number games read).
+- **Get the Windows HDR Calibration app**: on the **Displays** page, an HDR display without an HDR color profile links to Microsoft's free calibration app, which tells Windows and games how bright the display really gets.
+- **HDR mod updates**: once a day Huedra checks whether a mod it installed has a newer version. The game's **HDR mod** section then shows **Update available** and **Update**, which swaps the old version for the new one and keeps the mod's settings.
+- **Back up and restore settings** under **Settings › Advanced**: save every setting, with each game's own, to a file, and load it again, for example on a new PC.
+- **Emulators**: RetroArch, Dolphin, PCSX2, RPCS3, PPSSPP, DuckStation, Cemu, Xenia Canary, Ryujinx, shadPS4 and xemu are listed on the **Games** page under **Emulators**, so they get HDR settings of their own.
+
+### Changed
+- The settings window reads the displays' peak brightness only when the displays change, instead of every second.
+- The log says how long Windows took to report a game coming to the front, beside how long Huedra took to ask for the switch.
+- HDR mod downloads must end where Huedra expects them: on GitHub, a GitHub Pages site, reshade.me, or the RenoDX project's site. A download that a redirect sends anywhere else is refused before anything is unpacked.
+- HDR turns on sooner the first time a game runs: Huedra now asks for the switch before it writes the game's Auto HDR and RTX HDR values, which took about 170 ms with an NVIDIA driver.
+
 ## 1.3.1 — 2026-11-18
 
 ### Changed

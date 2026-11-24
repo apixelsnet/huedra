@@ -1,7 +1,10 @@
 //! Display identity and HDR state, shared by the command line, the engine and
 //! the settings window. The Windows side fills these in.
 
+use std::collections::BTreeMap;
 use std::fmt;
+
+use serde::{Deserialize, Serialize};
 
 /// Stable identity of a monitor: the device interface path Windows reports for
 /// it. It survives restarts and changes of display order.
@@ -158,6 +161,104 @@ impl Display {
     }
 }
 
+/// The peak brightness each display reported while in HDR. Windows reports
+/// another, often higher, peak for a display in SDR; games read the one in
+/// HDR. Kept in `peaks.toml` by the settings window.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct HdrPeaks {
+    /// Nits by display id.
+    #[serde(default)]
+    peaks: BTreeMap<String, f32>,
+}
+
+impl HdrPeaks {
+    /// Reads the file's text; damaged text gives an empty record.
+    pub fn parse(text: &str) -> Self {
+        toml::from_str(text).unwrap_or_default()
+    }
+
+    /// The record as TOML.
+    ///
+    /// # Errors
+    /// When it can't be written as TOML (never for a valid record).
+    pub fn to_toml(&self) -> Result<String, toml::ser::Error> {
+        toml::to_string(self)
+    }
+
+    /// Records the peaks of the displays now in HDR; whether anything
+    /// changed.
+    pub fn note(&mut self, displays: &[Display]) -> bool {
+        let mut changed = false;
+        for d in displays.iter().filter(|d| d.state == HdrState::On) {
+            if let Some(peak) = d.peak {
+                let old = self.peaks.insert(d.id.as_str().to_owned(), peak.get());
+                changed |= old != Some(peak.get());
+            }
+        }
+        changed
+    }
+
+    /// The peak a game sees on the display: the current one while it is in
+    /// HDR, else the one recorded in HDR, else the current one.
+    pub fn game_peak(&self, display: &Display) -> Option<Nits> {
+        if display.state == HdrState::On {
+            return display.peak;
+        }
+        self.peaks
+            .get(display.id.as_str())
+            .and_then(|&nits| Nits::new(nits))
+            .or(display.peak)
+    }
+}
+
+/// What to set a game's peak brightness to, from `peak_of` each HDR display
+/// (see [`HdrPeaks::game_peak`]): the displays `controlled` picks, or every
+/// HDR display when it picks none. `None` when no display reports a peak.
+///
+/// Most games that look washed out or clipped in HDR have a peak brightness
+/// that doesn't match the display; this is the number for their setting.
+pub fn peak_hint(
+    displays: &[Display],
+    peak_of: impl Fn(&Display) -> Option<Nits>,
+    controlled: impl Fn(&Display) -> bool,
+) -> Option<String> {
+    let capable = || displays.iter().filter(|d| d.support.is_capable());
+    let picked: Vec<&Display> = if capable().any(&controlled) {
+        capable().filter(|d| controlled(d)).collect()
+    } else {
+        capable().collect()
+    };
+    let peaks: Vec<(&Display, u32)> = picked
+        .into_iter()
+        .filter_map(|d| peak_of(d).map(|p| (d, rounded(p))))
+        .collect();
+    let (_, first) = *peaks.first()?;
+    if peaks.iter().all(|(_, p)| *p == first) {
+        return Some(format!(
+            "Set the game's peak brightness to {first} nits, the most your display shows."
+        ));
+    }
+    let each: Vec<String> = peaks
+        .iter()
+        .map(|(d, p)| format!("{p} nits on display {}", d.number))
+        .collect();
+    Some(format!(
+        "Set the game's peak brightness to the most the display it runs on shows: {}.",
+        each.join(", ")
+    ))
+}
+
+/// A peak in whole nits, as games take it.
+fn rounded(peak: Nits) -> u32 {
+    #[expect(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "peaks are positive, finite and far below u32::MAX; `as` saturates anyway"
+    )]
+    let nits = peak.get().round() as u32;
+    nits
+}
+
 /// Which displays a command applies to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DisplaySelector {
@@ -297,6 +398,102 @@ mod tests {
             peak: None,
             sdr_brightness: None,
         }
+    }
+
+    fn with_peak(number: u32, nits: f32) -> Display {
+        Display {
+            peak: Nits::new(nits),
+            ..display(number, number == 1, HdrSupport::Supported)
+        }
+    }
+
+    #[test]
+    fn peak_hint_names_one_number_when_displays_agree() {
+        let displays = [with_peak(1, 1014.6), with_peak(2, 1015.0)];
+        assert_eq!(
+            peak_hint(&displays, |d| d.peak, |_| true).as_deref(),
+            Some("Set the game's peak brightness to 1015 nits, the most your display shows."),
+            "rounded, one number"
+        );
+    }
+
+    #[test]
+    fn peak_hint_lists_each_display_when_they_differ() {
+        let displays = [with_peak(1, 1000.0), with_peak(2, 400.0)];
+        assert_eq!(
+            peak_hint(&displays, |d| d.peak, |_| true).as_deref(),
+            Some(
+                "Set the game's peak brightness to the most the display it runs on shows: \
+                 1000 nits on display 1, 400 nits on display 2."
+            ),
+            "one per display"
+        );
+    }
+
+    #[test]
+    fn peak_hint_prefers_controlled_displays() {
+        let displays = [with_peak(1, 1000.0), with_peak(2, 400.0)];
+        let hint = peak_hint(&displays, |d| d.peak, |d| d.number == 2);
+        assert!(
+            hint.is_some_and(|h| h.contains("400 nits,")),
+            "only display 2"
+        );
+        let none_controlled = peak_hint(&displays, |d| d.peak, |_| false);
+        assert!(
+            none_controlled.is_some_and(|h| h.contains("display 1")),
+            "every HDR display when none is controlled"
+        );
+    }
+
+    #[test]
+    fn peak_hint_needs_a_reported_peak() {
+        let sdr = Display {
+            peak: Nits::new(300.0),
+            ..display(1, true, HdrSupport::Unsupported)
+        };
+        assert_eq!(
+            peak_hint(&[sdr], |d| d.peak, |_| true),
+            None,
+            "SDR display ignored"
+        );
+        assert_eq!(
+            peak_hint(
+                &[display(1, true, HdrSupport::Supported)],
+                |d| d.peak,
+                |_| true
+            ),
+            None,
+            "no peak reported"
+        );
+    }
+
+    #[test]
+    fn hdr_peaks_prefer_the_peak_reported_in_hdr() {
+        let mut d = with_peak(1, 465.0);
+        let mut peaks = HdrPeaks::default();
+        assert!(
+            !peaks.note(std::slice::from_ref(&d)),
+            "SDR peaks aren't kept"
+        );
+        assert_eq!(
+            peaks.game_peak(&d),
+            Nits::new(465.0),
+            "nothing recorded yet"
+        );
+        d.state = HdrState::On;
+        d.peak = Nits::new(420.0);
+        assert!(peaks.note(std::slice::from_ref(&d)), "recorded in HDR");
+        assert!(!peaks.note(std::slice::from_ref(&d)), "unchanged");
+        d.state = HdrState::Off;
+        d.peak = Nits::new(465.0);
+        assert_eq!(peaks.game_peak(&d), Nits::new(420.0), "the HDR peak in SDR");
+        let back = HdrPeaks::parse(&peaks.to_toml().expect("toml"));
+        assert_eq!(back, peaks, "round trip");
+        assert_eq!(
+            HdrPeaks::parse("not toml ["),
+            HdrPeaks::default(),
+            "damaged"
+        );
     }
 
     #[test]

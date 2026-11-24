@@ -371,6 +371,37 @@ pub fn trusted(url: &str) -> Option<(&str, &str)> {
     (host_ok && allowed && !path.contains(char::is_whitespace)).then_some((host, path))
 }
 
+/// Hosts a mod download may end on after redirects besides the ones
+/// [`trusted`] starts from: GitHub's file servers, where `github.com`
+/// release links lead, and the RenoDX project's own site, where its GitHub
+/// Pages site sends its add-ons.
+const REDIRECT_HOSTS: [&str; 3] = [
+    "release-assets.githubusercontent.com",
+    "objects.githubusercontent.com",
+    "renodx.com",
+];
+
+/// Whether a download that started on a [`trusted`] address may be used
+/// from where redirects took it: `https://` on a host [`trusted`] accepts or
+/// one of the hosts redirects lead to (GitHub's file servers, `renodx.com`).
+/// Anything else (another site, plain `http`, a user name or port in the
+/// address, or no address at all) is refused.
+pub fn trusted_final(url: &str) -> bool {
+    let Some(rest) = url.strip_prefix("https://") else {
+        return false;
+    };
+    let host = rest.split(['/', '?', '#']).next().unwrap_or_default();
+    let host_ok = !host.is_empty()
+        && host
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-');
+    host_ok
+        && (host == "reshade.me"
+            || host == "github.com"
+            || host.ends_with(".github.io")
+            || REDIRECT_HOSTS.contains(&host))
+}
+
 /// The file name at the end of an address, if it is a plain file name.
 pub fn file_name(url: &str) -> Option<String> {
     let name = url.rsplit('/').next()?;
@@ -611,6 +642,173 @@ pub struct Manifest {
     /// Files of [`RUNTIME_FILES`] that were not there before.
     #[serde(default)]
     pub absent: Vec<String>,
+    /// The download's `ETag` at install or the last check.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub etag: String,
+    /// The download's `Last-Modified` at install or the last check.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub modified: String,
+    /// The download's size in bytes at install or the last check; 0 when
+    /// unknown.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub length: u64,
+    /// SHA-256 of the download (the add-on, or the zip when it is at most
+    /// [`COMPARE_MAX_BYTES`]), in hex; empty when unknown.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub download_sha256: String,
+    /// When it was last checked for a newer version, in seconds since 1970.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub checked: u64,
+    /// A newer version of the mod is available.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub newer: bool,
+}
+
+#[expect(
+    clippy::trivially_copy_pass_by_ref,
+    reason = "serde's skip_serializing_if passes a reference"
+)]
+fn is_zero(value: &u64) -> bool {
+    *value == 0
+}
+
+// ---- Updates ---------------------------------------------------------------
+
+/// How often an installed mod is checked for a newer version.
+pub const UPDATE_CHECK_SECS: u64 = 24 * 60 * 60;
+/// Downloads up to this size are fetched again and compared when the server's
+/// description changes; larger ones (Luma's zips) count as newer on the
+/// description alone.
+pub const COMPARE_MAX_BYTES: usize = 32 << 20;
+
+/// What a server says about a download, as recorded or as just read.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Validators {
+    /// `ETag`; empty when not sent.
+    pub etag: String,
+    /// `Last-Modified`; empty when not sent.
+    pub modified: String,
+    /// Size in bytes, when known.
+    pub length: Option<u64>,
+}
+
+impl Validators {
+    /// Whether the two describe the same file: `None` when there is nothing
+    /// to compare.
+    pub fn same_as(&self, other: &Self) -> Option<bool> {
+        if let (Some(a), Some(b)) = (self.length, other.length)
+            && a != b
+        {
+            return Some(false);
+        }
+        if !self.etag.is_empty() && !other.etag.is_empty() {
+            // A weak tag (`W/"..."`) names the same file as its strong form.
+            let strong = |tag: &str| tag.trim_start_matches("W/").to_owned();
+            return Some(strong(&self.etag) == strong(&other.etag));
+        }
+        if !self.modified.is_empty() && !other.modified.is_empty() {
+            return Some(self.modified == other.modified);
+        }
+        None
+    }
+}
+
+/// What a check of an installed mod's download found.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Freshness {
+    /// The server describes the file installed.
+    Same,
+    /// The server describes another file, too large to fetch for a
+    /// comparison: a newer version.
+    Newer,
+    /// The description changed or can't be compared, and the file is small:
+    /// fetch it and compare its SHA-256 with [`Manifest::matches_install`].
+    Compare,
+    /// Nothing to go on: record what the server says for the next check.
+    Unknown,
+}
+
+impl Manifest {
+    /// What was recorded about the download.
+    pub fn validators(&self) -> Validators {
+        Validators {
+            etag: self.etag.clone(),
+            modified: self.modified.clone(),
+            length: (self.length > 0).then_some(self.length),
+        }
+    }
+
+    /// Records what the server says about the download.
+    pub fn record(&mut self, served: &Validators) {
+        self.etag.clone_from(&served.etag);
+        self.modified.clone_from(&served.modified);
+        self.length = served.length.unwrap_or(0);
+    }
+
+    /// Whether `sha256` (a download's, in hex) is the version installed:
+    /// `None` when Huedra can't tell (a Luma install recorded before
+    /// downloads were hashed).
+    pub fn matches_install(&self, sha256: &str) -> Option<bool> {
+        if !self.download_sha256.is_empty() {
+            return Some(self.download_sha256.eq_ignore_ascii_case(sha256));
+        }
+        // A RenoDX add-on is copied as downloaded.
+        (self.source == Source::RenoDx).then(|| {
+            self.files
+                .iter()
+                .any(|f| f.sha256.eq_ignore_ascii_case(sha256))
+        })
+    }
+
+    /// Whether a check is due at `now` (seconds since 1970).
+    pub fn check_due(&self, now: u64) -> bool {
+        self.complete && !self.newer && now.saturating_sub(self.checked) >= UPDATE_CHECK_SECS
+    }
+}
+
+/// Compares what was recorded about a download with what the server says
+/// now.
+pub fn freshness(recorded: &Validators, now: &Validators) -> Freshness {
+    let small = now
+        .length
+        .is_some_and(|len| usize::try_from(len).is_ok_and(|len| len <= COMPARE_MAX_BYTES));
+    match recorded.same_as(now) {
+        Some(true) => Freshness::Same,
+        _ if small => Freshness::Compare,
+        Some(false) => Freshness::Newer,
+        None => Freshness::Unknown,
+    }
+}
+
+/// Whether the list now offers another download than the one installed: a
+/// versioned link that changed. `entry` is the list's mod for the game.
+pub fn link_changed(manifest: &Manifest, entry: &Mod) -> bool {
+    entry.installable()
+        && entry.source == manifest.source
+        && entry.url64.as_deref() != Some(manifest.url.as_str())
+        && entry.url32.as_deref() != Some(manifest.url.as_str())
+}
+
+/// The files an install wrote that are no longer as written (a game update,
+/// another mod), read before an update takes the old version out.
+///
+/// # Errors
+/// I/O errors other than a missing file.
+pub fn changed_files(
+    manifest: &Manifest,
+    hash: &dyn Fn(&[u8]) -> String,
+) -> io::Result<Vec<String>> {
+    let folder = PathBuf::from(&manifest.folder);
+    let mut changed = Vec::new();
+    for placed in &manifest.files {
+        match fs::read(folder.join(&placed.path)) {
+            Ok(data) if hash(&data) == placed.sha256 => {}
+            Ok(_) => changed.push(placed.path.clone()),
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error),
+        }
+    }
+    Ok(changed)
 }
 
 /// A game id as a file name.
@@ -1277,6 +1475,12 @@ mod tests {
             files: Vec::new(),
             dirs: Vec::new(),
             absent: Vec::new(),
+            etag: String::new(),
+            modified: String::new(),
+            length: 0,
+            download_sha256: String::new(),
+            checked: 0,
+            newer: false,
         }
     }
 
@@ -1571,6 +1775,200 @@ mod tests {
         remove_by_hand(&plan, &root.join("kept")).expect("remove");
         assert!(!game.join("reshade-shaders").exists(), "link gone");
         assert!(shared.join("mine.fx").is_file(), "its target untouched");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn downloads_may_end_only_on_known_hosts() {
+        for ok in [
+            "https://release-assets.githubusercontent.com/github-production-release-asset/1/2?sig=x",
+            "https://objects.githubusercontent.com/a/b",
+            "https://renodx.com/renodx-game.addon64",
+            "https://oopydoopy.github.io/renodx/renodx-absolum.addon64",
+            "https://github.com/x/y/releases/download/t/f.zip",
+            "https://reshade.me/downloads/ReShade_Setup_6.8.0_Addon.exe",
+        ] {
+            assert!(trusted_final(ok), "{ok}");
+        }
+        for bad in [
+            "",
+            "http://renodx.com/a.addon64",
+            "https://evil.example/a.addon64",
+            "https://renodx.com.evil.example/a",
+            "https://user@renodx.com/a",
+            "https://renodx.com:8443/a",
+            "https://githubusercontent.com/a",
+            "https://raw.githubusercontent.com/a",
+        ] {
+            assert!(!trusted_final(bad), "{bad}");
+        }
+    }
+
+    fn served(etag: &str, modified: &str, length: Option<u64>) -> Validators {
+        Validators {
+            etag: etag.into(),
+            modified: modified.into(),
+            length,
+        }
+    }
+
+    #[test]
+    fn validators_compare_tag_then_date() {
+        let a = served("\"1\"", "Mon", Some(10));
+        assert_eq!(
+            a.same_as(&served("W/\"1\"", "Tue", Some(10))),
+            Some(true),
+            "weak tag"
+        );
+        assert_eq!(
+            a.same_as(&served("\"2\"", "Mon", Some(10))),
+            Some(false),
+            "other tag"
+        );
+        assert_eq!(
+            a.same_as(&served("\"1\"", "Mon", Some(11))),
+            Some(false),
+            "other size"
+        );
+        assert_eq!(
+            a.same_as(&served("", "Mon", None)),
+            Some(true),
+            "date when no tag"
+        );
+        assert_eq!(
+            a.same_as(&served("", "", Some(10))),
+            None,
+            "nothing to compare"
+        );
+    }
+
+    #[test]
+    fn freshness_fetches_small_files_and_trusts_large_ones() {
+        let small = Some(1_000);
+        let large = Some(200 << 20);
+        let was = served("\"1\"", "", small);
+        assert_eq!(
+            freshness(&was, &served("\"1\"", "", small)),
+            Freshness::Same,
+            "same"
+        );
+        assert_eq!(
+            freshness(&was, &served("\"2\"", "", small)),
+            Freshness::Compare,
+            "small: compare"
+        );
+        let big = served("\"1\"", "", large);
+        assert_eq!(
+            freshness(&big, &served("\"2\"", "", large)),
+            Freshness::Newer,
+            "large: newer"
+        );
+        assert_eq!(
+            freshness(&Validators::default(), &served("\"2\"", "", large)),
+            Freshness::Unknown,
+            "nothing recorded, too large to fetch"
+        );
+        assert_eq!(
+            freshness(&Validators::default(), &served("\"2\"", "", small)),
+            Freshness::Compare,
+            "nothing recorded, small"
+        );
+    }
+
+    #[test]
+    fn matches_install_by_download_or_add_on() {
+        let mut m = manifest("steam:1", Path::new("/g"), Source::RenoDx);
+        m.files.push(Placed {
+            path: "renodx-game.addon64".into(),
+            sha256: "AB".into(),
+            replaced: false,
+        });
+        assert_eq!(m.matches_install("ab"), Some(true), "the add-on as copied");
+        assert_eq!(m.matches_install("cd"), Some(false), "another add-on");
+        m.download_sha256 = "cd".into();
+        assert_eq!(
+            m.matches_install("cd"),
+            Some(true),
+            "the recorded download wins"
+        );
+        let luma = manifest("steam:2", Path::new("/g"), Source::Luma);
+        assert_eq!(
+            luma.matches_install("ab"),
+            None,
+            "an old Luma record can't tell"
+        );
+    }
+
+    #[test]
+    fn checks_are_due_once_a_day_for_complete_installs() {
+        let mut m = manifest("steam:1", Path::new("/g"), Source::RenoDx);
+        assert!(!m.check_due(UPDATE_CHECK_SECS * 2), "incomplete");
+        m.complete = true;
+        m.checked = 100;
+        assert!(!m.check_due(100 + UPDATE_CHECK_SECS - 1), "within a day");
+        assert!(m.check_due(100 + UPDATE_CHECK_SECS), "a day later");
+        m.newer = true;
+        assert!(!m.check_due(100 + UPDATE_CHECK_SECS * 3), "already known");
+    }
+
+    #[test]
+    fn link_changed_when_the_list_offers_another_file() {
+        let m = manifest("steam:1", Path::new("/g"), Source::RenoDx);
+        let mut entry = Mod {
+            name: "Game".into(),
+            source: Source::RenoDx,
+            author: "A".into(),
+            status: Status::Working,
+            note: String::new(),
+            url64: Some("https://github.com/x".into()),
+            url32: None,
+            page: None,
+        };
+        assert!(!link_changed(&m, &entry), "same link");
+        entry.url64 = Some("https://github.com/x-v2".into());
+        assert!(link_changed(&m, &entry), "new link");
+        entry.url64 = None;
+        assert!(!link_changed(&m, &entry), "only a page now");
+    }
+
+    #[test]
+    fn old_records_load_and_new_fields_round_trip() {
+        let old = "game = \"steam:1\"\nname = \"Game\"\nsource = \"renodx\"\nurl = \"https://github.com/x\"\nfolder = \"C:/g\"\n";
+        let mut m: Manifest = toml::from_str(old).expect("old record");
+        assert_eq!(m.checked, 0, "defaults");
+        assert!(!m.newer, "defaults");
+        m.record(&served("\"1\"", "Mon", Some(5)));
+        m.checked = 7;
+        m.newer = true;
+        let text = toml::to_string(&m).expect("save");
+        let back: Manifest = toml::from_str(&text).expect("load");
+        assert_eq!(back, m, "round trip");
+        assert_eq!(
+            back.validators(),
+            served("\"1\"", "Mon", Some(5)),
+            "validators"
+        );
+    }
+
+    #[test]
+    fn changed_files_lists_what_no_longer_matches() {
+        let root = game_folder("changed");
+        let game = root.join("game");
+        fs::write(game.join("a.dll"), "a").expect("write");
+        fs::write(game.join("b.addon64"), "edited").expect("write");
+        let mut m = manifest("steam:1", &game, Source::RenoDx);
+        for (path, sha256) in [("a.dll", "a"), ("b.addon64", "b"), ("gone.txt", "g")] {
+            m.files.push(Placed {
+                path: path.into(),
+                sha256: sha256.into(),
+                replaced: false,
+            });
+        }
+        assert_eq!(
+            changed_files(&m, &text_hash).expect("read"),
+            ["b.addon64"],
+            "edited only; a missing file is not a change"
+        );
         let _ = fs::remove_dir_all(&root);
     }
 }

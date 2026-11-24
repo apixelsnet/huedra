@@ -39,7 +39,13 @@ const MIN_TIMER_MS: u32 = 10;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Event {
     /// A window of this process id came to the front.
-    Foreground(u32),
+    Foreground {
+        /// The process.
+        pid: u32,
+        /// Milliseconds between Windows noting the change and Huedra
+        /// receiving it.
+        lag_ms: u32,
+    },
     /// A watched process exited.
     ProcessExited(u32),
     /// A top-level window of a watched video program changed its title or

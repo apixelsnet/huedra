@@ -157,6 +157,27 @@ fn listed(
     Some(names.iter().any(|n| n.eq_ignore_ascii_case(profile)))
 }
 
+/// The display's default profile for `mode`, or `None` when it has none.
+///
+/// # Errors
+/// [`ColorError`] when the display is gone or Windows refuses.
+pub fn default_profile(display: &DisplayId, mode: ColorMode) -> Result<Option<String>, ColorError> {
+    let (adapter, source, scope) = locate(display)?;
+    // SAFETY: plain query; Windows allocates the name, freed below.
+    match unsafe { ColorProfileGetDisplayDefault(scope, adapter, source, CPT_ICC, subtype(mode)) } {
+        Ok(name) => {
+            // SAFETY: on success the name is a terminated string.
+            let text = unsafe { name.to_string() }.ok();
+            // SAFETY: Windows allocated it with LocalAlloc; not used after.
+            unsafe { LocalFree(Some(HLOCAL(name.0.cast()))) };
+            Ok(text)
+        }
+        // The list is empty: no default.
+        Err(error) if error.code() == HRESULT::from_win32(ERROR_FILE_NOT_FOUND.0) => Ok(None),
+        Err(error) => Err(failed(&error)),
+    }
+}
+
 fn failed(error: &windows::core::Error) -> ColorError {
     ColorError::Failed(format!("Windows refused (error {:#010x})", error.code().0))
 }
@@ -167,22 +188,7 @@ impl ColorSystem for Displays {
         display: &DisplayId,
         mode: ColorMode,
     ) -> Result<Option<String>, ColorError> {
-        let (adapter, source, scope) = locate(display)?;
-        // SAFETY: plain query; Windows allocates the name, freed below.
-        match unsafe {
-            ColorProfileGetDisplayDefault(scope, adapter, source, CPT_ICC, subtype(mode))
-        } {
-            Ok(name) => {
-                // SAFETY: on success the name is a terminated string.
-                let text = unsafe { name.to_string() }.ok();
-                // SAFETY: Windows allocated it with LocalAlloc; not used after.
-                unsafe { LocalFree(Some(HLOCAL(name.0.cast()))) };
-                Ok(text)
-            }
-            // The list is empty: no default.
-            Err(error) if error.code() == HRESULT::from_win32(ERROR_FILE_NOT_FOUND.0) => Ok(None),
-            Err(error) => Err(failed(&error)),
-        }
+        default_profile(display, mode)
     }
 
     fn use_profile(
