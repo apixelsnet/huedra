@@ -48,6 +48,8 @@ pub fn scan() -> Vec<Game> {
     games.extend(itch_games());
     games.extend(heroic_games());
     games.retain(|g| Path::new(&g.install_dir).is_dir());
+    let emulators = huedra_core::library::emulators::dedupe(emulator_games(), &games);
+    games.extend(emulators);
     let found = game_bar_games(&games);
     games.extend(found);
     games
@@ -186,6 +188,71 @@ fn uninstall_games() -> Vec<Game> {
         }
     }
     games
+}
+
+/// The emulators Huedra knows, from their uninstall entries, Scoop, and the
+/// folders their installers use; each only where its program is.
+fn emulator_games() -> Vec<Game> {
+    use huedra_core::library::emulators::{self, Emulator, KNOWN};
+    let program_in = |emulator: &Emulator, folder: &Path| {
+        emulator
+            .programs
+            .iter()
+            .map(|p| folder.join(p))
+            .find(|p| p.is_file())
+    };
+    let mut found: Vec<(&Emulator, PathBuf, PathBuf)> = Vec::new();
+    for (hive, path) in UNINSTALL_KEYS {
+        for entry in registry::subkeys(hive, path, reg::UNINSTALL_VALUES) {
+            if let Some((emulator, folder)) = emulators::from_uninstall(&entry) {
+                let folder = PathBuf::from(folder);
+                if let Some(exe) = program_in(emulator, &folder) {
+                    found.push((emulator, folder, exe));
+                }
+            }
+        }
+    }
+    // Scoop keeps each version in its own folder beside `current`; the app
+    // folder holds them all, so the game is found whichever runs.
+    let scoop = std::env::var_os("SCOOP")
+        .map(PathBuf::from)
+        .or_else(|| known_folder("USERPROFILE").map(|home| home.join("scoop")));
+    let program_files = known_folder("ProgramFiles");
+    // `C:` alone names the drive's current folder; `C:\` its root.
+    let system_drive = known_folder("SystemDrive").map(|drive| {
+        let mut root = drive.into_os_string();
+        root.push(r"\");
+        PathBuf::from(root)
+    });
+    for emulator in KNOWN {
+        if let Some(app) = scoop.as_ref().map(|s| s.join("apps").join(emulator.key))
+            && let Some(exe) = program_in(emulator, &app.join("current"))
+        {
+            found.push((emulator, app, exe));
+        }
+        for folder in emulator.folders {
+            let base = if folder.starts_with('\\') {
+                system_drive.as_ref().map(|d| d.join(&folder[1..]))
+            } else {
+                program_files.as_ref().map(|p| p.join(folder))
+            };
+            if let Some(dir) = base
+                && let Some(exe) = program_in(emulator, &dir)
+            {
+                found.push((emulator, dir, exe));
+            }
+        }
+    }
+    found
+        .into_iter()
+        .map(|(emulator, folder, exe)| {
+            emulators::game(
+                emulator,
+                &folder.to_string_lossy(),
+                Some(exe.to_string_lossy().into_owned()),
+            )
+        })
+        .collect()
 }
 
 fn hoyoplay_games() -> Vec<Game> {

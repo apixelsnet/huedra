@@ -22,7 +22,8 @@ use windows::Win32::UI::Shell::SHDefExtractIconW;
 use windows::Win32::UI::WindowsAndMessaging::{DestroyIcon, GetIconInfo, HICON, ICONINFO};
 
 use windows::Win32::UI::Controls::Dialogs::{
-    GetOpenFileNameW, OFN_FILEMUSTEXIST, OFN_NOCHANGEDIR, OFN_PATHMUSTEXIST, OPENFILENAMEW,
+    GetOpenFileNameW, GetSaveFileNameW, OFN_FILEMUSTEXIST, OFN_NOCHANGEDIR, OFN_OVERWRITEPROMPT,
+    OFN_PATHMUSTEXIST, OPENFILENAMEW,
 };
 use windows::Win32::UI::Shell::ShellExecuteW;
 use windows::Win32::UI::WindowsAndMessaging::{
@@ -71,6 +72,44 @@ pub fn pick_program(title: &str) -> Option<String> {
     };
     // SAFETY: every buffer referenced by `dialog` outlives the modal call.
     if !unsafe { GetOpenFileNameW(&mut dialog) }.as_bool() {
+        return None;
+    }
+    let len = file.iter().position(|&c| c == 0).unwrap_or(file.len());
+    Some(String::from_utf16_lossy(&file[..len]))
+}
+
+/// Asks for a settings file (`.toml`): one to save to (`save`, offering
+/// `name`, asking before replacing a file), or an existing one to open.
+pub fn pick_settings_file(title: &str, name: &str, save: bool) -> Option<String> {
+    let mut file: Vec<u16> = name.encode_utf16().take(4000).collect();
+    file.resize(4096, 0);
+    let filter: Vec<u16> = "Huedra settings (*.toml)\0*.toml\0"
+        .encode_utf16()
+        .chain([0])
+        .collect();
+    let title = HSTRING::from(title);
+    let mut dialog = OPENFILENAMEW {
+        lStructSize: u32::try_from(size_of::<OPENFILENAMEW>()).unwrap_or(0),
+        lpstrFilter: PCWSTR(filter.as_ptr()),
+        lpstrFile: PWSTR(file.as_mut_ptr()),
+        nMaxFile: u32::try_from(file.len()).unwrap_or(0),
+        lpstrTitle: PCWSTR(title.as_ptr()),
+        lpstrDefExt: w!("toml"),
+        Flags: if save {
+            OFN_OVERWRITEPROMPT | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR
+        } else {
+            OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR
+        },
+        ..Default::default()
+    };
+    let chosen = if save {
+        // SAFETY: every buffer referenced by `dialog` outlives the modal call.
+        unsafe { GetSaveFileNameW(&mut dialog) }
+    } else {
+        // SAFETY: as above.
+        unsafe { GetOpenFileNameW(&mut dialog) }
+    };
+    if !chosen.as_bool() {
         return None;
     }
     let len = file.iter().position(|&c| c == 0).unwrap_or(file.len());

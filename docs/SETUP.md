@@ -204,6 +204,7 @@ For games with no HDR or poor HDR, Huedra can install a RenoDX or Luma HDR mod:
 1. On the **Games** page, choose the **HDR mods** filter to see which of your games have one.
 2. Close the game, select it, and choose **Install** in its **HDR mod** section. Read the notice about the risks the first time, and check the list of changes before confirming.
 3. Start the game. To undo it, close the game and choose **Remove**.
+4. When the section later shows **Update available**, close the game and choose **Update** to get the mod's newest version.
 
 Huedra won't install mods in games with anti-cheat. The [user guide](USER-GUIDE.md#hdr-mods) has the details and the risks.
 

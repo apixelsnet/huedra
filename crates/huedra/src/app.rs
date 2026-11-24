@@ -20,7 +20,7 @@ use huedra_core::graphics;
 use huedra_core::icon::TrayIcon;
 use huedra_core::ipc::{DisplayReport, HistoryEntry, HistoryKind, Request, Response, StatusReport};
 use huedra_core::launch;
-use huedra_core::library::{GameId, Library};
+use huedra_core::library::{Game, GameId, Library};
 use huedra_core::logfile::{self, LogFile};
 use huedra_core::mode::DisplayMode;
 use huedra_core::shortcut::Binding;
@@ -185,6 +185,9 @@ struct App {
     tray: tray::Tray,
     hotkeys: Option<Hotkeys>,
     _foreground: Option<foreground::ForegroundHook>,
+    /// While a foreground change is handled: how long Windows took to
+    /// deliver it, for the switch's log line.
+    foreground_lag: Option<u32>,
     pipe: PipeServer,
     waker: Waker,
     /// Changes HDR on its own thread, so the menu, the shortcuts and the
@@ -250,6 +253,7 @@ impl App {
             tray: tray::Tray::new(host).context("could not create the tray icon")?,
             hotkeys: None,
             _foreground: foreground::ForegroundHook::install(),
+            foreground_lag: None,
             tracker: Tracker::default(),
             watches: HashMap::new(),
             game_monitors: HashMap::new(),
@@ -335,7 +339,11 @@ impl App {
     fn handle(&mut self, host: &mut EventLoop, event: Event) -> Flow {
         let now = Instant::now();
         match event {
-            Event::Foreground(pid) => self.on_foreground(host, now, pid),
+            Event::Foreground { pid, lag_ms } => {
+                self.foreground_lag = Some(lag_ms);
+                self.on_foreground(host, now, pid);
+                self.foreground_lag = None;
+            }
             Event::ProcessExited(pid) => self.on_exit(host, now, Pid(pid)),
             Event::WindowChanged(pid) => {
                 let pid = Pid(pid);
@@ -461,10 +469,20 @@ impl App {
         let Some(game) = self.library.find(&path).cloned() else {
             return;
         };
+        self.start_game(host, now, pid, &game);
+        // Recorded after the switch is requested: a program seen for the
+        // first time gets its Auto HDR and RTX HDR values written here,
+        // which takes a while on NVIDIA graphics, and they apply only from
+        // the game's next start anyway.
         self.note_program(&game.id, &path);
+    }
+
+    /// Follows a game that came to the front, turning HDR on when its
+    /// setting says so.
+    fn start_game(&mut self, host: &EventLoop, now: Instant, pid: Pid, game: &Game) {
         // A game is followed when it changes HDR, uses its own color
         // profiles, or both.
-        let trigger = self.config.trigger_for(&game);
+        let trigger = self.config.trigger_for(game);
         let colors = self.config.color_profiles(&game.id).is_some()
             || self
                 .config
@@ -1938,8 +1956,14 @@ impl App {
                 }
             }
             self.save_owned(&planned);
+            // Detection latency: Windows' delivery of a foreground change,
+            // then Huedra's handling of it.
+            let delivery = self
+                .foreground_lag
+                .map(|lag| format!(" ({lag} ms after Windows noted it)"))
+                .unwrap_or_default();
             self.log_line(&format!(
-                "Switch requested {} ms after the event.",
+                "Switch requested {} ms after the event{delivery}.",
                 now.elapsed().as_millis()
             ));
             let changes = outcome

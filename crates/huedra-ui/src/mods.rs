@@ -1,7 +1,8 @@
 //! HDR mods in the settings window: the RenoDX and Luma lists, kept for a
 //! day, and installing or removing a mod (also one installed by hand) on a
-//! background thread. What is checked, and the record that makes every
-//! install reversible, are in `huedra_core::mods`.
+//! background thread, and once a day whether an installed mod has a newer
+//! version. What is checked, and the record that makes every install
+//! reversible, are in `huedra_core::mods`.
 //! Feature doc: `docs/features/16-hdr-mods.md`.
 
 use std::ffi::OsStr;
@@ -13,7 +14,7 @@ use std::thread;
 use std::time::{Duration, SystemTime};
 
 use huedra_core::library::GameId;
-use huedra_core::mods::{self, Arch, Manifest, Mod, Source};
+use huedra_core::mods::{self, Arch, Freshness, Manifest, Mod, Source, Validators};
 use huedra_win::{hash, http, process};
 
 const RENODX_FILE: &str = "renodx.md";
@@ -106,6 +107,8 @@ pub struct Plan {
     pub proxy: Option<&'static str>,
     /// The add-on's file name (RenoDX only).
     pub addon: Option<String>,
+    /// The installed version this install replaces (an update).
+    pub replaces: Option<Manifest>,
 }
 
 impl Plan {
@@ -113,6 +116,11 @@ impl Plan {
     pub fn changes(&self) -> Vec<String> {
         let host = mods::trusted(&self.url).map_or("", |(host, _)| host);
         let mut lines = Vec::new();
+        if self.replaces.is_some() {
+            lines.push(
+                "Take out the installed version and put back the game's own files".to_owned(),
+            );
+        }
         match (self.entry.source, self.proxy, &self.addon) {
             (Source::RenoDx, Some(proxy), Some(addon)) => {
                 lines.push(format!(
@@ -191,6 +199,7 @@ pub fn plan(game: &GameId, entry: &Mod, program: &Path) -> Result<Plan, String> 
         folder,
         proxy,
         addon,
+        replaces: None,
     })
 }
 
@@ -206,12 +215,27 @@ fn running_in(folder: &Path) -> bool {
         .any(|path| path.to_lowercase().starts_with(&prefix))
 }
 
-/// Downloads a file from a trusted site straight to disk.
-fn fetch_to(url: &str, file: &Path) -> Result<(), String> {
+fn validators(headers: http::Headers) -> Validators {
+    Validators {
+        etag: headers.etag,
+        modified: headers.modified,
+        length: headers.length,
+    }
+}
+
+/// Downloads a file from a trusted site straight to disk; returns what the
+/// server said about it.
+fn fetch_to(url: &str, file: &Path) -> Result<Validators, String> {
     let (host, path) = mods::trusted(url).ok_or("The address isn't on a trusted site.")?;
     match http::download(host, path, &user_agent(), mods::MAX_DOWNLOAD_BYTES, file) {
-        Ok(200) => Ok(()),
-        Ok(status) => Err(format!("The download from {host} failed (HTTP {status}).")),
+        // Refused before anything is unpacked or copied; the work folder
+        // with the file goes with the failed install.
+        Ok((_, headers)) if !mods::trusted_final(&headers.final_url) => Err(format!(
+            "The download from {host} was sent on to {}, which isn't a site Huedra downloads mods from.",
+            site_of(&headers.final_url)
+        )),
+        Ok((200, headers)) => Ok(validators(headers)),
+        Ok((status, _)) => Err(format!("The download from {host} failed (HTTP {status}).")),
         Err(http::HttpError::TooLarge(max)) => Err(format!(
             "The download from {host} is larger than Huedra accepts ({} MB).",
             max >> 20
@@ -225,6 +249,15 @@ fn fetch_to(url: &str, file: &Path) -> Result<(), String> {
     }
 }
 
+/// The host of an address, for messages.
+fn site_of(url: &str) -> &str {
+    let rest = url.split_once("://").map_or(url, |(_, rest)| rest);
+    match rest.split(['/', '?', '#']).next() {
+        Some(host) if !host.is_empty() => host,
+        _ => "an unknown address",
+    }
+}
+
 /// The newest ReShade setup with add-on support, by the versioned link on
 /// ReShade's home page (the short link redirects through plain http).
 fn reshade_setup_to(file: &Path) -> Result<(), String> {
@@ -232,7 +265,20 @@ fn reshade_setup_to(file: &Path) -> Result<(), String> {
         .ok()
         .filter(|page| page.status == 200)
         .and_then(|page| mods::reshade_setup_url(&String::from_utf8_lossy(&page.body)));
-    fetch_to(newest.as_deref().unwrap_or(mods::RESHADE_URL), file)
+    fetch_to(newest.as_deref().unwrap_or(mods::RESHADE_URL), file).map(drop)
+}
+
+/// The SHA-256 of a downloaded file when it is small enough to compare
+/// later; empty otherwise.
+fn download_hash(file: &Path) -> String {
+    let small = fs::metadata(file)
+        .is_ok_and(|m| usize::try_from(m.len()).is_ok_and(|len| len <= mods::COMPARE_MAX_BYTES));
+    if !small {
+        return String::new();
+    }
+    fs::read(file)
+        .map(|data| hash::sha256_hex(&data))
+        .unwrap_or_default()
 }
 
 fn unpack(tar: &Path, archive: &Path, into: &Path, only: Option<&str>) -> Result<(), String> {
@@ -263,7 +309,13 @@ fn run_install(
     if running_in(&plan.folder) {
         return Err("Close the game first, then install the mod.".into());
     }
-    let work = mods::work_folder(mods_dir, &plan.game);
+    // An update stages beside the work folder: taking out the old version
+    // deletes the work folder.
+    let work = if plan.replaces.is_some() {
+        update_folder(mods_dir, &plan.game)
+    } else {
+        mods::work_folder(mods_dir, &plan.game)
+    };
     let download = work.join("download");
     let staged = work.join("staged");
     for dir in [&download, &staged] {
@@ -275,6 +327,8 @@ fn run_install(
         .filter(|p| p.is_file())
         .ok_or("Windows' tar.exe, which unpacks the download, is missing.")?;
     let canceled = || cancel.load(Ordering::Relaxed);
+    let served: Validators;
+    let sha256: String;
     let files: Vec<(String, String)> = match (plan.entry.source, plan.proxy, &plan.addon) {
         (Source::RenoDx, Some(proxy), Some(addon)) => {
             progress("Downloading ReShade from reshade.me", 0.1);
@@ -296,7 +350,8 @@ fn run_install(
                 return Err(CANCELED.into());
             }
             progress(&format!("Downloading {addon}"), 0.55);
-            fetch_to(&plan.url, &staged.join(addon))?;
+            served = fetch_to(&plan.url, &staged.join(addon))?;
+            sha256 = download_hash(&staged.join(addon));
             vec![
                 (dll.to_owned(), proxy.to_owned()),
                 (addon.clone(), addon.clone()),
@@ -305,7 +360,8 @@ fn run_install(
         _ => {
             progress("Downloading the mod from GitHub", 0.15);
             let archive = download.join("mod.zip");
-            fetch_to(&plan.url, &archive)?;
+            served = fetch_to(&plan.url, &archive)?;
+            sha256 = download_hash(&archive);
             if canceled() {
                 return Err(CANCELED.into());
             }
@@ -322,7 +378,40 @@ fn run_install(
     if canceled() {
         return Err(CANCELED.into());
     }
+    // ReShade's settings files that appeared with the old version (the
+    // mod's settings): kept through an update and still taken out by a
+    // later Remove.
+    let mut inherited: Vec<String> = Vec::new();
+    if let Some(old) = &plan.replaces {
+        progress("Taking out the installed version", 0.7);
+        let changed = mods::changed_files(old, &hash::sha256_hex)
+            .map_err(|e| format!("Huedra couldn't read the installed version ({e})."))?;
+        if !changed.is_empty() {
+            return Err(format!(
+                "These files changed after the install (a game update or another mod): {}. Remove the mod, then install it again.",
+                changed.join(", ")
+            ));
+        }
+        let mut old = old.clone();
+        if Path::new(&old.folder) == plan.folder {
+            inherited = std::mem::take(&mut old.absent);
+        }
+        let kept = mods::remove(mods_dir, &old, &hash::sha256_hex).map_err(|e| {
+            format!(
+                "Taking out the installed version stopped ({e}). Close the game and use Remove."
+            )
+        })?;
+        if !kept.is_empty() {
+            return Err(
+                "Some files of the installed version changed while it was taken out. Use Remove."
+                    .into(),
+            );
+        }
+    }
     progress("Copying the files into the game folder", 0.8);
+    let now = SystemTime::now()
+        .duration_since(SystemTime::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
     let mut manifest = Manifest {
         game: plan.game.clone(),
         name: plan.entry.name.clone(),
@@ -330,14 +419,19 @@ fn run_install(
         author: plan.entry.author.clone(),
         url: plan.url.clone(),
         folder: plan.folder.display().to_string(),
-        installed: SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .map_or(0, |d| d.as_secs()),
+        installed: now,
         complete: false,
         files: Vec::new(),
         dirs: Vec::new(),
         absent: Vec::new(),
+        etag: String::new(),
+        modified: String::new(),
+        length: 0,
+        download_sha256: sha256,
+        checked: now,
+        newer: false,
     };
+    manifest.record(&served);
     let result = mods::place(
         mods_dir,
         &mut manifest,
@@ -349,7 +443,18 @@ fn run_install(
     let _ = fs::remove_dir_all(&download);
     let _ = fs::remove_dir_all(&staged);
     match result {
-        Ok(()) => Ok(manifest),
+        Ok(()) if inherited.is_empty() => Ok(manifest),
+        Ok(()) => {
+            for name in inherited {
+                if !manifest.absent.contains(&name) {
+                    manifest.absent.push(name);
+                }
+            }
+            // The install is complete either way; a failed save only means
+            // Remove leaves ReShade's settings files behind.
+            let _ = manifest.save(&mods::manifest_path(mods_dir, &manifest.game));
+            Ok(manifest)
+        }
         Err(error) => {
             let undone = mods::remove(mods_dir, &manifest, &hash::sha256_hex).is_ok();
             Err(match (error.kind(), undone) {
@@ -386,10 +491,79 @@ pub fn install(
                 let _ = fs::remove_dir_all(work.join("download"));
                 let _ = fs::remove_dir_all(work.join("staged"));
             }
+            let _ = fs::remove_dir_all(update_folder(&mods_dir, &plan.game));
             // An empty work folder goes either way.
             let _ = fs::remove_dir(mods::work_folder(&mods_dir, &plan.game));
             done(result);
         });
+}
+
+/// Where an update downloads and unpacks the new version.
+fn update_folder(mods_dir: &Path, game: &GameId) -> PathBuf {
+    mods_dir.join(format!("{}.update", mods::key(game)))
+}
+
+/// Checks the installed mods whose check is due for a newer version, on a
+/// background thread, saving what it learns in their records; `done` gets
+/// the records that changed. A failed check waits for the next day.
+pub fn check_updates(
+    records: Vec<Manifest>,
+    lists: Vec<Mod>,
+    mods_dir: PathBuf,
+    done: impl FnOnce(Vec<Manifest>) + Send + 'static,
+) {
+    let _ = thread::Builder::new()
+        .name("huedra-mod-updates".into())
+        .spawn(move || {
+            let now = SystemTime::now()
+                .duration_since(SystemTime::UNIX_EPOCH)
+                .map_or(0, |d| d.as_secs());
+            let mut changed = Vec::new();
+            for mut record in records.into_iter().filter(|r| r.check_due(now)) {
+                record.checked = now;
+                let entry = mods::find(&lists, &record.name).filter(|m| m.source == record.source);
+                if entry.is_some_and(|e| mods::link_changed(&record, e)) {
+                    record.newer = true;
+                } else if let Some(served) = probe(&record.url) {
+                    match mods::freshness(&record.validators(), &served) {
+                        Freshness::Same | Freshness::Unknown => {}
+                        Freshness::Newer => record.newer = true,
+                        Freshness::Compare => {
+                            if let Some(sha256) = fetch_hash(&record.url) {
+                                match record.matches_install(&sha256) {
+                                    Some(same) => record.newer = !same,
+                                    // An old record: this download is the
+                                    // baseline from now on.
+                                    None => record.download_sha256 = sha256,
+                                }
+                            }
+                        }
+                    }
+                    if !record.newer {
+                        record.record(&served);
+                    }
+                }
+                let _ = record.save(&mods::manifest_path(&mods_dir, &record.game));
+                changed.push(record);
+            }
+            done(changed);
+        });
+}
+
+/// What the server says about a download now, without downloading it.
+fn probe(url: &str) -> Option<Validators> {
+    let (host, path) = mods::trusted(url)?;
+    match http::probe(host, path, &user_agent()) {
+        Ok((200 | 206, headers)) => Some(validators(headers)),
+        _ => None,
+    }
+}
+
+/// Downloads a small file into memory and returns its SHA-256.
+fn fetch_hash(url: &str) -> Option<String> {
+    let (host, path) = mods::trusted(url)?;
+    let response = http::get(host, path, &user_agent(), mods::COMPARE_MAX_BYTES).ok()?;
+    (response.status == 200).then(|| hash::sha256_hex(&response.body))
 }
 
 /// Removes a mod on a background thread; `done` gets the files left in

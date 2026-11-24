@@ -2,6 +2,7 @@
 //! Feature doc: `docs/features/04-game-library.md`.
 
 pub mod amazon;
+pub mod emulators;
 pub mod epic;
 pub mod gamebar;
 pub mod heroic;
@@ -53,6 +54,8 @@ pub enum Store {
     /// launcher lists.
     #[serde(rename = "gamebar")]
     GameBar,
+    /// An emulator Huedra knows (RetroArch, Dolphin, PCSX2...).
+    Emulator,
     /// Added by the user.
     Manual,
 }
@@ -75,6 +78,7 @@ impl Store {
             Self::Itch => "itch.io",
             Self::Heroic => "Heroic",
             Self::GameBar => "Game Bar",
+            Self::Emulator => "Emulators",
             Self::Manual => "Added manually",
         }
     }
@@ -96,6 +100,7 @@ impl Store {
             Self::Itch => "itch",
             Self::Heroic => "heroic",
             Self::GameBar => "gamebar",
+            Self::Emulator => "emulator",
             Self::Manual => "manual",
         }
     }

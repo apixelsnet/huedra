@@ -38,6 +38,9 @@ pub struct Locations {
     /// `mods\`, the record of each installed HDR mod, the game files it
     /// replaced, and the downloads while one installs (local).
     pub mods: PathBuf,
+    /// `peaks.toml`, the peak brightness each display reported while in
+    /// HDR (local).
+    pub peaks: PathBuf,
     /// Whether portable mode is on.
     pub portable: bool,
 }
@@ -91,6 +94,7 @@ impl Locations {
             last_crash: local.join("crash.last.txt"),
             graphics: local.join("graphics.toml"),
             mods: local.join("mods"),
+            peaks: local.join("peaks.toml"),
             portable,
         }
     }

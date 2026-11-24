@@ -79,3 +79,13 @@ Code: `crates/huedra-core/src/{autohdr,graphics,config}.rs`, `crates/huedra-win/
 
 Verified on this PC (NVIDIA driver 616.92, portable test copies and stand-in programs): default off wrote `AutoHDREnable=48;` and recorded the old values; per-game and default switches on and off; RTX HDR on and off read back from the driver's profile database; a game with a mod forced both off; `huedra uninstall` restored the Auto HDR values and deleted the "(Huedra)" profiles.
 Not verified: AMD or Intel graphics (the switch is disabled there by design); whether the driver applies RTX HDR in a running game (the NVIDIA app overlay was not checked).
+
+## Result (2026-11-24) — emulators
+Code: `crates/huedra-core/src/library/emulators.rs` (the list, uninstall entries, `dedupe`; tests `uninstall_entries_name_the_emulator_and_folder`, `other_programs_are_not_emulators`, `games_have_stable_ids`, `dedupe_keeps_one_and_skips_store_copies`, `keys_are_unique_and_lowercase`), `Store::Emulator` in `library/mod.rs`, `emulator_games` in `crates/huedra-win/src/stores.rs`, the store chip and `has_wiki_page` in `crates/huedra-ui/src/app.rs`.
+- RetroArch, Dolphin, PCSX2, RPCS3, PPSSPP, DuckStation, Cemu, Xenia Canary, Ryujinx, shadPS4 and xemu, as `emulator:<key>` under **Emulators**. Found from uninstall entries whose `DisplayName` is the emulator's name, alone or followed by a version (`InstallLocation`, else the uninstaller's folder); from Scoop (`%SCOOP%` or `%USERPROFILE%\scoop`, `apps\<key>\current`); and from the installers' folders (`C:\RetroArch-Win64`, `Program Files\<name>`). Each only where one of its programs exists.
+- A Scoop emulator's folder is `apps\<key>`, which holds every version beside `current`, so the program counts as it whichever path it runs from.
+- One entry per emulator; one in the folder of a game another store lists (RetroArch from Steam) is left out.
+- Like games added by hand, emulators get no PCGamingWiki lookup, and unlike them no HDR mod either: their name says nothing about the game they run.
+
+Verified: unit tests in CI; on this PC `huedra games` with `SCOOP` pointing at a stand-in Scoop folder (`apps\retroarch\current\retroarch.exe`, `apps\pcsx2\current\pcsx2-qt.exe`) listed RetroArch and PCSX2 under Emulators with their `apps\<key>` folders, and none without it (no emulator is installed here).
+Not verified: a real emulator, installed by its installer or by Scoop, running and turning HDR on; RetroArch from Steam next to a standalone copy.

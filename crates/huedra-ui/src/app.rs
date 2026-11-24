@@ -16,7 +16,7 @@ use huedra_core::command;
 use huedra_core::config::{
     CloseAction, Config, GameHdr, GameSettings, ManualDisplays, Seconds, UpdatePolicy,
 };
-use huedra_core::display::{Display, DisplayId, HdrState, HdrSupport, SdrBrightness};
+use huedra_core::display::{Display, DisplayId, HdrPeaks, HdrState, HdrSupport, SdrBrightness};
 use huedra_core::engine::{Mode, TriggerId};
 use huedra_core::gameinfo::{Cache, GameInfo};
 use huedra_core::geometry::WindowGeometry;
@@ -60,6 +60,11 @@ const WAIT_FOR_WINDOW: Duration = Duration::from_secs(10);
 const MICA_BUILD: u32 = 22_621;
 /// How often the Status page asks the tray process for its state.
 const STATUS_POLL: Duration = Duration::from_secs(1);
+/// How many status rounds pass between readings of the displays' color
+/// profiles.
+const CALIBRATION_ROUNDS: u32 = 10;
+/// The Windows HDR Calibration app in the Microsoft Store.
+const CALIBRATION_APP: &str = "https://apps.microsoft.com/detail/9n7f2sm5d1lr";
 const SPECTRUM_W: u32 = 640;
 const SPECTRUM_H: u32 = 160;
 
@@ -106,6 +111,10 @@ struct State {
     games: Vec<Game>,
     info: Cache,
     displays: Vec<Display>,
+    /// HDR displays without an HDR color profile, offered calibration.
+    uncalibrated: Vec<DisplayId>,
+    /// The peak each display reported while in HDR (`peaks.toml`).
+    hdr_peaks: HdrPeaks,
     /// The installed color profiles a game can choose.
     profiles: Installed,
     /// The modes the main display offers, for a game's mode.
@@ -289,6 +298,13 @@ pub fn run(locations: Locations, page: Page) -> Result<(), slint::PlatformError>
     let state = State {
         info,
         displays: read_displays().unwrap_or_default(),
+        uncalibrated: Vec::new(),
+        hdr_peaks: HdrPeaks::parse(
+            &huedra_core::files::read_limited(&locations.peaks, 64 << 10)
+                .ok()
+                .flatten()
+                .unwrap_or_default(),
+        ),
         profiles: read_profiles(),
         modes: read_modes(),
         games,
@@ -329,6 +345,7 @@ pub fn run(locations: Locations, page: Page) -> Result<(), slint::PlatformError>
         guessed: sample::programs(),
     };
     STATE.set(Some(state));
+    with_state(note_hdr_peaks);
 
     with_state(|s| {
         let choices = |names: &[String]| -> ModelRc<SharedString> {
@@ -362,6 +379,7 @@ pub fn run(locations: Locations, page: Page) -> Result<(), slint::PlatformError>
     start_lookups(&ui);
     start_icons(&ui);
     start_mod_lists(&ui);
+    start_mod_updates(&ui);
     start_found_scan(&ui);
 
     let weak = ui.as_weak();
@@ -807,7 +825,6 @@ pub(crate) fn read_displays() -> Option<Vec<Display>> {
     huedra_win::display::displays().ok()
 }
 
-/// The color profiles installed on this PC.
 /// The modes the main display offers now.
 fn read_modes() -> Vec<DisplayMode> {
     #[cfg(feature = "sample")]
@@ -835,11 +852,44 @@ fn read_modes() -> Vec<DisplayMode> {
         .unwrap_or_default()
 }
 
+/// The color profiles installed on this PC.
 fn read_profiles() -> Installed {
     #[cfg(feature = "sample")]
     return sample::profiles();
     #[cfg(not(feature = "sample"))]
     huedra_win::color::installed()
+}
+
+/// Records the peaks of displays now in HDR in `peaks.toml`, for the game
+/// details' peak brightness while they are back in SDR.
+fn note_hdr_peaks(state: &mut State) {
+    if state.hdr_peaks.note(&state.displays)
+        && let Ok(text) = state.hdr_peaks.to_toml()
+    {
+        let _ = huedra_core::files::write_atomic(&state.locations.peaks, text.as_bytes());
+    }
+}
+
+/// The HDR displays that have no HDR color profile, as the Windows HDR
+/// Calibration app makes. A display whose profile can't be read is left out.
+fn read_uncalibrated(displays: &[Display]) -> Vec<DisplayId> {
+    #[cfg(feature = "sample")]
+    {
+        let _ = displays;
+        Vec::new()
+    }
+    #[cfg(not(feature = "sample"))]
+    displays
+        .iter()
+        .filter(|d| d.support.is_capable())
+        .filter(|d| {
+            matches!(
+                huedra_win::color::default_profile(&d.id, huedra_core::color::ColorMode::Hdr),
+                Ok(None)
+            )
+        })
+        .map(|d| d.id.clone())
+        .collect()
 }
 
 /// The games of every store and those added by hand.
@@ -871,6 +921,10 @@ fn start_status_polling(ui: &SettingsWindow) {
             // Start Huedra can be pressed; once the tray has run, the window
             // closes when it ends.
             let mut tray_seen = false;
+            // Color profiles are read every few rounds and when the displays
+            // change: the user may have just calibrated one.
+            let mut round: u32 = 0;
+            let mut last_ids: Vec<DisplayId> = Vec::new();
             loop {
                 let answer = tray(&Request::Status);
                 // Only a missing pipe means the tray has ended; a busy or
@@ -883,6 +937,11 @@ fn start_status_polling(ui: &SettingsWindow) {
                 // Read here, off the window's thread: every display with its
                 // state now, for the Status and Displays pages.
                 let displays = read_displays();
+                let ids: Vec<DisplayId> = displays.iter().flatten().map(|d| d.id.clone()).collect();
+                let uncalibrated = (round.is_multiple_of(CALIBRATION_ROUNDS) || ids != last_ids)
+                    .then(|| read_uncalibrated(displays.as_deref().unwrap_or_default()));
+                last_ids = ids;
+                round = round.wrapping_add(1);
                 tray_seen |= report.is_some();
                 let close = tray_seen && tray_gone;
                 let delivered = weak.upgrade_in_event_loop(move |ui| {
@@ -890,10 +949,21 @@ fn start_status_polling(ui: &SettingsWindow) {
                         close_with_tray(&ui);
                     }
                     with_state(|s| {
+                        let mut changed = false;
+                        if let Some(uncalibrated) = uncalibrated
+                            && uncalibrated != s.uncalibrated
+                        {
+                            s.uncalibrated = uncalibrated;
+                            changed = true;
+                        }
                         if let Some(displays) = displays
                             && displays != s.displays
                         {
                             s.displays = displays;
+                            changed = true;
+                            note_hdr_peaks(s);
+                        }
+                        if changed {
                             show_displays(&ui, s);
                         }
                         show_status(&ui, s, report.as_ref());
@@ -1158,7 +1228,7 @@ fn cues(state: &State, game: &Game) -> Cues {
         .game_info
         .then(|| state.info.get(&game.id))
         .flatten();
-    let hdr = if !state.config.general.game_info || game.store == Store::Manual {
+    let hdr = if !state.config.general.game_info || !has_wiki_page(game.store) {
         ""
     } else {
         match info {
@@ -1207,8 +1277,16 @@ fn installed_mod<'a>(state: &'a State, id: &GameId) -> Option<&'a Manifest> {
 }
 
 /// The listed HDR mod for a game, while looking for mods is on.
+/// Whether a game of this store is looked up on PCGamingWiki: not one added
+/// by hand (its name is a file name) nor an emulator (its games are not the
+/// emulator).
+fn has_wiki_page(store: Store) -> bool {
+    !matches!(store, Store::Manual | Store::Emulator)
+}
+
 fn mod_for<'a>(state: &'a State, game: &Game) -> Option<&'a Mod> {
-    if !state.config.general.hdr_mods {
+    // An emulator's name never names a game with a mod.
+    if !state.config.general.hdr_mods || game.store == Store::Emulator {
         return None;
     }
     hdr_mods::find(&state.mods, &game.name)
@@ -1247,14 +1325,18 @@ fn mod_view(state: &State, game: &Game) -> (&'static str, String, String, String
         );
     }
     if let Some(record) = installed_mod(state, &game.id) {
-        let detail = if record.author.is_empty() {
+        let mut detail = if record.author.is_empty() {
             "Installed".to_owned()
         } else {
             format!("Installed · by {}", record.author)
         };
+        let newer = record.newer && mod_for(state, game).is_some_and(Mod::installable);
+        if newer {
+            detail.push_str(" · Update available");
+        }
         let page = mod_for(state, game).map(link).unwrap_or_default();
         return (
-            "installed",
+            if newer { "update" } else { "installed" },
             format!("{} for {}", record.source.label(), record.name),
             detail,
             String::new(),
@@ -1445,6 +1527,7 @@ fn show_games(ui: &SettingsWindow, state: &State) {
         Store::Itch,
         Store::Heroic,
         Store::GameBar,
+        Store::Emulator,
         Store::Manual,
     ] {
         let n = state.games.iter().filter(|g| g.store == store).count();
@@ -1591,6 +1674,13 @@ fn detail_of(state: &State, game: &Game) -> GameDetail {
             .and_then(|s| s.display_mode)
             .and_then(|m| state.modes.iter().position(|o| *o == m))
             .map_or(0, |i| i32::try_from(i + 1).unwrap_or(0)),
+        peak_hint: huedra_core::display::peak_hint(
+            &state.displays,
+            |d| state.hdr_peaks.game_peak(d),
+            |d| state.config.is_managed(d.id.as_str()),
+        )
+        .unwrap_or_default()
+        .into(),
     }
 }
 
@@ -1943,7 +2033,7 @@ fn start_lookups(ui: &SettingsWindow) {
         let items = s
             .games
             .iter()
-            .filter(|g| g.store != Store::Manual)
+            .filter(|g| has_wiki_page(g.store))
             .map(|g| Lookup {
                 id: g.id.clone(),
                 name: g.name.clone(),
@@ -1984,6 +2074,47 @@ fn start_mod_lists(ui: &SettingsWindow) {
         let _ = weak.upgrade_in_event_loop(move |ui| {
             with_state(|s| {
                 s.mods = found;
+                show_games(&ui, s);
+            });
+        });
+    });
+}
+
+/// Checks the mods Huedra installed for a newer version, at most once a day
+/// each, while looking for HDR mods is on.
+fn start_mod_updates(ui: &SettingsWindow) {
+    if cfg!(feature = "sample") {
+        return;
+    }
+    let Some((records, lists, folder)) = with_state(|s| {
+        s.config.general.hdr_mods.then(|| {
+            (
+                s.installed.clone(),
+                s.mods.clone(),
+                s.locations.mods.clone(),
+            )
+        })
+    })
+    .flatten() else {
+        return;
+    };
+    let weak = ui.as_weak();
+    mod_jobs::check_updates(records, lists, folder, move |checked| {
+        if checked.is_empty() {
+            return;
+        }
+        let _ = weak.upgrade_in_event_loop(move |ui| {
+            with_state(|s| {
+                for record in checked {
+                    // A record removed or replaced meanwhile stays as it is.
+                    if let Some(slot) = s
+                        .installed
+                        .iter_mut()
+                        .find(|m| m.game == record.game && m.installed == record.installed)
+                    {
+                        *slot = record;
+                    }
+                }
                 show_games(&ui, s);
             });
         });
@@ -2092,7 +2223,7 @@ fn refresh_games(ui: &SettingsWindow, state: &State) {
 
 /// Works out the install for a game and asks to confirm it, listing what
 /// will change, or says why it cannot be done.
-fn offer_install(ui: &SettingsWindow, state: &mut State, id: &GameId) {
+fn offer_install(ui: &SettingsWindow, state: &mut State, id: &GameId, update: bool) {
     let Some(game) = state.games.iter().find(|g| &g.id == id).cloned() else {
         return;
     };
@@ -2108,14 +2239,25 @@ fn offer_install(ui: &SettingsWindow, state: &mut State, id: &GameId) {
         );
         return;
     };
+    let replaces = if update {
+        installed_mod(state, id).cloned()
+    } else {
+        None
+    };
     match mod_jobs::plan(id, &entry, &program) {
-        Ok(plan) => {
+        Ok(mut plan) => {
+            let verb = if replaces.is_some() {
+                "Update"
+            } else {
+                "Install"
+            };
+            plan.replaces = replaces;
             let unchecked = if state.config.general.game_info {
                 ""
             } else {
                 "Game information is off, so Huedra can't check PCGamingWiki for anti-cheat. Make sure this game has none. "
             };
-            ui.set_mod_title(format!("Install {} for {}?", entry.source.label(), game.name).into());
+            ui.set_mod_title(format!("{verb} {} for {}?", entry.source.label(), game.name).into());
             ui.set_mod_text(
                 format!(
                     "{unchecked}{} by {} ({}). Huedra will:",
@@ -2127,6 +2269,7 @@ fn offer_install(ui: &SettingsWindow, state: &mut State, id: &GameId) {
             );
             ui.set_mod_changes(lines_model(plan.changes()));
             ui.set_mod_online(state.info.get(id).is_some_and(|i| i.online));
+            ui.set_mod_update(plan.replaces.is_some());
             state.mod_plan = Some(plan);
             ui.set_mod_dialog(2);
         }
@@ -2146,7 +2289,7 @@ fn wire_mods(ui: &SettingsWindow) {
                 return;
             }
             if s.config.general.mods_disclaimer_accepted {
-                offer_install(&ui, s, &id);
+                offer_install(&ui, s, &id, false);
             } else {
                 s.mod_pending = Some(id);
                 ui.set_mod_dialog(1);
@@ -2162,7 +2305,19 @@ fn wire_mods(ui: &SettingsWindow) {
             edit(s, |c| c.general.mods_disclaimer_accepted = true);
             ui.set_mod_dialog(0);
             if let Some(id) = s.mod_pending.take() {
-                offer_install(&ui, s, &id);
+                offer_install(&ui, s, &id, false);
+            }
+        });
+    });
+    let weak = ui.as_weak();
+    ui.on_update_mod(move |id| {
+        let Some(ui) = weak.upgrade() else {
+            return;
+        };
+        let id = GameId::from_raw(id.as_str());
+        with_state(|s| {
+            if s.mod_busy.is_none() {
+                offer_install(&ui, s, &id, true);
             }
         });
     });
@@ -2247,12 +2402,14 @@ fn start_install(ui: &SettingsWindow, state: &mut State) {
         return;
     };
     let game = plan.game.clone();
+    let update = plan.replaces.is_some();
     state.mod_busy = Some(game.clone());
     state.mod_removing = false;
     state.mod_cancel = Arc::new(AtomicBool::new(false));
     ui.set_mod_title(
         format!(
-            "Installing {} for {}",
+            "{} {} for {}",
+            if update { "Updating" } else { "Installing" },
             plan.entry.source.label(),
             plan.entry.name
         )
@@ -2285,16 +2442,41 @@ fn start_install(ui: &SettingsWindow, state: &mut State) {
                         s.installed.retain(|m| m.game != record.game);
                         s.installed.push(record);
                         edit(s, |c| c.game_mut(&game).hdr_mod = Some(source));
-                        mod_result(
-                            &ui,
-                            "HDR mod installed",
-                            &format!(
-                                "{name} is in the game's folder. Start the game and press Home to open its menu. Windows Auto HDR and NVIDIA RTX HDR are off for this game from its next start."
-                            ),
-                            Vec::new(),
-                        );
+                        if update {
+                            mod_result(
+                                &ui,
+                                "HDR mod updated",
+                                &format!(
+                                    "The newest {name} is in the game's folder. Its settings in the game's ReShade menu (Home) are kept."
+                                ),
+                                Vec::new(),
+                            );
+                        } else {
+                            mod_result(
+                                &ui,
+                                "HDR mod installed",
+                                &format!(
+                                    "{name} is in the game's folder. Start the game and press Home to open its menu. Windows Auto HDR and NVIDIA RTX HDR are off for this game from its next start."
+                                ),
+                                Vec::new(),
+                            );
+                        }
                     }
-                    Err(why) => mod_result(&ui, "The HDR mod wasn't installed", &why, Vec::new()),
+                    Err(why) => {
+                        // An update that stopped after taking out the old
+                        // version leaves no record of it.
+                        let path = hdr_mods::manifest_path(&s.locations.mods, &game);
+                        if update && !path.is_file() {
+                            s.installed.retain(|m| m.game != game);
+                            edit(s, |c| c.game_mut(&game).hdr_mod = None);
+                        }
+                        let title = if update {
+                            "The HDR mod wasn't updated"
+                        } else {
+                            "The HDR mod wasn't installed"
+                        };
+                        mod_result(&ui, title, &why, Vec::new());
+                    }
                 }
                 refresh_games(&ui, s);
             });
@@ -2508,7 +2690,7 @@ fn show_displays(ui: &SettingsWindow, state: &State) {
                 }
                 HdrSupport::Unsupported => {}
             }
-            if let Some(peak) = d.peak.filter(|_| capable) {
+            if let Some(peak) = state.hdr_peaks.game_peak(d).filter(|_| capable) {
                 parts.push(format!("Up to {peak}"));
             }
             let mut detail = parts.join(" · ");
@@ -2545,6 +2727,7 @@ fn show_displays(ui: &SettingsWindow, state: &State) {
                 brightness: d
                     .sdr_brightness
                     .map_or(0, |b| i32::try_from(b.nits()).unwrap_or(0)),
+                calibrate: capable && state.uncalibrated.contains(&d.id),
                 status: if d.primary {
                     // "Main display · controlled by Huedra": only the
                     // first word gives up its capital.
@@ -2595,6 +2778,9 @@ fn wire_displays(ui: &SettingsWindow) {
         if let Some(brightness) = u32::try_from(nits).ok().and_then(SdrBrightness::from_nits) {
             set_brightness_later(DisplayId::new(id.as_str()), brightness);
         }
+    });
+    ui.on_open_calibration(|| {
+        shell::open_web_page(CALIBRATION_APP);
     });
     ui.on_set_controlled(move |id, controlled| {
         with_state(|s| {
@@ -2783,7 +2969,92 @@ fn show_settings(ui: &SettingsWindow, state: &State) {
     ui.set_battery_sdr(g.battery_sdr);
 }
 
+/// The copy of the settings a restore replaced, beside `config.toml`.
+const BEFORE_RESTORE: &str = "config-before-restore.toml";
+
+/// Settings › Advanced › Back up: saves the settings to a file the user
+/// chooses and says how it went.
+fn back_up_settings(ui: &SettingsWindow) {
+    let Some(file) =
+        shell::pick_settings_file("Back up Huedra's settings", "Huedra settings.toml", true)
+    else {
+        return;
+    };
+    let note = with_state(|s| {
+        if let Ok(config) = Config::load(&s.locations.config) {
+            s.config = config;
+        }
+        match s.config.to_toml().map(|text| {
+            huedra_core::files::write_atomic(std::path::Path::new(&file), text.as_bytes())
+        }) {
+            Ok(Ok(())) => format!("Settings saved to {file}."),
+            Ok(Err(error)) => format!("Couldn't save the settings: {error}."),
+            Err(error) => format!("Couldn't save the settings: {error}."),
+        }
+    })
+    .unwrap_or_default();
+    ui.set_backup_note(note.into());
+}
+
+/// Settings › Advanced › Restore: replaces the settings with a saved file's,
+/// keeping the current ones in [`BEFORE_RESTORE`], and shows them.
+fn restore_settings(ui: &SettingsWindow) {
+    let Some(file) = shell::pick_settings_file("Restore Huedra's settings", "", false) else {
+        return;
+    };
+    let read = huedra_core::files::read_limited(std::path::Path::new(&file), 1 << 20)
+        .map_err(|e| e.to_string())
+        .and_then(|text| text.ok_or_else(|| "the file is empty or missing".to_owned()))
+        .and_then(|text| Config::parse(&text).map_err(|e| e.to_string()));
+    let config = match read {
+        Ok(config) => config,
+        Err(why) => {
+            ui.set_backup_note(format!("Nothing was changed: {file} isn't usable ({why}).").into());
+            return;
+        }
+    };
+    let note = with_state(|s| {
+        let before = s
+            .locations
+            .config
+            .parent()
+            .map(|dir| dir.join(BEFORE_RESTORE));
+        if let Some(before) = &before
+            && s.locations.config.is_file()
+            && let Err(error) = std::fs::copy(&s.locations.config, before)
+        {
+            return format!("Nothing was changed: the current settings couldn't be kept ({error}).");
+        }
+        if let Err(error) = config.save(&s.locations.config) {
+            return format!("Nothing was changed: {error}.");
+        }
+        s.config = config;
+        thread::spawn(|| {
+            let _ = tray(&Request::Reload);
+        });
+        refresh_games(ui, s);
+        show_video(ui, s);
+        show_displays(ui, s);
+        show_settings(ui, s);
+        format!("Settings restored from {file}. The ones they replaced are in {BEFORE_RESTORE} in Huedra's folder.")
+    })
+    .unwrap_or_default();
+    ui.set_backup_note(note.into());
+}
+
 fn wire_settings(ui: &SettingsWindow) {
+    let weak = ui.as_weak();
+    ui.on_back_up_settings(move || {
+        if let Some(ui) = weak.upgrade() {
+            back_up_settings(&ui);
+        }
+    });
+    let weak = ui.as_weak();
+    ui.on_restore_settings(move || {
+        if let Some(ui) = weak.upgrade() {
+            restore_settings(&ui);
+        }
+    });
     let weak = ui.as_weak();
     ui.on_set_start_with_windows(move |on| {
         let command = std::env::current_exe()

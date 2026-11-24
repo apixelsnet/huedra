@@ -109,6 +109,8 @@ Huedra reads the libraries of Steam, Epic Games, GOG, Xbox (Microsoft Store), Ub
 
 Games that no launcher lists but that the Xbox Game Bar recognized as games while they ran are listed too, under **Game Bar**, named after their folder. A program the Game Bar took for a game by mistake can be set to **Leave HDR alone**.
 
+Emulators are listed under **Emulators**, so they can have HDR settings of their own: RetroArch, Dolphin, PCSX2, RPCS3, PPSSPP, DuckStation, Cemu, Xenia Canary, Ryujinx, shadPS4 and xemu. Huedra finds them through their installers' entries, in [Scoop](https://scoop.sh), and in the folders their installers use (`C:\RetroArch-Win64`, or under `C:\Program Files`). A copy unpacked anywhere else can be added with **Add game**. Every game an emulator runs shares its settings, and emulators get no PCGamingWiki information or HDR mods. RetroArch installed from Steam stays under **Steam**.
+
 For League of Legends, only the game itself counts, not the League client that stays open between matches. Test servers (Riot's PBE, Battle.net's test realms and betas) are not listed.
 
 A game that is not listed, for example one installed without a store, can be added with **Add game**: choose its program file.
@@ -126,7 +128,8 @@ Select a game to open its details beside the list (on a narrow window they repla
 | **Keep HDR on after it closes** | Seconds HDR stays on after the game closes, so restarting it, or a launcher starting the game again, does not switch the display off and on twice. |
 | **Windows Auto HDR** | Whether Windows Auto HDR turns this game's SDR picture into HDR. Off unless you turn it on, here or for every game under **Settings › Auto HDR, RTX HDR and HDR mods**. Huedra sets it on the game's program (a store game's once Huedra has seen it run); it applies from the game's next start. Off and locked while the game has an HDR mod. |
 | **NVIDIA RTX HDR** | Whether the NVIDIA driver turns this game's SDR picture into HDR. Off unless you turn it on, here or in Settings. Huedra sets it in the game's NVIDIA driver profile, or in a profile of its own named "*game* (Huedra)" when the driver has none for the game; it applies from the game's next start. Needs an NVIDIA graphics card; on other graphics cards the switch is unavailable. Off and locked while the game has an HDR mod. |
-| **HDR mod** | A RenoDX or Luma HDR mod for the game, if one is listed: **Install**, **Remove**, or a link to its page (see [HDR mods](#hdr-mods)). |
+| **HDR mod** | A RenoDX or Luma HDR mod for the game, if one is listed: **Install**, **Update** when a newer version is out, **Remove**, or a link to its page (see [HDR mods](#hdr-mods)). |
+| **Peak brightness in the game** | The number to enter in the game's own HDR setting for peak or maximum brightness: the most your display can show, as Windows reports it in HDR, which is what games read (Windows often reports another number while the display is in SDR; Huedra remembers the one from the last time the display was in HDR). With displays of different peaks, one number per display. Games that look washed out or clipped in HDR are often set to another peak. Shown when a display reports its peak. |
 | **Color profile in SDR / in HDR** | An ICC color profile for the game's display while it runs, one for SDR and one for HDR; the earlier profiles come back when it closes. The HDR list offers only profiles Windows applies in HDR, such as those the Windows HDR Calibration app makes. |
 | **Resolution and refresh rate** | While the game runs, the display it's on uses this mode, set after HDR has turned on; Windows' own mode comes back when it closes. When HDR leaves too little bandwidth for the rate, the fastest one offered then is used. The list shows the main display's modes of the same shape as now, at 50 Hz or more. A game that sets its own refresh rate in full screen keeps its own. |
 
@@ -170,6 +173,8 @@ Some mods can't be installed by Huedra:
 - Vulkan games, and mods built for 32-bit games when the game is 64-bit (or the other way around).
 
 When a game has online play, Huedra warns before the install: play offline while a mod is installed.
+
+**Updating.** Mod authors fix and improve their mods often. Once a day, while **Look for HDR mods** is on, Huedra checks each mod it installed: it asks the download's server whether the file changed, without downloading it, and for an add-on that did, downloads it to compare with the one installed. A newer version shows **Update available** in the game's **HDR mod** section, with **Update**. Close the game and choose **Update**: the dialog lists the changes, then Huedra downloads the new version, takes out the old one (putting back the game's own files) and adds the new one. The mod's settings stay. When a file of the old version changed since the install, for example after a game update, Huedra stops before changing anything and asks you to use **Remove**, then **Install**.
 
 **Removing.** Close the game and choose **Remove**. Huedra keeps a record of every file it added and a copy of every file it replaced (in `%LOCALAPPDATA%\Huedra\mods`). Removing deletes the files it added, unless they changed since, puts back the files it replaced, and deletes the files ReShade created while the game ran (`ReShade.ini`, `ReShade.log`, `ReShadePreset.ini`) when they weren't there before. `huedra uninstall` removes every mod Huedra installed.
 
@@ -220,6 +225,7 @@ With NVIDIA RTX Video HDR turned on in the NVIDIA app, ordinary SDR video in a b
 | Setting | Meaning |
 | --- | --- |
 | **Let Huedra control HDR** | One switch per display. Huedra changes HDR only on the displays it controls, in every mode; on the others HDR stays as you set it in Windows. Displays that support HDR are controlled by default. A display without HDR shows **Not available**. |
+| **Get the Windows HDR Calibration app** | Shown under an HDR display that has no HDR color profile: opens the Microsoft Store page of Microsoft's free calibration app. Calibrating tells Windows, and so games and Huedra, how bright the display really gets. |
 | **SDR content brightness (nits)** | Shown on a display while it is in HDR: how bright the desktop and SDR apps look, 80 to 480 nits, the same setting as Windows Settings › Display › HDR. |
 | **Switch only the display with the game or video** | HDR turns on only for the display the game or video is on, and follows the window to another display. When off, every display Huedra controls switches together. |
 | **Always HDR on the main display only** | Always HDR mode and the Win+Alt+H shortcut turn HDR on only for the main display, the one Windows uses as the primary display. Other displays keep following their games and video. When off, every display Huedra controls. On by default. |
@@ -245,6 +251,7 @@ The **Settings** page sits at the foot of the navigation pane. It was called **G
 | **Advanced › Add "Start with HDR" to the right-click menu** | Adds Start with HDR to File Explorer's menu (see [Games](#start-a-game-with-hdr-already-on)). |
 | **Advanced › Write tab and file names to the log** | Off by default, so tab names and file names stay out of the log. |
 | **Advanced › Game information and icons** | Looks up games on PCGamingWiki and icons in Discord's public game list. |
+| **Advanced › Back up and restore settings** | **Back up** saves every setting, with each game's own settings, to a `.toml` file you choose. **Restore** replaces the current settings with a saved file's, for example on a new PC; the settings it replaced are kept as `config-before-restore.toml` in Huedra's folder. A file from a newer version of Huedra is refused. |
 
 The **About** section (headed with Huedra's version) has **Check for updates**, the disclaimer, the settings folder, and links to star the project on GitHub or support it on Buy Me a Coffee. Every feature is free; supporters are thanked in `SUPPORTERS.md` and get preview builds before each release.
 
@@ -309,6 +316,9 @@ Check that the game was closed while installing, and that the details name the p
 
 **A game does not turn HDR on.**
 Check that it is listed on the **Games** page and set to **Turn HDR on**. If it is missing, choose **Find new games**, or **Add game** and select its program. Some games start through a launcher; a **Wait before turning HDR on** of a few seconds helps.
+
+**A game looks washed out, too dark or clipped in HDR.**
+Set the game's own peak brightness to the number in its details under **Display › Peak brightness in the game**. If the **Displays** page shows **Get the Windows HDR Calibration app** under the display, calibrate it first: until then Windows may report a peak the display can't reach. A game with poor HDR of its own may have an HDR mod (see [HDR mods](#hdr-mods)).
 
 **HDR turns on for the wrong display.**
 Turn on **Displays › Switch only the display with the game or video**, and check **Let Huedra control HDR** for each display as you want.

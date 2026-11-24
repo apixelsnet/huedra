@@ -4,6 +4,7 @@
 
 use std::collections::HashMap;
 use std::mem::size_of;
+use std::sync::{Mutex, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -94,7 +95,7 @@ pub enum DisplayError {
 /// [`DisplayError`] when Windows does not return or describe the displays.
 pub fn displays() -> Result<Vec<Display>, DisplayError> {
     let found = enumerate()?;
-    let peaks = peak_luminance();
+    let peaks = cached_peaks(&found);
     Ok(found
         .into_iter()
         .map(|f| Display {
@@ -106,6 +107,43 @@ pub fn displays() -> Result<Vec<Display>, DisplayError> {
             ..f.display
         })
         .collect())
+}
+
+/// How long peaks read through DXGI are kept while the same displays are in
+/// the same states. Creating a DXGI factory costs far more than listing the
+/// displays, and the settings window lists them every second.
+const PEAK_MAX_AGE: Duration = Duration::from_secs(30);
+
+/// The peaks last read, with the displays and states they were read for.
+struct PeakCache {
+    key: Vec<(String, HdrState)>,
+    read: Instant,
+    peaks: HashMap<String, Nits>,
+}
+
+static PEAKS: Mutex<Option<PeakCache>> = Mutex::new(None);
+
+/// The displays' peaks, read again when a display comes, goes or switches
+/// HDR (Windows may report another peak then), or after [`PEAK_MAX_AGE`].
+fn cached_peaks(found: &[Found]) -> HashMap<String, Nits> {
+    let key: Vec<(String, HdrState)> = found
+        .iter()
+        .map(|f| (f.gdi_name.clone(), f.display.state))
+        .collect();
+    let mut cache = PEAKS.lock().unwrap_or_else(PoisonError::into_inner);
+    if let Some(cached) = cache.as_ref()
+        && cached.key == key
+        && cached.read.elapsed() < PEAK_MAX_AGE
+    {
+        return cached.peaks.clone();
+    }
+    let peaks = peak_luminance();
+    *cache = Some(PeakCache {
+        key,
+        read: Instant::now(),
+        peaks: peaks.clone(),
+    });
+    peaks
 }
 
 /// Lists the active displays without peak brightness, which needs DXGI and

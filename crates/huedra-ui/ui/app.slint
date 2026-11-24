@@ -204,6 +204,7 @@ export component SettingsWindow inherits Window {
     callback set-game-auto-hdr(string, bool);
     callback set-game-rtx-hdr(string, bool);
     callback install-mod(string);
+    callback update-mod(string);
     callback remove-mod(string);
     // The HDR mod dialog: 1 the notice (accepted once), 2 what an install
     // will change, 3 installing or removing, 4 what removing will change,
@@ -215,6 +216,8 @@ export component SettingsWindow inherits Window {
     in property <string> mod-step;
     in property <float> mod-progress;
     in property <bool> mod-online;
+    // The install being confirmed replaces the installed version.
+    in property <bool> mod-update;
     property <bool> mod-agreed;
     changed mod-dialog => {
         if root.mod-dialog == 1 {
@@ -281,6 +284,8 @@ export component SettingsWindow inherits Window {
     in property <bool> content-only;
     in property <bool> main-only;
     callback set-brightness(string, int);
+    // Displays: the Windows HDR Calibration app's store page.
+    callback open-calibration();
     callback set-controlled(string, bool);
     callback set-retries(int);
     callback set-content-only(bool);
@@ -308,6 +313,10 @@ export component SettingsWindow inherits Window {
     in property <bool> battery-sdr;
     in property <string> version;
     in property <string> data-folder;
+    // Settings › Advanced › Back up and restore settings: the last result.
+    in property <string> backup-note;
+    callback back-up-settings();
+    callback restore-settings();
     in property <string> update-note;
     in property <bool> can-check-updates;
     in property <bool> checking-updates;
@@ -608,6 +617,9 @@ export component SettingsWindow inherits Window {
                 install-mod(id) => {
                     root.install-mod(id);
                 }
+                update-mod(id) => {
+                    root.update-mod(id);
+                }
                 remove-mod(id) => {
                     root.remove-mod(id);
                 }
@@ -676,6 +688,9 @@ export component SettingsWindow inherits Window {
                 set-brightness(id, v) => {
                     root.set-brightness(id, v);
                 }
+                open-calibration => {
+                    root.open-calibration();
+                }
                 set-content-only(on) => {
                     root.set-content-only(on);
                 }
@@ -708,6 +723,13 @@ export component SettingsWindow inherits Window {
                 battery-sdr: root.battery-sdr;
                 version: root.version;
                 data-folder: root.data-folder;
+                backup-note: root.backup-note;
+                back-up-settings => {
+                    root.back-up-settings();
+                }
+                restore-settings => {
+                    root.restore-settings();
+                }
                 update-note: root.update-note;
                 can-check-updates: root.can-check-updates;
                 checking-updates: root.checking-updates;
@@ -1244,7 +1266,7 @@ export component SettingsWindow inherits Window {
                             if root.mod-dialog == 1 || root.mod-dialog == 2 || root.mod-dialog == 4: ActionButton {
                                 horizontal-stretch: 1;
                                 primary: true;
-                                text: root.mod-dialog == 1 ? "Continue" : root.mod-dialog == 2 ? "Install" : "Remove";
+                                text: root.mod-dialog == 1 ? "Continue" : root.mod-dialog == 2 ? (root.mod-update ? "Update" : "Install") : "Remove";
                                 enabled: root.mod-dialog != 1 || root.mod-agreed;
                                 property <int> tick: root.mod-focus-tick;
                                 property <int> step: root.mod-dialog;

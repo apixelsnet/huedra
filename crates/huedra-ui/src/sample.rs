@@ -149,6 +149,12 @@ pub fn installed() -> Vec<Manifest> {
         files: Vec::new(),
         dirs: Vec::new(),
         absent: Vec::new(),
+        etag: String::new(),
+        modified: String::new(),
+        length: 0,
+        download_sha256: String::new(),
+        checked: 0,
+        newer: false,
     }]
 }
 

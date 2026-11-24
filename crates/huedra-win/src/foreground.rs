@@ -3,6 +3,7 @@
 //! Feature doc: `docs/features/03-watchers.md`.
 
 use windows::Win32::Foundation::HWND;
+use windows::Win32::System::SystemInformation::GetTickCount;
 use windows::Win32::UI::Accessibility::{HWINEVENTHOOK, SetWinEventHook, UnhookWinEvent};
 use windows::Win32::UI::WindowsAndMessaging::{
     EVENT_SYSTEM_FOREGROUND, GetForegroundWindow, GetWindowThreadProcessId, WINEVENT_OUTOFCONTEXT,
@@ -66,9 +67,12 @@ unsafe extern "system" fn on_foreground(
     _id_object: i32,
     _id_child: i32,
     _thread: u32,
-    _time: u32,
+    time: u32,
 ) {
     if let Some(pid) = window_pid(hwnd) {
-        push(Event::Foreground(pid));
+        // SAFETY: no arguments. Both counts are milliseconds since start-up
+        // and wrap together.
+        let lag_ms = unsafe { GetTickCount() }.wrapping_sub(time);
+        push(Event::Foreground { pid, lag_ms });
     }
 }
